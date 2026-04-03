@@ -1,5 +1,6 @@
 mod config;
 mod error;
+mod invoice;
 mod setup;
 
 use config::loader::{load_config, LoadResult};
@@ -41,6 +42,14 @@ fn run() -> Result<(), error::AppError> {
                 ConfigSection::Presets,
             ];
             setup::run_setup(&prompter, &mut config, &all_missing, &cwd)?;
+
+            let now = time::OffsetDateTime::now_utc();
+            let period = invoice::period::collect_invoice_period(
+                &prompter,
+                u32::from(now.month() as u8),
+                now.year() as u32,
+            )?;
+            println!("Invoice period: {period}");
             Ok(())
         }
         LoadResult::Loaded(config) => match config.validate() {
@@ -48,11 +57,26 @@ fn run() -> Result<(), error::AppError> {
                 println!("Config loaded successfully.");
                 println!("Sender: {}", validated.sender.name);
                 println!("Recipient: {}", validated.recipient.name);
-                // TODO: Story 3.1 - proceed to invoice flow
+
+                let now = time::OffsetDateTime::now_utc();
+                let period = invoice::period::collect_invoice_period(
+                    &prompter,
+                    u32::from(now.month() as u8),
+                    now.year() as u32,
+                )?;
+                println!("Invoice period: {period}");
                 Ok(())
             }
             ValidationOutcome::Incomplete { mut config, missing } => {
                 setup::run_setup(&prompter, &mut config, &missing, &cwd)?;
+
+                let now = time::OffsetDateTime::now_utc();
+                let period = invoice::period::collect_invoice_period(
+                    &prompter,
+                    u32::from(now.month() as u8),
+                    now.year() as u32,
+                )?;
+                println!("Invoice period: {period}");
                 Ok(())
             }
         },

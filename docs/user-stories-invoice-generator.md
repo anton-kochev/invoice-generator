@@ -2,7 +2,7 @@
 
 ## Summary
 - **Epics**: 5
-- **Total User Stories**: 18 (3 completed ✅, 15 remaining)
+- **Total User Stories**: 18 (10 completed ✅, 8 remaining)
 - **User Roles Identified**: Freelance Developer (sole actor — referred to as "user" throughout)
 
 ---
@@ -59,7 +59,7 @@
 ## Epic 2: First-Run Setup Wizard
 > Interactive walkthrough that creates the config file from scratch when none exists.
 
-### Story 2.1: Detect Missing Config and Launch Setup
+### Story 2.1: Detect Missing Config and Launch Setup ✅
 **As a** user running the app for the first time,
 **I want** an interactive setup wizard to start automatically,
 **So that** I never have to create `invoice_config.yaml` by hand.
@@ -74,7 +74,7 @@
 
 ---
 
-### Story 2.2: Collect Sender Details
+### Story 2.2: Collect Sender Details ✅
 **As a** user,
 **I want** to enter my name, address, and email during setup,
 **So that** my details appear correctly on every invoice.
@@ -88,7 +88,7 @@
 
 ---
 
-### Story 2.3: Collect Recipient Details
+### Story 2.3: Collect Recipient Details ✅
 **As a** user,
 **I want** to enter my client's company info during setup,
 **So that** the invoice is correctly addressed.
@@ -101,7 +101,7 @@
 
 ---
 
-### Story 2.4: Collect Payment Methods
+### Story 2.4: Collect Payment Methods ✅
 **As a** user,
 **I want** to enter one or more payment methods during setup,
 **So that** clients know how to pay me.
@@ -116,7 +116,7 @@
 
 ---
 
-### Story 2.5: Create Initial Presets
+### Story 2.5: Create Initial Presets ✅
 **As a** user,
 **I want** to define at least one line-item preset during setup,
 **So that** I can quickly select it when generating invoices.
@@ -132,7 +132,7 @@
 
 ---
 
-### Story 2.6: Set Invoice Defaults
+### Story 2.6: Set Invoice Defaults ✅
 **As a** user,
 **I want** to configure currency, invoice date day, and payment terms with sensible defaults,
 **So that** I can just press Enter for the common case.
@@ -146,7 +146,7 @@
 
 ---
 
-### Story 2.7: Display Setup Summary and Proceed
+### Story 2.7: Display Setup Summary and Proceed ✅
 **As a** user,
 **I want** to see a summary of my config after setup completes,
 **So that** I can confirm everything looks right before generating invoices.
@@ -355,7 +355,7 @@
 | Concern | Crate |
 |---------|-------|
 | YAML config | `serde` + `serde_yaml` |
-| Interactive prompts | `dialoguer` |
+| Interactive prompts | `inquire` |
 | PDF generation | `genpdf` or `printpdf` |
 | Date handling | `chrono` |
 
