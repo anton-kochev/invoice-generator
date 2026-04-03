@@ -109,8 +109,13 @@ mod tests {
 
     #[test]
     fn test_save_config_creates_file() {
+        // Arrange
         let dir = TempDir::new().unwrap();
+
+        // Act
         let result = save_config(dir.path(), &Config::default());
+
+        // Assert
         assert!(result.is_ok());
         assert!(dir.path().join(CONFIG_FILENAME).exists());
     }
@@ -119,10 +124,15 @@ mod tests {
 
     #[test]
     fn test_save_config_complete_round_trips() {
+        // Arrange
         let dir = TempDir::new().unwrap();
         let original = complete_config();
+
+        // Act
         save_config(dir.path(), &original).unwrap();
         let loaded = unwrap_loaded(load_config(dir.path()));
+
+        // Assert
         assert_eq!(loaded, original);
     }
 
@@ -130,13 +140,17 @@ mod tests {
 
     #[test]
     fn test_save_config_partial_sender_only() {
+        // Arrange
         let dir = TempDir::new().unwrap();
         let config = Config {
             sender: Some(synthetic_sender()),
             ..Config::default()
         };
+
+        // Act
         save_config(dir.path(), &config).unwrap();
 
+        // Assert
         let loaded = unwrap_loaded(load_config(dir.path()));
         assert_eq!(loaded.sender, Some(synthetic_sender()));
         assert!(loaded.recipient.is_none());
@@ -152,8 +166,8 @@ mod tests {
 
     #[test]
     fn test_save_config_overwrites_existing() {
+        // Arrange
         let dir = TempDir::new().unwrap();
-
         let alice = Config {
             sender: Some(Sender {
                 name: "Alice".to_string(),
@@ -172,8 +186,11 @@ mod tests {
             }),
             ..Config::default()
         };
+
+        // Act
         save_config(dir.path(), &bob).unwrap();
 
+        // Assert
         let loaded = unwrap_loaded(load_config(dir.path()));
         assert_eq!(loaded.sender.unwrap().name, "Bob");
     }
@@ -182,9 +199,14 @@ mod tests {
 
     #[test]
     fn test_save_config_produces_valid_yaml() {
+        // Arrange
         let dir = TempDir::new().unwrap();
+
+        // Act
         save_config(dir.path(), &complete_config()).unwrap();
         let raw = std::fs::read_to_string(dir.path().join(CONFIG_FILENAME)).unwrap();
+
+        // Assert
         let parsed: Result<Config, _> = serde_yaml::from_str(&raw);
         assert!(parsed.is_ok());
     }
@@ -194,12 +216,15 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn test_save_config_io_error() {
+        // Arrange
         use std::os::unix::fs::PermissionsExt;
-
         let dir = TempDir::new().unwrap();
         std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o444)).unwrap();
 
+        // Act
         let result = save_config(dir.path(), &Config::default());
+
+        // Assert
         assert!(matches!(result, Err(AppError::ConfigIo(_))));
 
         // Restore permissions so TempDir cleanup works.
@@ -210,16 +235,19 @@ mod tests {
 
     #[test]
     fn test_append_preset_to_existing_presets() {
+        // Arrange
         let dir = TempDir::new().unwrap();
         save_config(dir.path(), &complete_config()).unwrap();
-
         let new_preset = Preset {
             key: "design".to_string(),
             description: "Design work".to_string(),
             default_rate: 80.0,
         };
+
+        // Act
         append_preset(dir.path(), new_preset).unwrap();
 
+        // Assert
         let loaded = unwrap_loaded(load_config(dir.path()));
         let presets = loaded.presets.unwrap();
         assert_eq!(presets.len(), 2);
@@ -231,10 +259,12 @@ mod tests {
 
     #[test]
     fn test_append_preset_preserves_other_sections() {
+        // Arrange
         let dir = TempDir::new().unwrap();
         let original = complete_config();
         save_config(dir.path(), &original).unwrap();
 
+        // Act
         append_preset(
             dir.path(),
             Preset {
@@ -245,6 +275,7 @@ mod tests {
         )
         .unwrap();
 
+        // Assert
         let loaded = unwrap_loaded(load_config(dir.path()));
         assert_eq!(loaded.sender, original.sender);
         assert_eq!(loaded.recipient, original.recipient);
@@ -256,6 +287,7 @@ mod tests {
 
     #[test]
     fn test_append_preset_when_no_presets_field() {
+        // Arrange
         let dir = TempDir::new().unwrap();
         let config = Config {
             sender: Some(synthetic_sender()),
@@ -263,6 +295,7 @@ mod tests {
         };
         save_config(dir.path(), &config).unwrap();
 
+        // Act
         append_preset(
             dir.path(),
             Preset {
@@ -273,6 +306,7 @@ mod tests {
         )
         .unwrap();
 
+        // Assert
         let loaded = unwrap_loaded(load_config(dir.path()));
         let presets = loaded.presets.unwrap();
         assert_eq!(presets.len(), 1);
@@ -283,7 +317,10 @@ mod tests {
 
     #[test]
     fn test_append_preset_no_config_file() {
+        // Arrange
         let dir = TempDir::new().unwrap();
+
+        // Act
         let result = append_preset(
             dir.path(),
             Preset {
@@ -292,6 +329,8 @@ mod tests {
                 default_rate: 50.0,
             },
         );
+
+        // Assert
         assert!(result.is_err());
         assert!(matches!(result, Err(AppError::ConfigIo(_))));
     }

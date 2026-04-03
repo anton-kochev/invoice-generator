@@ -42,8 +42,13 @@ mod tests {
 
     #[test]
     fn test_load_config_file_not_found_returns_not_found() {
+        // Arrange
         let dir = TempDir::new().unwrap();
+
+        // Act
         let result = load_config(dir.path());
+
+        // Assert
         assert!(result.is_ok());
         assert!(matches!(result.unwrap(), LoadResult::NotFound));
     }
@@ -52,6 +57,7 @@ mod tests {
 
     #[test]
     fn test_load_config_valid_complete_returns_loaded() {
+        // Arrange
         let dir = TempDir::new().unwrap();
         let yaml = r#"
 sender:
@@ -79,7 +85,11 @@ defaults:
   invoice_date_day: 5
 "#;
         std::fs::write(dir.path().join("invoice_config.yaml"), yaml).unwrap();
+
+        // Act
         let result = load_config(dir.path()).unwrap();
+
+        // Assert
         match result {
             LoadResult::Loaded(config) => {
                 let sender = config.sender.unwrap();
@@ -114,6 +124,7 @@ defaults:
 
     #[test]
     fn test_load_config_partial_sender_only() {
+        // Act
         let result = load_from_yaml(
             r#"
 sender:
@@ -124,6 +135,8 @@ sender:
 "#,
         )
         .unwrap();
+
+        // Assert
         match result {
             LoadResult::Loaded(config) => {
                 assert!(config.sender.is_some());
@@ -141,7 +154,10 @@ sender:
 
     #[test]
     fn test_load_config_empty_file_returns_loaded_default() {
+        // Act
         let result = load_from_yaml("").unwrap();
+
+        // Assert
         match result {
             LoadResult::Loaded(config) => {
                 assert_eq!(config, Config::default());
@@ -154,7 +170,10 @@ sender:
 
     #[test]
     fn test_load_config_malformed_yaml_returns_config_parse_error() {
+        // Act
         let result = load_from_yaml("sender:\n  name: [invalid yaml\n  broken: {{}");
+
+        // Assert
         assert!(matches!(result, Err(AppError::ConfigParse(_))));
     }
 
@@ -163,12 +182,17 @@ sender:
     #[test]
     #[cfg(unix)]
     fn test_load_config_io_error_returns_config_io_error() {
+        // Arrange
         use std::os::unix::fs::PermissionsExt;
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("invoice_config.yaml");
         std::fs::write(&path, "sender:\n  name: test").unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o000)).unwrap();
+
+        // Act
         let result = load_config(dir.path());
+
+        // Assert
         assert!(matches!(result, Err(AppError::ConfigIo(_))));
     }
 
@@ -176,6 +200,7 @@ sender:
 
     #[test]
     fn test_load_config_bic_alias() {
+        // Act
         let result = load_from_yaml(
             r#"
 payment:
@@ -185,6 +210,8 @@ payment:
 "#,
         )
         .unwrap();
+
+        // Assert
         match result {
             LoadResult::Loaded(config) => {
                 let payment = config.payment.unwrap();
@@ -198,6 +225,7 @@ payment:
 
     #[test]
     fn test_load_config_vat_alias() {
+        // Act
         let result = load_from_yaml(
             r#"
 recipient:
@@ -208,6 +236,8 @@ recipient:
 "#,
         )
         .unwrap();
+
+        // Assert
         match result {
             LoadResult::Loaded(config) => {
                 let recipient = config.recipient.unwrap();
@@ -221,7 +251,10 @@ recipient:
 
     #[test]
     fn test_load_config_defaults_empty_object_uses_serde_defaults() {
+        // Act
         let result = load_from_yaml("defaults: {}").unwrap();
+
+        // Assert
         match result {
             LoadResult::Loaded(config) => {
                 let defaults = config.defaults.unwrap();
@@ -237,6 +270,7 @@ recipient:
 
     #[test]
     fn test_load_config_unknown_fields_are_ignored() {
+        // Act
         let result = load_from_yaml(
             r#"
 unknown_section: "hello"
@@ -249,6 +283,8 @@ sender:
 "#,
         )
         .unwrap();
+
+        // Assert
         match result {
             LoadResult::Loaded(config) => {
                 assert!(config.sender.is_some());

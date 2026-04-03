@@ -104,7 +104,10 @@ mod tests {
 
     #[test]
     fn test_validate_empty_config_returns_all_missing() {
+        // Act
         let result = Config::default().validate();
+
+        // Assert
         match result {
             ValidationOutcome::Incomplete { missing, .. } => {
                 assert_eq!(
@@ -125,7 +128,10 @@ mod tests {
 
     #[test]
     fn test_validate_complete_config_returns_validated() {
+        // Act
         let result = make_complete_config().validate();
+
+        // Assert
         match result {
             ValidationOutcome::Complete(v) => {
                 assert_eq!(v.sender.name, "Alice");
@@ -142,9 +148,14 @@ mod tests {
 
     #[test]
     fn test_validate_missing_defaults_filled_with_default() {
+        // Arrange
         let mut config = make_complete_config();
         config.defaults = None;
+
+        // Act
         let result = config.validate();
+
+        // Assert
         match result {
             ValidationOutcome::Complete(v) => {
                 assert_eq!(v.defaults.currency, "EUR");
@@ -159,11 +170,16 @@ mod tests {
 
     #[test]
     fn test_validate_sender_only_returns_three_missing() {
+        // Arrange
         let config = Config {
             sender: Some(make_sender()),
             ..Config::default()
         };
+
+        // Act
         let result = config.validate();
+
+        // Assert
         match result {
             ValidationOutcome::Incomplete { missing, .. } => {
                 assert_eq!(
@@ -183,12 +199,17 @@ mod tests {
 
     #[test]
     fn test_validate_sender_and_recipient_returns_two_missing() {
+        // Arrange
         let config = Config {
             sender: Some(make_sender()),
             recipient: Some(make_recipient()),
             ..Config::default()
         };
+
+        // Act
         let result = config.validate();
+
+        // Assert
         match result {
             ValidationOutcome::Incomplete { missing, .. } => {
                 assert_eq!(missing, vec![ConfigSection::Payment, ConfigSection::Presets]);
@@ -201,9 +222,14 @@ mod tests {
 
     #[test]
     fn test_validate_empty_payment_vec_treated_as_missing() {
+        // Arrange
         let mut config = make_complete_config();
         config.payment = Some(vec![]);
+
+        // Act
         let result = config.validate();
+
+        // Assert
         match result {
             ValidationOutcome::Incomplete { missing, .. } => {
                 assert_eq!(missing, vec![ConfigSection::Payment]);
@@ -216,9 +242,14 @@ mod tests {
 
     #[test]
     fn test_validate_empty_presets_vec_treated_as_missing() {
+        // Arrange
         let mut config = make_complete_config();
         config.presets = Some(vec![]);
+
+        // Act
         let result = config.validate();
+
+        // Assert
         match result {
             ValidationOutcome::Incomplete { missing, .. } => {
                 assert_eq!(missing, vec![ConfigSection::Presets]);
