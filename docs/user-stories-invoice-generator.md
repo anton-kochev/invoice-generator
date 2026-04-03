@@ -2,7 +2,7 @@
 
 ## Summary
 - **Epics**: 5
-- **Total User Stories**: 18 (12 completed ✅, 6 remaining)
+- **Total User Stories**: 18 (13 completed ✅, 5 remaining)
 - **User Roles Identified**: Freelance Developer (sole actor — referred to as "user" throughout)
 
 ---
@@ -213,7 +213,7 @@
 
 ---
 
-### Story 3.4: Enter Line Item Details
+### Story 3.4: Enter Line Item Details ✅
 **As a** user,
 **I want** to enter days worked and optionally override the rate for each line item,
 **So that** I can accurately bill for the actual work done.

@@ -40,27 +40,17 @@ fn run_invoice_flow(
     )?;
     println!("Invoice period: {period}");
 
-    let selection = invoice::preset_selection::select_preset(
+    let line_items = invoice::line_item::collect_all_line_items(
         prompter,
         &validated.presets,
         &validated.defaults.currency,
     )?;
 
-    match &selection {
-        invoice::types::PresetSelection::Existing(preset) => {
-            let line_item = invoice::line_item::collect_line_item_details(
-                prompter,
-                &preset,
-                1,
-            )?;
-            println!(
-                "Line item: {} — {:.2} days @ {:.2} = {:.2}",
-                line_item.description, line_item.days, line_item.rate, line_item.amount
-            );
-        }
-        invoice::types::PresetSelection::CreateNew => {
-            println!("Create new preset (not yet implemented)");
-        }
+    for item in &line_items {
+        println!(
+            "  {} — {:.2} days @ {:.2} = {:.2}",
+            item.description, item.days, item.rate, item.amount
+        );
     }
 
     Ok(())
