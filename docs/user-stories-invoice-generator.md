@@ -2,7 +2,7 @@
 
 ## Summary
 - **Epics**: 5
-- **Total User Stories**: 18 (2 completed ✅, 16 remaining)
+- **Total User Stories**: 18 (3 completed ✅, 15 remaining)
 - **User Roles Identified**: Freelance Developer (sole actor — referred to as "user" throughout)
 
 ---
@@ -41,7 +41,7 @@
 
 ---
 
-### Story 1.3: Persist Config Changes to YAML
+### Story 1.3: Persist Config Changes to YAML ✅
 **As a** user,
 **I want** config changes (e.g., new presets) to be written back to `invoice_config.yaml`,
 **So that** they survive across sessions without manual file editing.
