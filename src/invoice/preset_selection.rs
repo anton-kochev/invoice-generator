@@ -1,0 +1,308 @@
+use crate::config::types::Preset;
+use crate::error::AppError;
+use crate::setup::prompter::Prompter;
+
+use super::types::PresetSelection;
+
+/// Interactively select a preset for a line item.
+///
+/// Displays all available presets in a numbered list, plus a
+/// "Create new preset" option at the end.
+pub fn select_preset(
+    prompter: &dyn Prompter,
+    presets: &[Preset],
+    currency: &str,
+) -> Result<PresetSelection, AppError> {
+    prompter.message("\nSelect a preset for this line item:\n");
+
+    for (i, preset) in presets.iter().enumerate() {
+        prompter.message(&format!(
+            "  [{}] {} \u{2014} {} ({} {:.2}/day)",
+            i + 1,
+            preset.key,
+            preset.description,
+            currency,
+            preset.default_rate,
+        ));
+    }
+
+    let max = presets.len() + 1;
+    prompter.message(&format!("  [{max}] + Create new preset"));
+
+    let choice = loop {
+        let n = prompter.u32_with_default("Select preset number:", 1)?;
+        if n >= 1 && n as usize <= max {
+            break n;
+        }
+        prompter.message(&format!("Please enter a number between 1 and {max}."));
+    };
+
+    if choice as usize == max {
+        Ok(PresetSelection::CreateNew)
+    } else {
+        Ok(PresetSelection::Existing(presets[choice as usize - 1].clone()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::setup::mock_prompter::{MockPrompter, MockResponse};
+
+    fn make_presets() -> Vec<Preset> {
+        vec![
+            Preset {
+                key: "dev".into(),
+                description: "Software development".into(),
+                default_rate: 800.0,
+            },
+            Preset {
+                key: "consulting".into(),
+                description: "Technical consulting".into(),
+                default_rate: 1000.0,
+            },
+        ]
+    }
+
+    #[test]
+    fn displays_all_presets_in_numbered_list() {
+        // Arrange
+        let presets = make_presets();
+        let prompter = MockPrompter::new(vec![MockResponse::U32(1)]);
+
+        // Act
+        select_preset(&prompter, &presets, "EUR").unwrap();
+
+        // Assert
+        let messages = prompter.messages.borrow();
+        let all = messages.join("\n");
+        assert!(all.contains("[1]"), "Expected [1] in messages, got: {all}");
+        assert!(all.contains("[2]"), "Expected [2] in messages, got: {all}");
+        assert!(all.contains("dev"), "Expected 'dev' in messages, got: {all}");
+        assert!(
+            all.contains("consulting"),
+            "Expected 'consulting' in messages, got: {all}"
+        );
+        assert!(
+            all.contains("[3] + Create new preset"),
+            "Expected '[3] + Create new preset' in messages, got: {all}"
+        );
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn displays_currency_and_rate() {
+        // Arrange
+        let presets = vec![Preset {
+            key: "design".into(),
+            description: "Graphic design".into(),
+            default_rate: 500.0,
+        }];
+        let prompter = MockPrompter::new(vec![MockResponse::U32(1)]);
+
+        // Act
+        select_preset(&prompter, &presets, "USD").unwrap();
+
+        // Assert
+        let messages = prompter.messages.borrow();
+        let all = messages.join("\n");
+        assert!(all.contains("USD"), "Expected 'USD' in messages, got: {all}");
+        assert!(
+            all.contains("500.00"),
+            "Expected '500.00' in messages, got: {all}"
+        );
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn selects_first_preset() {
+        // Arrange
+        let presets = make_presets();
+        let prompter = MockPrompter::new(vec![MockResponse::U32(1)]);
+
+        // Act
+        let result = select_preset(&prompter, &presets, "EUR").unwrap();
+
+        // Assert
+        assert_eq!(result, PresetSelection::Existing(presets[0].clone()));
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn selects_last_preset() {
+        // Arrange
+        let presets = make_presets();
+        let prompter = MockPrompter::new(vec![MockResponse::U32(2)]);
+
+        // Act
+        let result = select_preset(&prompter, &presets, "EUR").unwrap();
+
+        // Assert
+        assert_eq!(result, PresetSelection::Existing(presets[1].clone()));
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn selects_create_new() {
+        // Arrange
+        let presets = make_presets();
+        let prompter = MockPrompter::new(vec![MockResponse::U32(3)]);
+
+        // Act
+        let result = select_preset(&prompter, &presets, "EUR").unwrap();
+
+        // Assert
+        assert_eq!(result, PresetSelection::CreateNew);
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn single_preset_shows_create_new_as_option_two() {
+        // Arrange
+        let presets = vec![Preset {
+            key: "solo".into(),
+            description: "Solo work".into(),
+            default_rate: 600.0,
+        }];
+        let prompter = MockPrompter::new(vec![MockResponse::U32(2)]);
+
+        // Act
+        let result = select_preset(&prompter, &presets, "EUR").unwrap();
+
+        // Assert
+        assert_eq!(result, PresetSelection::CreateNew);
+        let messages = prompter.messages.borrow();
+        let all = messages.join("\n");
+        assert!(
+            all.contains("[2] + Create new preset"),
+            "Expected '[2] + Create new preset' in messages, got: {all}"
+        );
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn reprompts_on_zero() {
+        // Arrange
+        let presets = make_presets();
+        let prompter = MockPrompter::new(vec![MockResponse::U32(0), MockResponse::U32(1)]);
+
+        // Act
+        let result = select_preset(&prompter, &presets, "EUR").unwrap();
+
+        // Assert
+        assert_eq!(result, PresetSelection::Existing(presets[0].clone()));
+        let messages = prompter.messages.borrow();
+        let all = messages.join("\n");
+        assert!(
+            all.contains("1") && all.contains("3"),
+            "Expected error message mentioning '1 and 3', got: {all}"
+        );
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn reprompts_on_too_high() {
+        // Arrange
+        let presets = make_presets();
+        let prompter = MockPrompter::new(vec![MockResponse::U32(99), MockResponse::U32(2)]);
+
+        // Act
+        let result = select_preset(&prompter, &presets, "EUR").unwrap();
+
+        // Assert
+        assert_eq!(result, PresetSelection::Existing(presets[1].clone()));
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn reprompts_on_number_beyond_create_new() {
+        // Arrange
+        let presets = make_presets();
+        let prompter = MockPrompter::new(vec![MockResponse::U32(4), MockResponse::U32(3)]);
+
+        // Act
+        let result = select_preset(&prompter, &presets, "EUR").unwrap();
+
+        // Assert
+        assert_eq!(result, PresetSelection::CreateNew);
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn reprompts_multiple_invalid_then_valid() {
+        // Arrange
+        let presets = make_presets();
+        let prompter = MockPrompter::new(vec![
+            MockResponse::U32(0),
+            MockResponse::U32(99),
+            MockResponse::U32(1),
+        ]);
+
+        // Act
+        let result = select_preset(&prompter, &presets, "EUR").unwrap();
+
+        // Assert
+        assert_eq!(result, PresetSelection::Existing(presets[0].clone()));
+        let messages = prompter.messages.borrow();
+        let error_count = messages
+            .iter()
+            .filter(|m| m.contains("Please enter a number between"))
+            .count();
+        assert_eq!(
+            error_count, 2,
+            "Expected 2 error messages, got {error_count}"
+        );
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn preserves_preset_data_in_return() {
+        // Arrange
+        let presets = vec![Preset {
+            key: "special".into(),
+            description: "Special project work".into(),
+            default_rate: 1234.56,
+        }];
+        let prompter = MockPrompter::new(vec![MockResponse::U32(1)]);
+
+        // Act
+        let result = select_preset(&prompter, &presets, "EUR").unwrap();
+
+        // Assert
+        match result {
+            PresetSelection::Existing(p) => {
+                assert_eq!(p.key, "special");
+                assert_eq!(p.description, "Special project work");
+                assert!((p.default_rate - 1234.56).abs() < f64::EPSILON);
+            }
+            PresetSelection::CreateNew => panic!("Expected Existing, got CreateNew"),
+        }
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn with_many_presets_shows_all() {
+        // Arrange
+        let presets: Vec<Preset> = (1..=5)
+            .map(|i| Preset {
+                key: format!("preset{i}"),
+                description: format!("Preset number {i}"),
+                default_rate: i as f64 * 100.0,
+            })
+            .collect();
+        let prompter = MockPrompter::new(vec![MockResponse::U32(6)]);
+
+        // Act
+        let result = select_preset(&prompter, &presets, "EUR").unwrap();
+
+        // Assert
+        assert_eq!(result, PresetSelection::CreateNew);
+        let messages = prompter.messages.borrow();
+        let all = messages.join("\n");
+        assert!(
+            all.contains("[6] + Create new preset"),
+            "Expected '[6] + Create new preset' in messages, got: {all}"
+        );
+        prompter.assert_exhausted();
+    }
+}

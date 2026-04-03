@@ -2,7 +2,7 @@
 
 ## Summary
 - **Epics**: 5
-- **Total User Stories**: 18 (10 completed ✅, 8 remaining)
+- **Total User Stories**: 18 (11 completed ✅, 7 remaining)
 - **User Roles Identified**: Freelance Developer (sole actor — referred to as "user" throughout)
 
 ---
@@ -164,7 +164,7 @@
 ## Epic 3: Invoice Data Collection
 > The interactive prompts that gather period, line items, and confirmation for a single invoice.
 
-### Story 3.1: Prompt for Invoice Period
+### Story 3.1: Prompt for Invoice Period ✅
 **As a** user,
 **I want** to enter the billing month and year with smart defaults,
 **So that** generating last month's invoice requires minimal typing.
@@ -357,7 +357,7 @@
 | YAML config | `serde` + `serde_yaml` |
 | Interactive prompts | `inquire` |
 | PDF generation | `genpdf` or `printpdf` |
-| Date handling | `chrono` |
+| Date handling | `time` |
 
 The application compiles to a single static binary with no runtime dependencies.
 

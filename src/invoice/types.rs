@@ -1,5 +1,16 @@
 use std::fmt;
 
+use crate::config::types::Preset;
+
+/// Result of the preset selection prompt.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PresetSelection {
+    /// User selected an existing preset.
+    Existing(Preset),
+    /// User wants to create a new preset (Story 3.3).
+    CreateNew,
+}
+
 /// A validated invoice period (month + year).
 ///
 /// Month is constrained to 1..=12, year to 2000..=2099.
