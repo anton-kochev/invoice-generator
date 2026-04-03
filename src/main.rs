@@ -1,25 +1,46 @@
 mod config;
 mod error;
+mod setup;
 
 use config::loader::{load_config, LoadResult};
-use config::validator::ValidationOutcome;
+use config::types::Config;
+use config::validator::{ConfigSection, ValidationOutcome};
+use setup::prompter::InquirePrompter;
 use std::process;
 
 fn main() {
     if let Err(e) = run() {
-        eprintln!("Error: {e}");
-        if matches!(e, error::AppError::ConfigParse(_)) {
-            eprintln!("Fix the file or delete it to re-run setup.");
+        match e {
+            error::AppError::SetupCancelled => {
+                println!("Setup cancelled. Your progress has been saved.");
+            }
+            error::AppError::ConfigParse(_) => {
+                eprintln!("Error: {e}");
+                eprintln!("Fix the file or delete it to re-run setup.");
+                process::exit(1);
+            }
+            _ => {
+                eprintln!("Error: {e}");
+                process::exit(1);
+            }
         }
-        process::exit(1);
     }
 }
 
 fn run() -> Result<(), error::AppError> {
     let cwd = std::env::current_dir().map_err(error::AppError::ConfigIo)?;
+    let prompter = InquirePrompter::new();
+
     match load_config(&cwd)? {
         LoadResult::NotFound => {
-            println!("No config file found. First-run setup would start here.");
+            let mut config = Config::default();
+            let all_missing = vec![
+                ConfigSection::Sender,
+                ConfigSection::Recipient,
+                ConfigSection::Payment,
+                ConfigSection::Presets,
+            ];
+            setup::run_setup(&prompter, &mut config, &all_missing, &cwd)?;
             Ok(())
         }
         LoadResult::Loaded(config) => match config.validate() {
@@ -30,14 +51,9 @@ fn run() -> Result<(), error::AppError> {
                 // TODO: Story 3.1 - proceed to invoice flow
                 Ok(())
             }
-            ValidationOutcome::Incomplete { missing, .. } => {
-                eprintln!("Config is incomplete. Missing sections:");
-                for section in &missing {
-                    eprintln!("  - {section}");
-                }
-                eprintln!("Setup would resume from: {}", missing[0]);
-                eprintln!("Fix the file or delete it to re-run setup.");
-                std::process::exit(1);
+            ValidationOutcome::Incomplete { mut config, missing } => {
+                setup::run_setup(&prompter, &mut config, &missing, &cwd)?;
+                Ok(())
             }
         },
     }

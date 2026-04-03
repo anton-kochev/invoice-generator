@@ -10,4 +10,8 @@ pub enum AppError {
     /// IO error while reading the config file.
     #[error("Failed to read config: {0}")]
     ConfigIo(#[from] std::io::Error),
+
+    /// User cancelled the setup wizard (Escape / Ctrl-C).
+    #[error("Setup cancelled by user.")]
+    SetupCancelled,
 }
