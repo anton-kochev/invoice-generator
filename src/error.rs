@@ -14,4 +14,8 @@ pub enum AppError {
     /// User cancelled the setup wizard (Escape / Ctrl-C).
     #[error("Setup cancelled by user.")]
     SetupCancelled,
+
+    /// Invalid date during invoice computation.
+    #[error("Invalid date: {0}")]
+    InvalidDate(String),
 }

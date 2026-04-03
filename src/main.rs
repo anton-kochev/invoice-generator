@@ -32,25 +32,36 @@ fn run_invoice_flow(
     prompter: &dyn Prompter,
     validated: &ValidatedConfig,
 ) -> Result<(), error::AppError> {
-    let now = time::OffsetDateTime::now_utc();
-    let period = invoice::period::collect_invoice_period(
-        prompter,
-        u32::from(now.month() as u8),
-        now.year() as u32,
-    )?;
-    println!("Invoice period: {period}");
+    loop {
+        let now = time::OffsetDateTime::now_utc();
+        let period = invoice::period::collect_invoice_period(
+            prompter,
+            u32::from(now.month() as u8),
+            now.year() as u32,
+        )?;
 
-    let line_items = invoice::line_item::collect_all_line_items(
-        prompter,
-        &validated.presets,
-        &validated.defaults.currency,
-    )?;
+        let line_items = invoice::line_item::collect_all_line_items(
+            prompter,
+            &validated.presets,
+            &validated.defaults.currency,
+        )?;
 
-    for item in &line_items {
-        println!(
-            "  {} — {:.2} days @ {:.2} = {:.2}",
-            item.description, item.days, item.rate, item.amount
-        );
+        let summary = invoice::summary::build_summary(
+            period,
+            line_items,
+            &validated.defaults,
+        )?;
+
+        let formatted = invoice::display::format_summary(&summary);
+        prompter.message(&formatted);
+
+        if prompter.confirm("Generate PDF?", true)? {
+            // Story 4.2+: PDF generation goes here
+            prompter.message("PDF generation not yet implemented.");
+            break;
+        }
+
+        prompter.message("Starting over...\n");
     }
 
     Ok(())

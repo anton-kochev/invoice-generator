@@ -77,6 +77,25 @@ impl LineItem {
     }
 }
 
+/// A fully computed invoice summary, ready for display or PDF generation.
+#[derive(Debug, Clone, PartialEq)]
+pub struct InvoiceSummary {
+    /// e.g. "INV-2025-12"
+    pub invoice_number: String,
+    /// The billed period (month + year).
+    pub period: InvoicePeriod,
+    /// Invoice issue date (day after billing period month).
+    pub invoice_date: time::Date,
+    /// Payment due date (invoice_date + payment_terms_days).
+    pub due_date: time::Date,
+    /// Currency code, e.g. "EUR".
+    pub currency: String,
+    /// The individual line items.
+    pub line_items: Vec<LineItem>,
+    /// Sum of all line item amounts, rounded to 2dp.
+    pub total: f64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
