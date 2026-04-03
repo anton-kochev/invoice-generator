@@ -2,7 +2,7 @@
 
 ## Summary
 - **Epics**: 5
-- **Total User Stories**: 18
+- **Total User Stories**: 18 (2 completed ✅, 16 remaining)
 - **User Roles Identified**: Freelance Developer (sole actor — referred to as "user" throughout)
 
 ---
@@ -10,7 +10,7 @@
 ## Epic 1: Config File Management
 > Foundation for reading, validating, and persisting the YAML configuration that drives all invoice data.
 
-### Story 1.1: Load and Parse Config File
+### Story 1.1: Load and Parse Config File ✅
 **As a** user,
 **I want** the app to load `invoice_config.yaml` from the working directory at startup,
 **So that** all my static invoice data is ready without re-entering it each time.
@@ -25,7 +25,7 @@
 
 ---
 
-### Story 1.2: Validate Config Completeness
+### Story 1.2: Validate Config Completeness ✅
 **As a** user,
 **I want** the app to tell me exactly which config section is broken or missing,
 **So that** I can fix it without guessing.

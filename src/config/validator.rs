@@ -41,6 +41,7 @@ pub enum ValidationOutcome {
     Complete(ValidatedConfig),
     /// One or more required sections are missing.
     Incomplete {
+        #[allow(dead_code)] // needed by setup wizard (Story 2.1) to resume from partial config
         config: Config,
         missing: Vec<ConfigSection>,
     },

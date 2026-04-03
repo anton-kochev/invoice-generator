@@ -4,14 +4,19 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct Config {
     /// Sender / freelancer info.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sender: Option<Sender>,
     /// Default recipient / client info.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recipient: Option<Recipient>,
     /// Available payment methods.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub payment: Option<Vec<PaymentMethod>>,
     /// Invoice presets (e.g. hourly-rate templates).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub presets: Option<Vec<Preset>>,
     /// Default values for new invoices.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub defaults: Option<Defaults>,
 }
 
