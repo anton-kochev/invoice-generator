@@ -48,7 +48,15 @@ fn run_invoice_flow(
 
     match &selection {
         invoice::types::PresetSelection::Existing(preset) => {
-            println!("Selected preset: {} \u{2014} {}", preset.key, preset.description);
+            let line_item = invoice::line_item::collect_line_item_details(
+                prompter,
+                &preset,
+                1,
+            )?;
+            println!(
+                "Line item: {} — {:.2} days @ {:.2} = {:.2}",
+                line_item.description, line_item.days, line_item.rate, line_item.amount
+            );
         }
         invoice::types::PresetSelection::CreateNew => {
             println!("Create new preset (not yet implemented)");

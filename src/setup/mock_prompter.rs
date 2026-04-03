@@ -95,6 +95,13 @@ impl Prompter for MockPrompter {
         }
     }
 
+    fn positive_f64_with_default(&self, _prompt: &str, _default: f64) -> Result<f64, AppError> {
+        match self.pop("F64") {
+            MockResponse::F64(v) => Ok(v),
+            other => panic!("MockPrompter: expected F64, got {other:?}"),
+        }
+    }
+
     fn confirm(&self, _prompt: &str, _default: bool) -> Result<bool, AppError> {
         match self.pop("Confirm") {
             MockResponse::Confirm(b) => Ok(b),
@@ -172,5 +179,18 @@ mod tests {
 
         // Act & Assert
         prompter.assert_exhausted(); // should panic
+    }
+
+    #[test]
+    fn test_mock_prompter_pops_f64_with_default_response() {
+        // Arrange
+        let prompter = MockPrompter::new(vec![MockResponse::F64(750.0)]);
+
+        // Act
+        let result = prompter.positive_f64_with_default("Rate:", 800.0).unwrap();
+
+        // Assert
+        assert!((result - 750.0).abs() < f64::EPSILON);
+        prompter.assert_exhausted();
     }
 }

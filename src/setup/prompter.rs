@@ -27,6 +27,9 @@ pub trait Prompter {
     /// Prompt for a positive f64. Re-prompts on non-positive or parse error.
     fn positive_f64(&self, prompt: &str) -> Result<f64, AppError>;
 
+    /// Prompt for a positive f64 with a default value. Enter accepts default.
+    fn positive_f64_with_default(&self, prompt: &str, default: f64) -> Result<f64, AppError>;
+
     /// Yes/No confirmation. `default` determines what Enter alone means.
     fn confirm(&self, prompt: &str, default: bool) -> Result<bool, AppError>;
 }
@@ -129,6 +132,23 @@ impl Prompter for InquirePrompter {
                 } else {
                     Ok(inquire::validator::Validation::Invalid(
                         "Rate must be greater than 0.".into(),
+                    ))
+                }
+            })
+            .prompt()
+            .map_err(|_| AppError::SetupCancelled)
+    }
+
+    fn positive_f64_with_default(&self, prompt: &str, default: f64) -> Result<f64, AppError> {
+        inquire::CustomType::<f64>::new(prompt)
+            .with_default(default)
+            .with_error_message("Please enter a valid number.")
+            .with_validator(|val: &f64| {
+                if *val > 0.0 {
+                    Ok(inquire::validator::Validation::Valid)
+                } else {
+                    Ok(inquire::validator::Validation::Invalid(
+                        "Value must be greater than 0.".into(),
                     ))
                 }
             })

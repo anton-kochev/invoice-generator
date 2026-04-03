@@ -2,7 +2,7 @@
 
 ## Summary
 - **Epics**: 5
-- **Total User Stories**: 18 (11 completed ✅, 7 remaining)
+- **Total User Stories**: 18 (12 completed ✅, 6 remaining)
 - **User Roles Identified**: Freelance Developer (sole actor — referred to as "user" throughout)
 
 ---
@@ -181,7 +181,7 @@
 
 ---
 
-### Story 3.2: Select Preset for Line Item
+### Story 3.2: Select Preset for Line Item ✅
 **As a** user,
 **I want** to pick a preset from a numbered list when adding a line item,
 **So that** I don't have to re-type descriptions and rates every time.
