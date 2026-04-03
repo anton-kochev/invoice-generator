@@ -1,6 +1,7 @@
 mod config;
 mod error;
 mod invoice;
+mod pdf;
 mod setup;
 
 use config::loader::{load_config, LoadResult};
@@ -31,6 +32,7 @@ fn main() {
 fn run_invoice_flow(
     prompter: &dyn Prompter,
     validated: &ValidatedConfig,
+    cwd: &std::path::Path,
 ) -> Result<(), error::AppError> {
     loop {
         let now = time::OffsetDateTime::now_utc();
@@ -56,8 +58,11 @@ fn run_invoice_flow(
         prompter.message(&formatted);
 
         if prompter.confirm("Generate PDF?", true)? {
-            // Story 4.2+: PDF generation goes here
-            prompter.message("PDF generation not yet implemented.");
+            let pdf_bytes = pdf::generate_pdf(&summary, validated)?;
+            let filename = format!("{}.pdf", summary.invoice_number);
+            let output_path = cwd.join(&filename);
+            std::fs::write(&output_path, &pdf_bytes)?;
+            prompter.message(&format!("PDF saved: {}", output_path.display()));
             break;
         }
 
@@ -107,5 +112,5 @@ fn run() -> Result<(), error::AppError> {
         },
     };
 
-    run_invoice_flow(&prompter, &validated)
+    run_invoice_flow(&prompter, &validated, &cwd)
 }

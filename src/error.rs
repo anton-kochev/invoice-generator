@@ -18,4 +18,12 @@ pub enum AppError {
     /// Invalid date during invoice computation.
     #[error("Invalid date: {0}")]
     InvalidDate(String),
+
+    /// PDF compilation failed (typst compilation error).
+    #[error("PDF compilation failed: {0}")]
+    PdfCompile(String),
+
+    /// PDF export failed.
+    #[error("PDF export failed: {0}")]
+    PdfExport(String),
 }
