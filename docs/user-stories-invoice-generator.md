@@ -2,7 +2,7 @@
 
 ## Summary
 - **Epics**: 11 (5 v1.0 + 6 v2.0)
-- **Total User Stories**: 41 (25 completed ✅ + 16 remaining)
+- **Total User Stories**: 41 (31 completed ✅ + 10 remaining)
 - **User Roles Identified**: Freelance Developer (sole actor — referred to as "user" throughout)
 
 ---
@@ -503,7 +503,7 @@ The application compiles to a single static binary with no runtime dependencies.
 
 ---
 
-### Story 7.2: Recipient Selection in Interactive Flow
+### Story 7.2: Recipient Selection in Interactive Flow ✅
 **As a** user,
 **I want** to be prompted to select a recipient when multiple profiles exist,
 **So that** I can invoice the right client each time.
@@ -518,7 +518,7 @@ The application compiles to a single static binary with no runtime dependencies.
 
 ---
 
-### Story 7.3: Client Flag in Non-Interactive Mode
+### Story 7.3: Client Flag in Non-Interactive Mode ✅
 **As a** user,
 **I want** to specify `--client <key>` in `invoice generate` to choose a recipient,
 **So that** scripted generation works with multi-client configs.
@@ -532,7 +532,7 @@ The application compiles to a single static binary with no runtime dependencies.
 
 ---
 
-### Story 7.4: Recipient Listing Subcommand
+### Story 7.4: Recipient Listing Subcommand ✅
 **As a** user,
 **I want** to run `invoice recipient list` to see all configured client profiles,
 **So that** I can check recipient keys without opening the config file.
@@ -547,7 +547,7 @@ The application compiles to a single static binary with no runtime dependencies.
 
 ---
 
-### Story 7.5: Recipient Add Subcommand
+### Story 7.5: Recipient Add Subcommand ✅
 **As a** user,
 **I want** to run `invoice recipient add` to interactively add a new client profile,
 **So that** I don't have to hand-edit the YAML config.
@@ -563,7 +563,7 @@ The application compiles to a single static binary with no runtime dependencies.
 
 ---
 
-### Story 7.6: Recipient Deletion Subcommand
+### Story 7.6: Recipient Deletion Subcommand ✅
 **As a** user,
 **I want** to run `invoice recipient delete <key>` to remove a client profile,
 **So that** I can clean up old clients.
@@ -728,7 +728,7 @@ The application compiles to a single static binary with no runtime dependencies.
 ## Epic 11: v2.0 Error Handling & Backwards Compatibility
 > Cross-cutting robustness for new v2.0 features and seamless migration from v1.0 configs.
 
-### Story 11.1: v1.0 Config Backwards Compatibility
+### Story 11.1: v1.0 Config Backwards Compatibility ✅
 **As a** user upgrading from v1.0,
 **I want** my existing config file to work without changes,
 **So that** I can upgrade the binary without a migration step.
@@ -822,7 +822,7 @@ The application compiles to a single static binary with no runtime dependencies.
 
 1. **Sprint 5** ✅: Stories 6.1, 6.4, 6.5 (subcommand scaffold + preset management)
 2. **Sprint 6** ✅: Stories 6.2, 6.3 (non-interactive generation)
-3. **Sprint 7**: Stories 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 11.1 (multi-recipient + backwards compat)
+3. **Sprint 7** ✅: Stories 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 11.1 (multi-recipient + backwards compat)
 4. **Sprint 8**: Stories 8.1, 8.2 (multi-currency)
 5. **Sprint 9**: Stories 9.1, 9.2, 9.3, 9.4 (tax/VAT)
 6. **Sprint 10**: Stories 10.1, 10.2, 10.3 (branding)
