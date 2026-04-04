@@ -1,8 +1,8 @@
 # User Stories — Invoice Generator CLI
 
 ## Summary
-- **Epics**: 5
-- **Total User Stories**: 18 (18 completed ✅)
+- **Epics**: 11 (5 v1.0 + 6 v2.0)
+- **Total User Stories**: 41 (18 v1.0 completed ✅ + 23 v2.0)
 - **User Roles Identified**: Freelance Developer (sole actor — referred to as "user" throughout)
 
 ---
@@ -387,3 +387,438 @@ The application compiles to a single static binary with no runtime dependencies.
 2. **Sprint 2**: Stories 2.1–2.7 (full setup wizard)
 3. **Sprint 3**: Stories 3.1, 3.2, 3.4, 3.5, 3.6 (core invoice flow) + 5.1 (validation)
 4. **Sprint 4**: Stories 4.1, 4.2, 4.3 (PDF generation) + 3.3 (inline preset creation)
+
+---
+
+# v2.0 User Stories
+
+> All stories below build on top of the completed v1.0 foundation. v1.0 behavior remains unchanged unless explicitly noted. See `docs/SRS_Invoice_Generator_v2.md` for the full specification.
+
+---
+
+## Epic 6: Subcommand CLI Architecture
+> Introduce a subcommand structure so the tool can be used both interactively and non-interactively from scripts.
+
+### Story 6.1: Subcommand Routing and Default Behavior
+**As a** user,
+**I want** the CLI to support subcommands (`invoice`, `invoice generate`, `invoice preset`),
+**So that** I can choose between interactive and scripted workflows.
+
+**Acceptance Criteria:**
+- [ ] Running `invoice` with no subcommand launches the existing interactive flow (v1.0 behavior, unchanged)
+- [ ] Unknown subcommands print usage help and exit with non-zero code
+- [ ] `--help` on any subcommand prints usage for that specific subcommand
+- [ ] Existing v1.0 behavior is fully preserved when no subcommand is given
+
+**Dependencies:** None (builds on existing main.rs entry point)
+
+---
+
+### Story 6.2: Non-Interactive Single-Item Generation
+**As a** user,
+**I want** to generate an invoice from the command line with `--month`, `--year`, `--preset`, and `--days` flags,
+**So that** I can script invoice generation without interactive prompts.
+
+**Acceptance Criteria:**
+- [ ] `invoice generate --month 3 --year 2026 --preset pwc --days 10` generates a PDF and exits
+- [ ] All four flags are required — missing flags produce an error listing what is missing, then exit with non-zero code
+- [ ] `--preset` value must match an existing preset key; unknown key prints error and exits with non-zero code
+- [ ] `--days` must be > 0; invalid value prints error and exits
+- [ ] Output PDF uses the same filename convention as interactive mode (Story 4.3)
+- [ ] If a PDF with the same filename already exists, silently overwrites it
+- [ ] Exit code is 0 on success
+
+**Dependencies:** Story 6.1
+
+---
+
+### Story 6.3: Non-Interactive Multi-Item Generation
+**As a** user,
+**I want** to pass multiple line items as JSON via `--items` flag,
+**So that** I can generate multi-line invoices in a single command.
+
+**Acceptance Criteria:**
+- [ ] `--items '[{"preset":"pwc","days":10},{"preset":"internal","days":5}]'` generates a PDF with two line items
+- [ ] Each JSON object must include `preset` (string) and `days` (number > 0)
+- [ ] Optional `rate` field overrides the preset's `default_rate` (number only — currency always comes from preset/default)
+- [ ] `--items` and `--preset`/`--days` are mutually exclusive — providing both prints error and exits
+- [ ] Malformed JSON prints parse error and exits with non-zero code
+- [ ] Unknown preset key in any item prints error naming the unknown key and exits
+- [ ] All other required flags (`--month`, `--year`) still apply
+
+**Dependencies:** Story 6.2
+
+---
+
+### Story 6.4: Preset Listing Subcommand
+**As a** user,
+**I want** to run `invoice preset list` to see all configured presets,
+**So that** I can check preset keys and rates without opening the config file.
+
+**Acceptance Criteria:**
+- [ ] Prints a formatted table with columns: Key, Description, Default Rate, Currency
+- [ ] Lists all presets from the config file
+- [ ] Exits with code 0
+
+**Dependencies:** Story 6.1
+
+---
+
+### Story 6.5: Preset Deletion Subcommand
+**As a** user,
+**I want** to run `invoice preset delete <key>` to remove a preset,
+**So that** I can clean up presets I no longer use.
+
+**Acceptance Criteria:**
+- [ ] Prompts for confirmation: `Delete preset "pwc" (Software Development Services PwC Project)? (y/N)`
+- [ ] On "y", removes the preset from `invoice_config.yaml` and prints `✓ Preset "pwc" deleted from invoice_config.yaml`
+- [ ] On "N" or Enter, aborts without changes
+- [ ] If the preset is the only remaining one, refuses: `Cannot delete — at least one preset must exist.`
+- [ ] Unknown key prints error and exits with non-zero code
+
+**Dependencies:** Story 6.1, Story 1.3
+
+---
+
+## Epic 7: Multiple Client Profiles
+> Support multiple recipients in the config so users who invoice different clients don't need multiple config files.
+
+### Story 7.1: Multi-Recipient Config Structure
+**As a** user,
+**I want** the config file to support a named list of recipients with a default,
+**So that** I can store multiple client profiles in one config.
+
+**Acceptance Criteria:**
+- [ ] Config supports a `recipients` array, each entry having a `key`, `name`, `address`, and optional `company_id`/`vat`
+- [ ] A `default_recipient` field designates the default profile key
+- [ ] Backwards compatible: if config uses v1.0 single-`recipient` structure, treats it as a single-profile list — no migration required
+- [ ] Config validation ensures at least one recipient exists and `default_recipient` references a valid key
+
+**Dependencies:** Story 1.1, Story 1.2
+
+---
+
+### Story 7.2: Recipient Selection in Interactive Flow
+**As a** user,
+**I want** to be prompted to select a recipient when multiple profiles exist,
+**So that** I can invoice the right client each time.
+
+**Acceptance Criteria:**
+- [ ] If only one recipient exists, uses it automatically (no prompt)
+- [ ] If multiple recipients exist, displays a numbered list and prompts for selection
+- [ ] Selected recipient's data is used for the invoice "TO" section and PDF
+- [ ] Works with both v1.0 and v2.0 config formats
+
+**Dependencies:** Story 7.1
+
+---
+
+### Story 7.3: Client Flag in Non-Interactive Mode
+**As a** user,
+**I want** to specify `--client <key>` in `invoice generate` to choose a recipient,
+**So that** scripted generation works with multi-client configs.
+
+**Acceptance Criteria:**
+- [ ] `--client` flag is optional; if omitted, `default_recipient` is used
+- [ ] Unknown `--client` key prints error listing available client profiles and exits with non-zero code
+- [ ] Works with both single-item and multi-item (`--items`) generation
+
+**Dependencies:** Story 7.1, Story 6.2
+
+---
+
+### Story 7.4: Recipient Listing Subcommand
+**As a** user,
+**I want** to run `invoice recipient list` to see all configured client profiles,
+**So that** I can check recipient keys without opening the config file.
+
+**Acceptance Criteria:**
+- [ ] Prints a formatted table with columns: Key, Name, Address (first line), Company ID
+- [ ] Marks the default recipient with an indicator (e.g., `*` or `(default)`)
+- [ ] Lists all recipients from the config file
+- [ ] Exits with code 0
+
+**Dependencies:** Story 7.1
+
+---
+
+### Story 7.5: Recipient Add Subcommand
+**As a** user,
+**I want** to run `invoice recipient add` to interactively add a new client profile,
+**So that** I don't have to hand-edit the YAML config.
+
+**Acceptance Criteria:**
+- [ ] Prompts for: key (short identifier), company name (required), address lines (at least one, blank terminates), company ID (optional), VAT (optional)
+- [ ] Rejects duplicate keys with message `Key "X" already exists. Choose another:` and re-prompts
+- [ ] Appends the new recipient to `invoice_config.yaml`
+- [ ] Asks if this should become the new default recipient
+- [ ] Prints confirmation: `✓ Recipient "key" added to invoice_config.yaml`
+
+**Dependencies:** Story 7.1, Story 1.3
+
+---
+
+### Story 7.6: Recipient Deletion Subcommand
+**As a** user,
+**I want** to run `invoice recipient delete <key>` to remove a client profile,
+**So that** I can clean up old clients.
+
+**Acceptance Criteria:**
+- [ ] Prompts for confirmation: `Delete recipient "key" (Company Name)? (y/N)`
+- [ ] On "y", removes the recipient from `invoice_config.yaml` and prints `✓ Recipient "key" deleted from invoice_config.yaml`
+- [ ] On "N" or Enter, aborts without changes
+- [ ] If the recipient is the only remaining one, refuses: `Cannot delete — at least one recipient must exist.`
+- [ ] If deleting the `default_recipient`, prompts user to select a new default from remaining recipients
+- [ ] Unknown key prints error and exits with non-zero code
+
+**Dependencies:** Story 7.1, Story 1.3
+
+---
+
+## Epic 8: Multi-Currency Support
+> Allow different currencies per preset and validate consistency within a single invoice.
+
+### Story 8.1: Per-Preset Currency Override
+**As a** user,
+**I want** each preset to optionally specify its own currency,
+**So that** I can have presets for clients who pay in different currencies.
+
+**Acceptance Criteria:**
+- [ ] Each preset may include an optional `currency` field (ISO 4217 code)
+- [ ] If `currency` is absent, the preset uses `defaults.currency`
+- [ ] `defaults.currency` accepts any ISO 4217 code (EUR, USD, GBP, CZK, UAH, etc.)
+- [ ] The PDF renders the correct currency code in rate and amount columns
+- [ ] Backwards compatible: existing configs without per-preset currency work unchanged
+
+**Dependencies:** Story 1.1
+
+---
+
+### Story 8.2: Mixed-Currency Validation
+**As a** user,
+**I want** the app to reject invoices with mixed currencies,
+**So that** I don't accidentally combine EUR and USD line items on one invoice.
+
+**Acceptance Criteria:**
+- [ ] At generation time, validates all line items share the same currency
+- [ ] If currencies differ, prints error listing the conflicting currencies and exits with non-zero code
+- [ ] Applies to both interactive and non-interactive modes
+- [ ] Single-item invoices always pass this check
+
+**Dependencies:** Story 8.1
+
+---
+
+## Epic 9: Tax / VAT Auto-Calculation
+> Optional tax rate per line item with automatic calculation and updated PDF layout.
+
+### Story 9.1: Tax Rate Config and Defaults
+**As a** user,
+**I want** each preset to optionally include a default tax rate,
+**So that** tax is calculated automatically for clients that require VAT.
+
+**Acceptance Criteria:**
+- [ ] Each preset may include an optional `tax_rate` field (percentage, e.g. `21.0`)
+- [ ] If `tax_rate` is absent or `0`, the line item has no tax (v1.0 behavior)
+- [ ] Tax rate is stored as a percentage, not a decimal fraction
+- [ ] Config remains backwards-compatible: missing `tax_rate` means no tax
+
+**Dependencies:** Story 1.1
+
+---
+
+### Story 9.2: Tax Rate Override in Interactive Flow
+**As a** user,
+**I want** to override the tax rate when entering line item details,
+**So that** I can adjust tax for special cases without changing the config.
+
+**Acceptance Criteria:**
+- [ ] After the rate prompt (Story 3.4), prompts for tax rate with the preset's default shown in brackets
+- [ ] Enter accepts the default; entering `0` means no tax for this item
+- [ ] Tax prompt only appears when the preset has a non-zero `tax_rate` — presets without `tax_rate` skip the prompt entirely
+- [ ] Tax amount is computed as `amount * tax_rate / 100`, rounded to 2 decimal places
+
+**Dependencies:** Story 9.1, Story 3.4
+
+---
+
+### Story 9.3: Tax Rate in Non-Interactive Mode
+**As a** user,
+**I want** to specify `tax_rate` in the `--items` JSON array,
+**So that** I can control tax per line item in scripted generation.
+
+**Acceptance Criteria:**
+- [ ] Each item in `--items` JSON may include an optional `tax_rate` field
+- [ ] If omitted, uses the preset's `tax_rate` (which itself defaults to 0)
+- [ ] `tax_rate` must be >= 0; negative values produce an error
+
+**Dependencies:** Story 9.1, Story 6.3
+
+---
+
+### Story 9.4: PDF Layout with Tax Columns
+**As a** user,
+**I want** the PDF to show tax breakdown when any line item has tax,
+**So that** the invoice meets VAT requirements.
+
+**Acceptance Criteria:**
+- [ ] When at least one line item has a non-zero tax rate, the table gains **Tax (%)** and **Tax Amount** columns
+- [ ] Rows with zero tax show "–" in the tax columns
+- [ ] The single TOTAL row is replaced by three rows: **Subtotal** (sum of net amounts), **Tax** (sum of tax amounts), **Total** (subtotal + tax)
+- [ ] When no line items have tax, the PDF renders identically to v1.0 (no tax columns, single TOTAL row)
+- [ ] Tax amounts use the same currency formatting as other amounts
+
+**Dependencies:** Story 9.1, Story 4.2
+
+---
+
+## Epic 10: Custom PDF Branding
+> Optional config section to customize the visual appearance of generated PDFs.
+
+### Story 10.1: Branding Config Section
+**As a** user,
+**I want** to configure logo, accent color, font, and footer text in my config,
+**So that** my invoices match my personal brand.
+
+**Acceptance Criteria:**
+- [ ] Config supports an optional `branding` section with fields: `logo`, `accent_color`, `font`, `footer_text`
+- [ ] All fields are optional — sensible defaults (matching v1.0 styling) apply if absent
+- [ ] Config remains backwards-compatible: missing `branding` section produces v1.0 styling
+- [ ] Validation: `accent_color` must be a valid hex color if provided; invalid value prints warning and falls back to default
+
+**Dependencies:** Story 1.1
+
+---
+
+### Story 10.2: Logo in PDF Header
+**As a** user,
+**I want** to place my logo in the invoice header,
+**So that** invoices look professional and branded.
+
+**Acceptance Criteria:**
+- [ ] `logo` field accepts a file path relative to the config file location
+- [ ] Supported formats: PNG, JPEG
+- [ ] Logo is scaled to fit the header area without distorting aspect ratio
+- [ ] If logo file is not found, prints warning and generates PDF without logo (does not fail)
+
+**Dependencies:** Story 10.1, Story 4.2
+
+---
+
+### Story 10.3: Accent Color, Font, and Footer
+**As a** user,
+**I want** to customize the accent color, font, and footer text,
+**So that** invoices are visually consistent with my brand.
+
+**Acceptance Criteria:**
+- [ ] `accent_color` (hex) is applied to the "INVOICE" heading, table header row, and horizontal rule lines
+- [ ] `font` overrides the default font family; falls back to default if the specified font is unavailable (note: available fonts depend on what Typst can discover — bundled + system fonts)
+- [ ] `footer_text` replaces the default footer message; empty string omits the footer entirely
+- [ ] Changes are purely visual — no impact on data content or layout structure
+
+**Dependencies:** Story 10.1, Story 4.2
+
+---
+
+## Epic 11: v2.0 Error Handling & Backwards Compatibility
+> Cross-cutting robustness for new v2.0 features and seamless migration from v1.0 configs.
+
+### Story 11.1: v1.0 Config Backwards Compatibility
+**As a** user upgrading from v1.0,
+**I want** my existing config file to work without changes,
+**So that** I can upgrade the binary without a migration step.
+
+**Acceptance Criteria:**
+- [ ] v2.0 reads and works with unmodified v1.0 config files
+- [ ] Single-`recipient` structure is treated as a single-profile list automatically
+- [ ] Missing `tax_rate`, `branding`, `recipients`, and per-preset `currency` fields are handled with sensible defaults
+- [ ] Running `invoice` (no subcommand) on a v1.0 config produces the same result as v1.0
+- [ ] No deprecation warnings for v1.0 config format
+
+**Dependencies:** Story 7.1, Story 8.1, Story 9.1, Story 10.1
+
+---
+
+### Story 11.2: CLI Error Messages for v2.0 Commands
+**As a** user,
+**I want** clear error messages for all v2.0 CLI mistakes,
+**So that** I can fix my command without guessing.
+
+**Acceptance Criteria:**
+- [ ] Unknown subcommand → prints usage help and exits with non-zero code
+- [ ] Missing required flags in `generate` → lists missing flags, prints usage for `generate`, exits non-zero
+- [ ] Malformed `--items` JSON → prints parse error, exits non-zero
+- [ ] Unknown preset key in `--items` → prints error naming the unknown key, exits non-zero
+- [ ] Mixed currencies → prints error listing conflicting currencies, exits non-zero
+- [ ] Unknown `--client` key → prints error listing available client profiles, exits non-zero
+- [ ] Deleting last preset → `Cannot delete — at least one preset must exist.`
+- [ ] Deleting last recipient → `Cannot delete — at least one recipient must exist.`
+
+**Dependencies:** Story 6.1
+
+---
+
+### Story 11.3: Setup Wizard Update for Multi-Recipient Format
+**As a** user,
+**I want** the setup wizard to create the v2.0 multi-recipient config format,
+**So that** new installations start with the modern structure.
+
+**Acceptance Criteria:**
+- [ ] During first-run setup, recipient collection (Story 2.3) creates a `recipients` array with a single entry
+- [ ] Prompts for a short `key` for the recipient (or derives from company name)
+- [ ] Sets `default_recipient` to that key
+- [ ] After initial setup, user can add more recipients via `invoice recipient add` (Story 7.5)
+- [ ] Setup wizard still works identically for the single-recipient case
+
+**Dependencies:** Story 7.1, Story 2.3
+
+---
+
+## v2.0 Resolved Gaps & Ambiguities
+
+| # | SRS Section | Issue | Resolution |
+|---|-------------|-------|------------|
+| 1 | §2.1 — Single-item rate override | No `--rate` flag for `--preset --days` mode — can the user override rate? | **Use `--items` for rate overrides.** Single-item mode always uses `default_rate`. |
+| 2 | §3.1 — Recipient management | No CLI commands to add/edit/delete recipients | **Added `invoice recipient list/add/delete` subcommands** (Stories 7.4–7.6). |
+| 3 | §4 — Currency on rate override | Does `--items` rate override change currency? | **No.** Rate override changes only the number; currency always comes from preset/default. |
+| 4 | §5.2 — Tax prompt for tax-free presets | Should tax prompt appear when preset has no `tax_rate`? | **No.** Tax prompt only appears when preset has a non-zero `tax_rate`. |
+| 5 | §6.2 — Font availability | Typst has its own font loading — which fonts are available? | **Implementation detail.** Use fonts discoverable by Typst (bundled + system). Fall back to default if unavailable. |
+| 6 | §2.1 — Overwrite in CLI mode | Should non-interactive mode prompt for overwrite? | **Silently overwrite.** Non-interactive mode always overwrites existing files. |
+
+---
+
+## v2.0 Dependency Map
+
+**Critical path** (longest chain):
+
+```
+6.1 (Subcommand routing)
+  → 6.2 (Single-item generate)
+    → 6.3 (Multi-item generate)
+      → 9.3 (Tax in CLI mode)
+```
+
+**Secondary chains:**
+
+```
+7.1 (Multi-recipient config) → 7.2 (Interactive selection) → 7.3 (CLI flag)
+7.1 → 7.4 (Recipient list) + 7.5 (Recipient add) + 7.6 (Recipient delete)
+7.1 → 11.1 (Backwards compat) → 11.3 (Setup wizard update)
+
+9.1 (Tax config) → 9.2 (Interactive tax override) → 9.4 (PDF tax layout)
+9.1 → 9.3 (CLI tax)
+
+10.1 (Branding config) → 10.2 (Logo) + 10.3 (Color/font/footer)
+
+8.1 (Per-preset currency) → 8.2 (Mixed-currency validation)
+```
+
+**Recommended sprint ordering:**
+
+1. **Sprint 5**: Stories 6.1, 6.4, 6.5 (subcommand scaffold + preset management)
+2. **Sprint 6**: Stories 6.2, 6.3 (non-interactive generation)
+3. **Sprint 7**: Stories 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 11.1 (multi-recipient + backwards compat)
+4. **Sprint 8**: Stories 8.1, 8.2 (multi-currency)
+5. **Sprint 9**: Stories 9.1, 9.2, 9.3, 9.4 (tax/VAT)
+6. **Sprint 10**: Stories 10.1, 10.2, 10.3 (branding)
+7. **Sprint 11**: Stories 11.2, 11.3 (error handling polish + setup wizard update)
