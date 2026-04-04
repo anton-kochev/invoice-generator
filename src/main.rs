@@ -6,7 +6,7 @@ mod pdf;
 mod setup;
 
 use clap::Parser;
-use cli::{Cli, Command, PresetAction};
+use cli::{Cli, Command, PresetAction, RecipientAction};
 use setup::prompter::InquirePrompter;
 use std::process;
 
@@ -46,6 +46,27 @@ fn run(cli: Cli) -> Result<(), error::AppError> {
             }
             PresetAction::Delete { key } => {
                 cli::preset_cmd::handle_preset_delete(
+                    &prompter,
+                    &cwd,
+                    &key,
+                    &mut std::io::stdout(),
+                )
+            }
+        },
+        Some(Command::Recipient { action }) => match action {
+            RecipientAction::List => {
+                let validated = cli::load_validated_config(&cwd)?;
+                cli::recipient_cmd::handle_recipient_list(&validated, &mut std::io::stdout())
+            }
+            RecipientAction::Add => {
+                cli::recipient_cmd::handle_recipient_add(
+                    &prompter,
+                    &cwd,
+                    &mut std::io::stdout(),
+                )
+            }
+            RecipientAction::Delete { key } => {
+                cli::recipient_cmd::handle_recipient_delete(
                     &prompter,
                     &cwd,
                     &key,

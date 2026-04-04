@@ -2,6 +2,7 @@ pub mod common;
 pub mod generate_cmd;
 pub mod interactive;
 pub mod preset_cmd;
+pub mod recipient_cmd;
 pub mod recipient_selection;
 
 use std::path::Path;
@@ -29,6 +30,11 @@ pub enum Command {
     },
     /// Generate an invoice (non-interactive)
     Generate(GenerateArgs),
+    /// Manage recipient profiles
+    Recipient {
+        #[command(subcommand)]
+        action: RecipientAction,
+    },
 }
 
 /// Arguments for the `generate` subcommand.
@@ -57,6 +63,19 @@ pub struct GenerateArgs {
     /// Recipient profile key (defaults to default_recipient)
     #[arg(long)]
     pub client: Option<String>,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum RecipientAction {
+    /// List all configured recipients
+    List,
+    /// Add a new recipient
+    Add,
+    /// Delete a recipient by key
+    Delete {
+        /// The recipient key to delete
+        key: String,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -325,5 +344,70 @@ mod tests {
             }
             other => panic!("Expected Generate, got {other:?}"),
         }
+    }
+
+    // ── Recipient subcommand tests ──
+
+    #[test]
+    fn test_recipient_list_parses() {
+        // Arrange
+        let args = ["invoice", "recipient", "list"];
+
+        // Act
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        // Assert
+        assert!(matches!(
+            cli.command,
+            Some(Command::Recipient {
+                action: RecipientAction::List
+            })
+        ));
+    }
+
+    #[test]
+    fn test_recipient_add_parses() {
+        // Arrange
+        let args = ["invoice", "recipient", "add"];
+
+        // Act
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        // Assert
+        assert!(matches!(
+            cli.command,
+            Some(Command::Recipient {
+                action: RecipientAction::Add
+            })
+        ));
+    }
+
+    #[test]
+    fn test_recipient_delete_parses_key() {
+        // Arrange
+        let args = ["invoice", "recipient", "delete", "acme"];
+
+        // Act
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        // Assert
+        match cli.command {
+            Some(Command::Recipient {
+                action: RecipientAction::Delete { key },
+            }) => assert_eq!(key, "acme"),
+            other => panic!("Expected Recipient Delete, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_recipient_delete_missing_key_is_error() {
+        // Arrange
+        let args = ["invoice", "recipient", "delete"];
+
+        // Act
+        let result = Cli::try_parse_from(args);
+
+        // Assert
+        assert!(result.is_err());
     }
 }
