@@ -34,6 +34,7 @@ fn run_invoice_flow(
     validated: &ValidatedConfig,
     cwd: &std::path::Path,
 ) -> Result<(), error::AppError> {
+    let presets = validated.presets.clone();
     loop {
         let now = time::OffsetDateTime::now_utc();
         let period = invoice::period::collect_invoice_period(
@@ -44,8 +45,9 @@ fn run_invoice_flow(
 
         let line_items = invoice::line_item::collect_all_line_items(
             prompter,
-            &validated.presets,
+            &presets,
             &validated.defaults.currency,
+            cwd,
         )?;
 
         let summary = invoice::summary::build_summary(
