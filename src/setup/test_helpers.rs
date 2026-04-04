@@ -18,6 +18,7 @@ pub fn synthetic_sender() -> Sender {
 
 pub fn synthetic_recipient() -> Recipient {
     Recipient {
+        key: None,
         name: "Bob Corp".into(),
         address: vec!["99 Oak Lane".into()],
         company_id: Some("BC-98765".into()),
@@ -64,6 +65,8 @@ pub fn complete_config() -> Config {
     Config {
         sender: Some(synthetic_sender()),
         recipient: Some(synthetic_recipient()),
+        recipients: None,
+        default_recipient: None,
         payment: Some(synthetic_payment()),
         presets: Some(synthetic_presets()),
         defaults: Some(synthetic_defaults()),
@@ -116,6 +119,7 @@ pub fn full_setup_responses() -> Vec<MockResponse> {
         MockResponse::Lines(vec!["42 Elm St".into()]),
         MockResponse::Text("alice@example.com".into()),
         // Recipient
+        MockResponse::Text("bob".into()),
         MockResponse::Text("Bob Corp".into()),
         MockResponse::Lines(vec!["99 Oak Lane".into()]),
         MockResponse::OptionalText(None),
@@ -141,6 +145,7 @@ pub fn full_setup_responses() -> Vec<MockResponse> {
 pub fn resume_from_recipient_responses() -> Vec<MockResponse> {
     vec![
         // Recipient
+        MockResponse::Text("bob".into()),
         MockResponse::Text("Bob Corp".into()),
         MockResponse::Lines(vec!["99 Oak Lane".into()]),
         MockResponse::OptionalText(None),

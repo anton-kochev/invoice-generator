@@ -12,6 +12,12 @@ pub struct Config {
     /// Available payment methods.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub payment: Option<Vec<PaymentMethod>>,
+    /// v2 multi-recipient list.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recipients: Option<Vec<Recipient>>,
+    /// Key of the default recipient profile.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_recipient: Option<String>,
     /// Invoice presets (e.g. hourly-rate templates).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub presets: Option<Vec<Preset>>,
@@ -31,6 +37,8 @@ pub struct Sender {
 /// Information about the invoice recipient.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Recipient {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
     pub name: String,
     pub address: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -86,5 +94,160 @@ impl Default for Defaults {
             invoice_date_day: default_invoice_date_day(),
             payment_terms_days: default_payment_terms_days(),
         }
+    }
+}
+
+/// Derive a slug key from a recipient name.
+/// Lowercases, replaces non-alphanumeric characters with hyphens, collapses runs.
+pub fn derive_recipient_key(name: &str) -> String {
+    name.to_lowercase()
+        .split(|c: char| !c.is_alphanumeric() && c != '-')
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn derive_key_simple_two_words() {
+        // Arrange
+        let name = "Acme Corp";
+
+        // Act
+        let key = derive_recipient_key(name);
+
+        // Assert
+        assert_eq!(key, "acme-corp");
+    }
+
+    #[test]
+    fn derive_key_single_word() {
+        // Arrange
+        let name = "Bob";
+
+        // Act
+        let key = derive_recipient_key(name);
+
+        // Assert
+        assert_eq!(key, "bob");
+    }
+
+    #[test]
+    fn derive_key_punctuation_stripped() {
+        // Arrange
+        let name = "Foo & Bar, Inc.";
+
+        // Act
+        let key = derive_recipient_key(name);
+
+        // Assert
+        assert_eq!(key, "foo-bar-inc");
+    }
+
+    #[test]
+    fn derive_key_whitespace_only_returns_empty() {
+        // Arrange
+        let name = "   ";
+
+        // Act
+        let key = derive_recipient_key(name);
+
+        // Assert
+        assert_eq!(key, "");
+    }
+
+    #[test]
+    fn derive_key_empty_string_returns_empty() {
+        // Arrange
+        let name = "";
+
+        // Act
+        let key = derive_recipient_key(name);
+
+        // Assert
+        assert_eq!(key, "");
+    }
+
+    #[test]
+    fn derive_key_preserves_existing_hyphens() {
+        // Arrange
+        let name = "Müller-Schmidt GmbH";
+
+        // Act
+        let key = derive_recipient_key(name);
+
+        // Assert
+        assert_eq!(key, "müller-schmidt-gmbh");
+    }
+
+    #[test]
+    fn v1_yaml_deserializes_with_key_none() {
+        // Arrange
+        let yaml = "name: Acme Corp\naddress:\n  - 123 Main St\n";
+
+        // Act
+        let r: Recipient = serde_yaml::from_str(yaml).unwrap();
+
+        // Assert
+        assert!(r.key.is_none());
+        assert_eq!(r.name, "Acme Corp");
+    }
+
+    #[test]
+    fn v2_yaml_with_key_deserializes() {
+        // Arrange
+        let yaml = "key: acme\nname: Acme Corp\naddress:\n  - 123 Main St\n";
+
+        // Act
+        let r: Recipient = serde_yaml::from_str(yaml).unwrap();
+
+        // Assert
+        assert_eq!(r.key, Some("acme".into()));
+    }
+
+    #[test]
+    fn config_recipients_none_omitted_from_yaml() {
+        // Arrange
+        let config = Config {
+            recipients: None,
+            default_recipient: None,
+            ..Config::default()
+        };
+
+        // Act
+        let yaml = serde_yaml::to_string(&config).unwrap();
+
+        // Assert
+        assert!(!yaml.contains("recipients"), "None recipients should be omitted from YAML");
+        assert!(!yaml.contains("default_recipient"), "None default_recipient should be omitted");
+    }
+
+    #[test]
+    fn v2_config_with_recipients_round_trips() {
+        // Arrange
+        let config = Config {
+            recipients: Some(vec![
+                Recipient {
+                    key: Some("acme".into()),
+                    name: "Acme Corp".into(),
+                    address: vec!["123 Main St".into()],
+                    company_id: None,
+                    vat_number: None,
+                },
+            ]),
+            default_recipient: Some("acme".into()),
+            ..Config::default()
+        };
+
+        // Act
+        let yaml = serde_yaml::to_string(&config).unwrap();
+        let loaded: Config = serde_yaml::from_str(&yaml).unwrap();
+
+        // Assert
+        assert_eq!(loaded.recipients.as_ref().unwrap().len(), 1);
+        assert_eq!(loaded.default_recipient, Some("acme".into()));
     }
 }

@@ -235,7 +235,7 @@ mod tests {
     fn test_handle_preset_list_returns_formatted_table() {
         // Arrange
         let config = complete_config();
-        let validated = match config.validate() {
+        let validated = match config.validate().unwrap() {
             ValidationOutcome::Complete(v) => v,
             _ => panic!("Expected Complete"),
         };

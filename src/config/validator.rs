@@ -1,6 +1,7 @@
 use std::fmt;
 
 use super::types::*;
+use crate::error::AppError;
 
 /// Identifies a top-level config section for validation reporting.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,11 +28,23 @@ impl fmt::Display for ConfigSection {
 pub struct ValidatedConfig {
     pub sender: Sender,
     pub recipient: Recipient,
+    /// All available recipients (guaranteed non-empty).
+    pub recipients: Vec<Recipient>,
+    /// Key of the default recipient profile.
+    pub default_recipient_key: String,
     /// Guaranteed non-empty.
     pub payment: Vec<PaymentMethod>,
     /// Guaranteed non-empty.
     pub presets: Vec<Preset>,
     pub defaults: Defaults,
+}
+
+impl ValidatedConfig {
+    /// Returns the default recipient (the one matching `default_recipient_key`).
+    #[allow(dead_code)] // needed by Story 7.2 (recipient selection)
+    pub fn active_recipient(&self) -> &Recipient {
+        &self.recipient
+    }
 }
 
 /// Result of validating a [`Config`].
@@ -50,40 +63,120 @@ pub enum ValidationOutcome {
 impl Config {
     /// Validate that all required sections are present.
     ///
-    /// Returns [`ValidationOutcome::Complete`] with a [`ValidatedConfig`] when
-    /// all sections are filled in, or [`ValidationOutcome::Incomplete`] listing
+    /// Returns `Ok(ValidationOutcome::Complete)` with a [`ValidatedConfig`] when
+    /// all sections are filled in, or `Ok(ValidationOutcome::Incomplete)` listing
     /// which sections are missing.
-    pub fn validate(self) -> ValidationOutcome {
+    ///
+    /// Returns `Err(AppError)` for hard errors like duplicate keys or invalid
+    /// default recipient references.
+    pub fn validate(self) -> Result<ValidationOutcome, AppError> {
         let mut missing = Vec::new();
 
-        if self.sender.is_none() {
+        let sender = self.sender;
+        let payment = self.payment;
+        let presets = self.presets;
+        let defaults = self.defaults;
+
+        if sender.is_none() {
             missing.push(ConfigSection::Sender);
         }
-        if self.recipient.is_none() {
-            missing.push(ConfigSection::Recipient);
+
+        // Normalize recipients: v2 (recipients list) takes precedence over v1 (single recipient).
+        let (recipients, default_key) =
+            match (self.recipient, self.recipients, self.default_recipient) {
+                (_, Some(list), dk) if !list.is_empty() => (Some(list), dk),
+                (_, Some(_), _) => {
+                    // Empty list — treat as missing
+                    missing.push(ConfigSection::Recipient);
+                    (None, None)
+                }
+                (Some(mut r), None, _) => {
+                    let key = r
+                        .key
+                        .clone()
+                        .unwrap_or_else(|| derive_recipient_key(&r.name));
+                    r.key = Some(key.clone());
+                    (Some(vec![r]), Some(key))
+                }
+                (None, None, _) => {
+                    missing.push(ConfigSection::Recipient);
+                    (None, None)
+                }
+            };
+
+        // Validate recipient keys if recipients present.
+        if let Some(ref list) = recipients {
+            // Check for empty keys
+            for r in list {
+                if r.key.as_ref().map_or(true, |k| k.is_empty()) {
+                    return Err(AppError::InvalidDefaultRecipient(
+                        "recipient has empty or missing key".into(),
+                    ));
+                }
+            }
+            // Check for duplicate keys
+            let mut seen = std::collections::HashSet::new();
+            for r in list {
+                let k = r.key.as_ref().unwrap();
+                if !seen.insert(k.clone()) {
+                    return Err(AppError::DuplicateRecipientKey(k.clone()));
+                }
+            }
+            // Validate default_recipient references a valid key
+            match &default_key {
+                Some(dk) => {
+                    if !list.iter().any(|r| r.key.as_deref() == Some(dk.as_str())) {
+                        return Err(AppError::InvalidDefaultRecipient(dk.clone()));
+                    }
+                }
+                None => {
+                    return Err(AppError::InvalidDefaultRecipient(
+                        "default_recipient is required when recipients are defined".into(),
+                    ));
+                }
+            }
         }
-        match &self.payment {
+
+        match &payment {
             Some(v) if !v.is_empty() => {}
             _ => missing.push(ConfigSection::Payment),
         }
-        match &self.presets {
+        match &presets {
             Some(v) if !v.is_empty() => {}
             _ => missing.push(ConfigSection::Presets),
         }
 
         if missing.is_empty() {
-            ValidationOutcome::Complete(ValidatedConfig {
-                sender: self.sender.unwrap(),
-                recipient: self.recipient.unwrap(),
-                payment: self.payment.unwrap(),
-                presets: self.presets.unwrap(),
-                defaults: self.defaults.unwrap_or_default(),
-            })
+            let recipients_vec = recipients.unwrap();
+            let dk = default_key.unwrap();
+            let recipient = recipients_vec
+                .iter()
+                .find(|r| r.key.as_deref() == Some(&dk))
+                .cloned()
+                .unwrap();
+
+            Ok(ValidationOutcome::Complete(ValidatedConfig {
+                sender: sender.unwrap(),
+                recipient,
+                recipients: recipients_vec,
+                default_recipient_key: dk,
+                payment: payment.unwrap(),
+                presets: presets.unwrap(),
+                defaults: defaults.unwrap_or_default(),
+            }))
         } else {
-            ValidationOutcome::Incomplete {
-                config: self,
+            Ok(ValidationOutcome::Incomplete {
+                config: Config {
+                    sender,
+                    recipient: None, // already consumed by normalization
+                    recipients,
+                    default_recipient: default_key,
+                    payment,
+                    presets,
+                    defaults,
+                },
                 missing,
-            }
+            })
         }
     }
 }
@@ -105,7 +198,7 @@ mod tests {
     #[test]
     fn test_validate_empty_config_returns_all_missing() {
         // Act
-        let result = Config::default().validate();
+        let result = Config::default().validate().unwrap();
 
         // Assert
         match result {
@@ -129,13 +222,16 @@ mod tests {
     #[test]
     fn test_validate_complete_config_returns_validated() {
         // Act
-        let result = make_complete_config().validate();
+        let result = make_complete_config().validate().unwrap();
 
         // Assert
         match result {
             ValidationOutcome::Complete(v) => {
                 assert_eq!(v.sender.name, "Alice");
                 assert_eq!(v.recipient.name, "Bob Corp");
+                assert_eq!(v.recipients.len(), 1);
+                assert_eq!(v.default_recipient_key, "bob-corp");
+                assert_eq!(v.recipient.key, Some("bob-corp".into()));
                 assert_eq!(v.payment.len(), 1);
                 assert_eq!(v.presets.len(), 1);
                 assert_eq!(v.defaults.currency, "EUR");
@@ -153,7 +249,7 @@ mod tests {
         config.defaults = None;
 
         // Act
-        let result = config.validate();
+        let result = config.validate().unwrap();
 
         // Assert
         match result {
@@ -177,7 +273,7 @@ mod tests {
         };
 
         // Act
-        let result = config.validate();
+        let result = config.validate().unwrap();
 
         // Assert
         match result {
@@ -207,7 +303,7 @@ mod tests {
         };
 
         // Act
-        let result = config.validate();
+        let result = config.validate().unwrap();
 
         // Assert
         match result {
@@ -227,7 +323,7 @@ mod tests {
         config.payment = Some(vec![]);
 
         // Act
-        let result = config.validate();
+        let result = config.validate().unwrap();
 
         // Assert
         match result {
@@ -247,7 +343,7 @@ mod tests {
         config.presets = Some(vec![]);
 
         // Act
-        let result = config.validate();
+        let result = config.validate().unwrap();
 
         // Assert
         match result {
@@ -256,6 +352,316 @@ mod tests {
             }
             ValidationOutcome::Complete(_) => panic!("Expected Incomplete"),
         }
+    }
+
+    // ── Story 7.1 Phase 4: Recipient validation ──
+
+    #[test]
+    fn test_validate_v1_config_normalizes_to_recipients_list() {
+        // Arrange — v1 style with single recipient
+        let config = Config {
+            sender: Some(make_sender()),
+            recipient: Some(make_recipient()),
+            recipients: None,
+            default_recipient: None,
+            payment: Some(make_payment()),
+            presets: Some(make_presets()),
+            defaults: Some(Defaults::default()),
+        };
+
+        // Act
+        let result = config.validate().unwrap();
+
+        // Assert
+        match result {
+            ValidationOutcome::Complete(v) => {
+                assert_eq!(v.recipients.len(), 1);
+                assert_eq!(v.default_recipient_key, "bob-corp");
+                assert_eq!(v.recipient.name, "Bob Corp");
+                assert_eq!(v.recipient.key, Some("bob-corp".into()));
+            }
+            ValidationOutcome::Incomplete { .. } => panic!("Expected Complete"),
+        }
+    }
+
+    #[test]
+    fn test_validate_v2_config_with_multiple_recipients() {
+        // Arrange
+        let config = Config {
+            sender: Some(make_sender()),
+            recipient: None,
+            recipients: Some(vec![
+                Recipient {
+                    key: Some("acme".into()),
+                    name: "Acme Corp".into(),
+                    address: vec!["123 St".into()],
+                    company_id: None,
+                    vat_number: None,
+                },
+                Recipient {
+                    key: Some("globex".into()),
+                    name: "Globex Inc".into(),
+                    address: vec!["456 Ave".into()],
+                    company_id: None,
+                    vat_number: None,
+                },
+            ]),
+            default_recipient: Some("globex".into()),
+            payment: Some(make_payment()),
+            presets: Some(make_presets()),
+            defaults: Some(Defaults::default()),
+        };
+
+        // Act
+        let result = config.validate().unwrap();
+
+        // Assert
+        match result {
+            ValidationOutcome::Complete(v) => {
+                assert_eq!(v.recipients.len(), 2);
+                assert_eq!(v.default_recipient_key, "globex");
+                assert_eq!(v.recipient.name, "Globex Inc");
+            }
+            ValidationOutcome::Incomplete { .. } => panic!("Expected Complete"),
+        }
+    }
+
+    #[test]
+    fn test_validate_missing_recipients_returns_incomplete() {
+        // Arrange
+        let config = Config {
+            sender: Some(make_sender()),
+            recipient: None,
+            recipients: None,
+            default_recipient: None,
+            payment: Some(make_payment()),
+            presets: Some(make_presets()),
+            defaults: Some(Defaults::default()),
+        };
+
+        // Act
+        let result = config.validate().unwrap();
+
+        // Assert
+        match result {
+            ValidationOutcome::Incomplete { missing, .. } => {
+                assert!(missing.contains(&ConfigSection::Recipient));
+            }
+            ValidationOutcome::Complete(_) => panic!("Expected Incomplete"),
+        }
+    }
+
+    #[test]
+    fn test_validate_empty_recipients_vec_treated_as_missing_section() {
+        // Arrange
+        let config = Config {
+            sender: Some(make_sender()),
+            recipient: None,
+            recipients: Some(vec![]),
+            default_recipient: None,
+            payment: Some(make_payment()),
+            presets: Some(make_presets()),
+            defaults: Some(Defaults::default()),
+        };
+
+        // Act
+        let result = config.validate().unwrap();
+
+        // Assert
+        match result {
+            ValidationOutcome::Incomplete { missing, .. } => {
+                assert!(missing.contains(&ConfigSection::Recipient));
+            }
+            ValidationOutcome::Complete(_) => panic!("Expected Incomplete"),
+        }
+    }
+
+    #[test]
+    fn test_validate_invalid_default_recipient_key_returns_error() {
+        // Arrange
+        let config = Config {
+            sender: Some(make_sender()),
+            recipient: None,
+            recipients: Some(vec![make_recipient_with_key()]),
+            default_recipient: Some("nonexistent".into()),
+            payment: Some(make_payment()),
+            presets: Some(make_presets()),
+            defaults: Some(Defaults::default()),
+        };
+
+        // Act
+        let result = config.validate();
+
+        // Assert
+        assert!(matches!(result, Err(AppError::InvalidDefaultRecipient(_))));
+    }
+
+    #[test]
+    fn test_validate_missing_default_recipient_with_recipients_returns_error() {
+        // Arrange
+        let config = Config {
+            sender: Some(make_sender()),
+            recipient: None,
+            recipients: Some(vec![make_recipient_with_key()]),
+            default_recipient: None,
+            payment: Some(make_payment()),
+            presets: Some(make_presets()),
+            defaults: Some(Defaults::default()),
+        };
+
+        // Act
+        let result = config.validate();
+
+        // Assert
+        assert!(matches!(result, Err(AppError::InvalidDefaultRecipient(_))));
+    }
+
+    #[test]
+    fn test_validate_duplicate_recipient_keys_returns_error() {
+        // Arrange
+        let config = Config {
+            sender: Some(make_sender()),
+            recipient: None,
+            recipients: Some(vec![
+                Recipient {
+                    key: Some("acme".into()),
+                    name: "Acme Corp".into(),
+                    address: vec!["123 St".into()],
+                    company_id: None,
+                    vat_number: None,
+                },
+                Recipient {
+                    key: Some("acme".into()),
+                    name: "Acme LLC".into(),
+                    address: vec!["456 Ave".into()],
+                    company_id: None,
+                    vat_number: None,
+                },
+            ]),
+            default_recipient: Some("acme".into()),
+            payment: Some(make_payment()),
+            presets: Some(make_presets()),
+            defaults: Some(Defaults::default()),
+        };
+
+        // Act
+        let result = config.validate();
+
+        // Assert
+        assert!(matches!(result, Err(AppError::DuplicateRecipientKey(_))));
+    }
+
+    #[test]
+    fn test_validate_empty_recipient_key_returns_error() {
+        // Arrange
+        let config = Config {
+            sender: Some(make_sender()),
+            recipient: None,
+            recipients: Some(vec![Recipient {
+                key: Some("".into()),
+                name: "Acme Corp".into(),
+                address: vec!["123 St".into()],
+                company_id: None,
+                vat_number: None,
+            }]),
+            default_recipient: Some("".into()),
+            payment: Some(make_payment()),
+            presets: Some(make_presets()),
+            defaults: Some(Defaults::default()),
+        };
+
+        // Act
+        let result = config.validate();
+
+        // Assert
+        assert!(matches!(result, Err(AppError::InvalidDefaultRecipient(_))));
+    }
+
+    #[test]
+    fn test_validate_v1_and_v2_both_present_v2_wins() {
+        // Arrange — pathological: both recipient and recipients set
+        let config = Config {
+            sender: Some(make_sender()),
+            recipient: Some(Recipient {
+                key: None,
+                name: "Old Corp".into(),
+                address: vec!["Old St".into()],
+                company_id: None,
+                vat_number: None,
+            }),
+            recipients: Some(vec![make_recipient_with_key()]),
+            default_recipient: Some("bob-corp".into()),
+            payment: Some(make_payment()),
+            presets: Some(make_presets()),
+            defaults: Some(Defaults::default()),
+        };
+
+        // Act
+        let result = config.validate().unwrap();
+
+        // Assert — v2 recipients wins, not the v1 recipient
+        match result {
+            ValidationOutcome::Complete(v) => {
+                assert_eq!(v.recipient.name, "Bob Corp");
+                assert_eq!(v.recipients.len(), 1);
+            }
+            ValidationOutcome::Incomplete { .. } => panic!("Expected Complete"),
+        }
+    }
+
+    // ── Story 7.1 Phase 5: active_recipient() ──
+
+    #[test]
+    fn test_active_recipient_returns_default() {
+        // Arrange
+        let config = Config {
+            sender: Some(make_sender()),
+            recipient: None,
+            recipients: Some(vec![
+                Recipient {
+                    key: Some("acme".into()),
+                    name: "Acme Corp".into(),
+                    address: vec!["123 St".into()],
+                    company_id: None,
+                    vat_number: None,
+                },
+                Recipient {
+                    key: Some("globex".into()),
+                    name: "Globex Inc".into(),
+                    address: vec!["456 Ave".into()],
+                    company_id: None,
+                    vat_number: None,
+                },
+            ]),
+            default_recipient: Some("globex".into()),
+            payment: Some(make_payment()),
+            presets: Some(make_presets()),
+            defaults: Some(Defaults::default()),
+        };
+
+        // Act
+        let validated = match config.validate().unwrap() {
+            ValidationOutcome::Complete(v) => v,
+            _ => panic!("Expected Complete"),
+        };
+
+        // Assert
+        assert_eq!(validated.active_recipient().name, "Globex Inc");
+    }
+
+    #[test]
+    fn test_active_recipient_single_recipient() {
+        // Arrange
+        let config = make_complete_config();
+
+        // Act
+        let validated = match config.validate().unwrap() {
+            ValidationOutcome::Complete(v) => v,
+            _ => panic!("Expected Complete"),
+        };
+
+        // Assert
+        assert_eq!(validated.active_recipient().name, "Bob Corp");
     }
 
     // ── Helpers ──
@@ -270,6 +676,17 @@ mod tests {
 
     fn make_recipient() -> Recipient {
         Recipient {
+            key: None,
+            name: "Bob Corp".into(),
+            address: vec!["456 Ave".into()],
+            company_id: None,
+            vat_number: None,
+        }
+    }
+
+    fn make_recipient_with_key() -> Recipient {
+        Recipient {
+            key: Some("bob-corp".into()),
             name: "Bob Corp".into(),
             address: vec!["456 Ave".into()],
             company_id: None,
@@ -296,7 +713,9 @@ mod tests {
     fn make_complete_config() -> Config {
         Config {
             sender: Some(make_sender()),
-            recipient: Some(make_recipient()),
+            recipient: None,
+            recipients: Some(vec![make_recipient_with_key()]),
+            default_recipient: Some("bob-corp".into()),
             payment: Some(make_payment()),
             presets: Some(make_presets()),
             defaults: Some(Defaults::default()),

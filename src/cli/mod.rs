@@ -71,7 +71,7 @@ pub enum PresetAction {
 pub fn load_validated_config(dir: &Path) -> Result<ValidatedConfig, AppError> {
     match load_config(dir)? {
         LoadResult::NotFound => Err(AppError::ConfigNotFound),
-        LoadResult::Loaded(config) => match config.validate() {
+        LoadResult::Loaded(config) => match config.validate()? {
             ValidationOutcome::Complete(v) => Ok(v),
             ValidationOutcome::Incomplete { .. } => Err(AppError::ConfigNotFound),
         },

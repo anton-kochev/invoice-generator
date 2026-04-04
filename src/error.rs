@@ -46,6 +46,24 @@ pub enum AppError {
     /// Failed to parse `--items` JSON.
     #[error("Failed to parse --items JSON: {0}")]
     ItemsParse(String),
+
+    /// default_recipient references a key not found in recipients list.
+    #[error("Default recipient key \"{0}\" not found in recipients list")]
+    InvalidDefaultRecipient(String),
+
+    /// Two recipients share the same key.
+    #[error("Duplicate recipient key: \"{0}\"")]
+    DuplicateRecipientKey(String),
+
+    /// Requested recipient key does not exist.
+    #[allow(dead_code)] // needed by Story 7.3 (recipient deletion)
+    #[error("Unknown recipient: \"{0}\"")]
+    RecipientNotFound(String),
+
+    /// Cannot delete the last remaining recipient.
+    #[allow(dead_code)] // needed by Story 7.6 (recipient guard)
+    #[error("Cannot delete — at least one recipient must exist.")]
+    LastRecipient,
 }
 
 #[cfg(test)]
@@ -76,6 +94,57 @@ mod tests {
         assert!(
             msg.contains("at least one preset"),
             "Expected 'at least one preset' in: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_invalid_default_recipient_displays_key() {
+        // Arrange
+        let err = AppError::InvalidDefaultRecipient("bogus".into());
+
+        // Act
+        let msg = format!("{err}");
+
+        // Assert
+        assert!(msg.contains("bogus"), "Expected 'bogus' in: {msg}");
+    }
+
+    #[test]
+    fn test_duplicate_recipient_key_displays_key() {
+        // Arrange
+        let err = AppError::DuplicateRecipientKey("acme".into());
+
+        // Act
+        let msg = format!("{err}");
+
+        // Assert
+        assert!(msg.contains("acme"), "Expected 'acme' in: {msg}");
+    }
+
+    #[test]
+    fn test_recipient_not_found_displays_key() {
+        // Arrange
+        let err = AppError::RecipientNotFound("xyz".into());
+
+        // Act
+        let msg = format!("{err}");
+
+        // Assert
+        assert!(msg.contains("xyz"), "Expected 'xyz' in: {msg}");
+    }
+
+    #[test]
+    fn test_last_recipient_displays_message() {
+        // Arrange
+        let err = AppError::LastRecipient;
+
+        // Act
+        let msg = format!("{err}");
+
+        // Assert
+        assert!(
+            msg.contains("at least one recipient"),
+            "Expected 'at least one recipient' in: {msg}"
         );
     }
 }

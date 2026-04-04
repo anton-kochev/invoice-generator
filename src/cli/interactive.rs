@@ -19,14 +19,14 @@ pub fn run_interactive(prompter: &dyn Prompter, cwd: &Path) -> Result<(), AppErr
                 ConfigSection::Presets,
             ];
             setup::run_setup(prompter, &mut config, &all_missing, cwd)?;
-            match config.validate() {
+            match config.validate()? {
                 ValidationOutcome::Complete(v) => v,
                 ValidationOutcome::Incomplete { .. } => {
                     unreachable!("Setup completed but config still incomplete")
                 }
             }
         }
-        LoadResult::Loaded(config) => match config.validate() {
+        LoadResult::Loaded(config) => match config.validate()? {
             ValidationOutcome::Complete(v) => {
                 println!("Config loaded successfully.");
                 println!("Sender: {}", v.sender.name);
@@ -35,7 +35,7 @@ pub fn run_interactive(prompter: &dyn Prompter, cwd: &Path) -> Result<(), AppErr
             }
             ValidationOutcome::Incomplete { mut config, missing } => {
                 setup::run_setup(prompter, &mut config, &missing, cwd)?;
-                match config.validate() {
+                match config.validate()? {
                     ValidationOutcome::Complete(v) => v,
                     ValidationOutcome::Incomplete { .. } => {
                         unreachable!("Setup completed but config still incomplete")

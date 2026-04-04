@@ -61,18 +61,22 @@ mod tests {
     }
 
     fn make_config() -> ValidatedConfig {
+        let recipient = Recipient {
+            key: Some("acme-corp".into()),
+            name: "Acme Corp".into(),
+            address: vec!["456 Oak Ave".into(), "Berlin, Germany".into()],
+            company_id: Some("DE123456".into()),
+            vat_number: Some("ATU12345678".into()),
+        };
         ValidatedConfig {
             sender: Sender {
                 name: "Jane Doe".into(),
                 address: vec!["123 Main St".into(), "Vienna, Austria".into()],
                 email: "jane@example.com".into(),
             },
-            recipient: Recipient {
-                name: "Acme Corp".into(),
-                address: vec!["456 Oak Ave".into(), "Berlin, Germany".into()],
-                company_id: Some("DE123456".into()),
-                vat_number: Some("ATU12345678".into()),
-            },
+            recipient: recipient.clone(),
+            recipients: vec![recipient],
+            default_recipient_key: "acme-corp".into(),
             payment: vec![PaymentMethod {
                 label: "Primary Bank Account".into(),
                 iban: "DE89 3704 0044 0532 0130 00".into(),

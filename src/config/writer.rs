@@ -93,6 +93,7 @@ mod tests {
 
     fn synthetic_recipient() -> Recipient {
         Recipient {
+            key: Some("bob-corp".to_string()),
             name: "Bob Corp".to_string(),
             address: vec!["99 Oak Lane".to_string(), "Shelbyville, IL 62565".to_string()],
             company_id: Some("BC-98765".to_string()),
@@ -127,7 +128,9 @@ mod tests {
     fn complete_config() -> Config {
         Config {
             sender: Some(synthetic_sender()),
-            recipient: Some(synthetic_recipient()),
+            recipient: None,
+            recipients: Some(vec![synthetic_recipient()]),
+            default_recipient: Some("bob-corp".to_string()),
             payment: Some(synthetic_payment()),
             presets: Some(synthetic_presets()),
             defaults: Some(synthetic_defaults()),
@@ -505,6 +508,69 @@ mod tests {
         assert_eq!(remaining.len(), 2);
         assert_eq!(remaining[0].key, "dev");
         assert_eq!(remaining[1].key, "qa");
+    }
+
+    // ── Story 7.1 Phase 6: v2 round-trip tests ──
+
+    #[test]
+    fn test_save_config_v2_recipients_round_trips() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        let config = Config {
+            sender: Some(synthetic_sender()),
+            recipient: None,
+            recipients: Some(vec![Recipient {
+                key: Some("acme".into()),
+                name: "Acme Corp".into(),
+                address: vec!["123 St".into()],
+                company_id: Some("AC-123".into()),
+                vat_number: None,
+            }]),
+            default_recipient: Some("acme".into()),
+            payment: Some(synthetic_payment()),
+            presets: Some(synthetic_presets()),
+            defaults: Some(synthetic_defaults()),
+        };
+
+        // Act
+        save_config(dir.path(), &config).unwrap();
+        let loaded = unwrap_loaded(load_config(dir.path()));
+
+        // Assert
+        assert_eq!(loaded.recipients.as_ref().unwrap().len(), 1);
+        assert_eq!(
+            loaded.recipients.as_ref().unwrap()[0].key,
+            Some("acme".into())
+        );
+        assert_eq!(loaded.default_recipient, Some("acme".into()));
+    }
+
+    #[test]
+    fn test_save_config_v2_no_null_in_yaml() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        let config = Config {
+            sender: Some(synthetic_sender()),
+            recipient: None,
+            recipients: Some(vec![Recipient {
+                key: Some("bob".into()),
+                name: "Bob Corp".into(),
+                address: vec!["St".into()],
+                company_id: None,
+                vat_number: None,
+            }]),
+            default_recipient: Some("bob".into()),
+            payment: Some(synthetic_payment()),
+            presets: Some(synthetic_presets()),
+            defaults: Some(synthetic_defaults()),
+        };
+
+        // Act
+        save_config(dir.path(), &config).unwrap();
+        let raw = std::fs::read_to_string(dir.path().join(CONFIG_FILENAME)).unwrap();
+
+        // Assert
+        assert!(!raw.contains("null"), "YAML output should not contain 'null'");
     }
 
     #[test]

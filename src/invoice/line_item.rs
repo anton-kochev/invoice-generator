@@ -95,11 +95,14 @@ mod tests {
                 email: "alice@example.com".into(),
             }),
             recipient: Some(Recipient {
+                key: None,
                 name: "Bob Corp".into(),
                 address: vec!["99 Oak Lane".into(), "Shelbyville, IL 62565".into()],
                 company_id: Some("BC-98765".into()),
                 vat_number: Some("CZ12345678".into()),
             }),
+            recipients: None,
+            default_recipient: None,
             payment: Some(vec![PaymentMethod {
                 label: "SEPA Transfer".into(),
                 iban: "DE89370400440532013000".into(),

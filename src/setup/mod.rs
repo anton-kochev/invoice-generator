@@ -167,7 +167,7 @@ mod tests {
 
         // Assert
         assert!(config.sender.is_some());
-        assert!(config.recipient.is_some());
+        assert!(config.recipients.is_some());
         assert!(config.payment.is_some());
         assert!(config.presets.is_some());
         assert!(config.defaults.is_some());
