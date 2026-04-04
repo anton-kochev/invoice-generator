@@ -54,6 +54,9 @@ pub struct GenerateArgs {
     /// JSON array of line items: [{"preset":"key","days":N,"rate":N}]
     #[arg(long, conflicts_with_all = ["preset", "days"])]
     pub items: Option<String>,
+    /// Recipient profile key (defaults to default_recipient)
+    #[arg(long)]
+    pub client: Option<String>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -282,5 +285,45 @@ mod tests {
 
         // Assert
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_generate_client_flag_parses() {
+        // Arrange
+        let args = [
+            "invoice", "generate", "--month", "3", "--year", "2026",
+            "--preset", "dev", "--days", "10", "--client", "acme",
+        ];
+
+        // Act
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        // Assert
+        match cli.command {
+            Some(Command::Generate(g)) => {
+                assert_eq!(g.client.as_deref(), Some("acme"));
+            }
+            other => panic!("Expected Generate, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_generate_without_client_flag_defaults_to_none() {
+        // Arrange
+        let args = [
+            "invoice", "generate", "--month", "3", "--year", "2026",
+            "--preset", "dev", "--days", "10",
+        ];
+
+        // Act
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        // Assert
+        match cli.command {
+            Some(Command::Generate(g)) => {
+                assert!(g.client.is_none());
+            }
+            other => panic!("Expected Generate, got {other:?}"),
+        }
     }
 }

@@ -56,7 +56,6 @@ pub enum AppError {
     DuplicateRecipientKey(String),
 
     /// Requested recipient key does not exist.
-    #[allow(dead_code)]
     #[error("Unknown recipient: \"{key}\". Available: {}", available.join(", "))]
     RecipientNotFound {
         key: String,

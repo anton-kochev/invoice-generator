@@ -1,7 +1,8 @@
 use std::io::Write;
 use std::path::Path;
 
-use crate::config::types::Preset;
+use crate::config::types::{Preset, Recipient};
+use crate::config::validator::ValidatedConfig;
 use crate::error::AppError;
 use crate::invoice::summary::build_summary;
 use crate::invoice::types::{InvoicePeriod, LineItem};
@@ -82,6 +83,31 @@ fn resolve_line_items(args: &GenerateArgs, presets: &[Preset]) -> Result<Vec<Lin
     }
 }
 
+/// Resolve which recipient to use based on the --client flag.
+///
+/// If no client is specified, returns the default recipient.
+/// If a client key is provided, looks it up in the validated recipients list.
+fn resolve_recipient<'a>(
+    client: Option<&str>,
+    validated: &'a ValidatedConfig,
+) -> Result<&'a Recipient, AppError> {
+    match client {
+        None => Ok(&validated.recipient),
+        Some(key) => validated
+            .recipients
+            .iter()
+            .find(|r| r.key.as_deref() == Some(key))
+            .ok_or_else(|| AppError::RecipientNotFound {
+                key: key.to_string(),
+                available: validated
+                    .recipients
+                    .iter()
+                    .filter_map(|r| r.key.clone())
+                    .collect(),
+            }),
+    }
+}
+
 /// Handle `invoice generate` — non-interactive invoice generation.
 pub fn handle_generate(
     args: &GenerateArgs,
@@ -89,10 +115,11 @@ pub fn handle_generate(
     writer: &mut dyn Write,
 ) -> Result<(), AppError> {
     let validated = load_validated_config(cwd)?;
+    let recipient = resolve_recipient(args.client.as_deref(), &validated)?;
     let period = validate_period(args.month, args.year)?;
     let line_items = resolve_line_items(args, &validated.presets)?;
     let summary = build_summary(period, line_items, &validated.defaults)?;
-    let pdf_bytes = generate_pdf(&summary, &validated, &validated.recipient)?;
+    let pdf_bytes = generate_pdf(&summary, &validated, recipient)?;
     let output_path = pdf_output_path(&validated.sender.name, &period, cwd);
     std::fs::write(&output_path, &pdf_bytes)?;
     writeln!(writer, "PDF saved: {}", output_path.display())?;
@@ -113,6 +140,7 @@ mod tests {
             preset: Some(preset.to_string()),
             days: Some(days),
             items: None,
+            client: None,
         }
     }
 
@@ -123,6 +151,7 @@ mod tests {
             preset: None,
             days: None,
             items: Some(json.to_string()),
+            client: None,
         }
     }
 
@@ -425,5 +454,108 @@ mod tests {
         assert!(output.contains("PDF saved:"));
         let pdf_path = dir.path().join("Invoice_Alice_Smith_Mar2026.pdf");
         assert!(pdf_path.exists());
+    }
+
+    // ── Phase: resolve_recipient tests (pure) ──
+
+    #[test]
+    fn test_resolve_recipient_none_returns_default() {
+        // Arrange
+        let validated = crate::setup::test_helpers::validated(
+            crate::setup::test_helpers::v2_config_two_recipients(),
+        );
+
+        // Act
+        let result = resolve_recipient(None, &validated);
+
+        // Assert
+        let recipient = result.unwrap();
+        assert_eq!(recipient.name, "Acme Corp");
+    }
+
+    #[test]
+    fn test_resolve_recipient_some_matching_key_returns_recipient() {
+        // Arrange
+        let validated = crate::setup::test_helpers::validated(
+            crate::setup::test_helpers::v2_config_two_recipients(),
+        );
+
+        // Act
+        let result = resolve_recipient(Some("globex"), &validated);
+
+        // Assert
+        let recipient = result.unwrap();
+        assert_eq!(recipient.name, "Globex Inc");
+    }
+
+    #[test]
+    fn test_resolve_recipient_unknown_key_returns_error() {
+        // Arrange
+        let validated = crate::setup::test_helpers::validated(
+            crate::setup::test_helpers::v2_config_two_recipients(),
+        );
+
+        // Act
+        let result = resolve_recipient(Some("nonexistent"), &validated);
+
+        // Assert
+        assert!(matches!(result, Err(AppError::RecipientNotFound { .. })));
+    }
+
+    #[test]
+    fn test_resolve_recipient_error_lists_available_keys() {
+        // Arrange
+        let validated = crate::setup::test_helpers::validated(
+            crate::setup::test_helpers::v2_config_two_recipients(),
+        );
+
+        // Act
+        let result = resolve_recipient(Some("nope"), &validated);
+
+        // Assert
+        match result {
+            Err(AppError::RecipientNotFound { key, available }) => {
+                assert_eq!(key, "nope");
+                assert!(available.contains(&"acme".to_string()));
+                assert!(available.contains(&"globex".to_string()));
+            }
+            other => panic!("Expected RecipientNotFound, got {other:?}"),
+        }
+    }
+
+    // ── Phase: --client integration tests ──
+
+    #[test]
+    fn test_handle_generate_with_client_flag_uses_specified_recipient() {
+        // Arrange
+        let config = crate::setup::test_helpers::v2_config_two_recipients();
+        let dir = setup_dir(Some(&config));
+        let mut args = generate_single_args(3, 2026, "dev", 10.0);
+        args.client = Some("globex".to_string());
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let result = handle_generate(&args, dir.path(), &mut buf);
+
+        // Assert
+        assert!(result.is_ok(), "Expected Ok, got {result:?}");
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("PDF saved:"));
+    }
+
+    #[test]
+    fn test_handle_generate_with_unknown_client_returns_error() {
+        // Arrange
+        let config = crate::setup::test_helpers::v2_config_two_recipients();
+        let dir = setup_dir(Some(&config));
+        let mut args = generate_single_args(3, 2026, "dev", 10.0);
+        args.client = Some("nonexistent".to_string());
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let result = handle_generate(&args, dir.path(), &mut buf);
+
+        // Assert
+        assert!(matches!(result, Err(AppError::RecipientNotFound { .. })));
     }
 }
