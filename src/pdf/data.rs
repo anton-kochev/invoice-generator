@@ -62,7 +62,11 @@ pub struct PaymentData<'a> {
 
 impl<'a> InvoiceData<'a> {
     /// Build template data from a computed summary and validated config.
-    pub fn from_parts(summary: &'a InvoiceSummary, config: &'a ValidatedConfig) -> Self {
+    pub fn from_parts(
+        summary: &'a InvoiceSummary,
+        config: &'a ValidatedConfig,
+        recipient: &'a crate::config::types::Recipient,
+    ) -> Self {
         Self {
             sender: SenderData {
                 name: &config.sender.name,
@@ -70,10 +74,10 @@ impl<'a> InvoiceData<'a> {
                 email: &config.sender.email,
             },
             recipient: RecipientData {
-                name: &config.recipient.name,
-                address: &config.recipient.address,
-                company_id: config.recipient.company_id.as_deref(),
-                vat_number: config.recipient.vat_number.as_deref(),
+                name: &recipient.name,
+                address: &recipient.address,
+                company_id: recipient.company_id.as_deref(),
+                vat_number: recipient.vat_number.as_deref(),
             },
             invoice: InvoiceInfo {
                 number: summary.invoice_number.clone(),
@@ -166,7 +170,7 @@ mod tests {
         let config = make_config();
 
         // Act
-        let data = InvoiceData::from_parts(&summary, &config);
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient);
         let json = serde_json::to_value(&data).unwrap();
 
         // Assert
@@ -186,7 +190,7 @@ mod tests {
         let config = make_config();
 
         // Act
-        let data = InvoiceData::from_parts(&summary, &config);
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient);
         let json = serde_json::to_value(&data).unwrap();
 
         // Assert
@@ -204,7 +208,7 @@ mod tests {
         let config = make_config();
 
         // Act
-        let data = InvoiceData::from_parts(&summary, &config);
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient);
         let json = serde_json::to_value(&data).unwrap();
 
         // Assert
@@ -223,7 +227,7 @@ mod tests {
         config.recipient.vat_number = None;
 
         // Act
-        let data = InvoiceData::from_parts(&summary, &config);
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient);
         let json = serde_json::to_value(&data).unwrap();
 
         // Assert

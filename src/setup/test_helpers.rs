@@ -90,6 +90,72 @@ pub fn config_with_two_presets() -> Config {
     cfg
 }
 
+// ── v2 Config Factories ──
+
+pub fn synthetic_recipient_with_key(key: &str, name: &str) -> Recipient {
+    Recipient {
+        key: Some(key.into()),
+        name: name.into(),
+        address: vec!["123 Synthetic St".into()],
+        company_id: Some(format!("{}-ID", key.to_uppercase())),
+        vat_number: None,
+    }
+}
+
+pub fn synthetic_recipient_acme() -> Recipient {
+    Recipient {
+        key: Some("acme".into()),
+        name: "Acme Corp".into(),
+        address: vec!["100 Acme Blvd".into(), "Metropolis, IL 62960".into()],
+        company_id: Some("AC-12345".into()),
+        vat_number: None,
+    }
+}
+
+pub fn synthetic_recipient_globex() -> Recipient {
+    Recipient {
+        key: Some("globex".into()),
+        name: "Globex Inc".into(),
+        address: vec!["200 Globex Ave".into()],
+        company_id: None,
+        vat_number: Some("CZ87654321".into()),
+    }
+}
+
+pub fn v2_complete_config() -> Config {
+    Config {
+        sender: Some(synthetic_sender()),
+        recipient: None,
+        recipients: Some(vec![synthetic_recipient_acme()]),
+        default_recipient: Some("acme".into()),
+        payment: Some(synthetic_payment()),
+        presets: Some(synthetic_presets()),
+        defaults: Some(synthetic_defaults()),
+    }
+}
+
+pub fn v2_config_two_recipients() -> Config {
+    Config {
+        sender: Some(synthetic_sender()),
+        recipient: None,
+        recipients: Some(vec![synthetic_recipient_acme(), synthetic_recipient_globex()]),
+        default_recipient: Some("acme".into()),
+        payment: Some(synthetic_payment()),
+        presets: Some(synthetic_presets()),
+        defaults: Some(synthetic_defaults()),
+    }
+}
+
+pub fn validated(config: Config) -> crate::config::validator::ValidatedConfig {
+    use crate::config::validator::ValidationOutcome;
+    match config.validate().unwrap() {
+        ValidationOutcome::Complete(v) => v,
+        ValidationOutcome::Incomplete { missing, .. } => {
+            panic!("Expected Complete, got Incomplete with missing: {missing:?}")
+        }
+    }
+}
+
 // ── Tempdir Helper ──
 
 pub fn setup_dir(config: Option<&Config>) -> TempDir {

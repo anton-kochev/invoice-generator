@@ -11,8 +11,9 @@ use crate::invoice::types::InvoiceSummary;
 pub fn generate_pdf(
     summary: &InvoiceSummary,
     config: &ValidatedConfig,
+    recipient: &crate::config::types::Recipient,
 ) -> Result<Vec<u8>, AppError> {
-    let invoice_data = data::InvoiceData::from_parts(summary, config);
+    let invoice_data = data::InvoiceData::from_parts(summary, config, recipient);
 
     let json = serde_json::to_vec(&invoice_data)
         .map_err(|e| AppError::PdfCompile(format!("JSON serialization failed: {e}")))?;
@@ -98,7 +99,7 @@ mod tests {
         let config = make_config();
 
         // Act
-        let result = generate_pdf(&summary, &config);
+        let result = generate_pdf(&summary, &config, &config.recipient);
 
         // Assert
         let pdf = result.expect("PDF generation should succeed");
@@ -112,7 +113,7 @@ mod tests {
         let config = make_config();
 
         // Act
-        let pdf = generate_pdf(&summary, &config).unwrap();
+        let pdf = generate_pdf(&summary, &config, &config.recipient).unwrap();
 
         // Assert
         assert!(pdf.len() > 100, "PDF should have substantial content");
@@ -125,8 +126,8 @@ mod tests {
         let config = make_config();
 
         // Act
-        let pdf1 = generate_pdf(&summary, &config).unwrap();
-        let pdf2 = generate_pdf(&summary, &config).unwrap();
+        let pdf1 = generate_pdf(&summary, &config, &config.recipient).unwrap();
+        let pdf2 = generate_pdf(&summary, &config, &config.recipient).unwrap();
 
         // Assert
         assert_eq!(pdf1, pdf2, "Same input should produce identical PDF bytes");

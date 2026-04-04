@@ -56,9 +56,12 @@ pub enum AppError {
     DuplicateRecipientKey(String),
 
     /// Requested recipient key does not exist.
-    #[allow(dead_code)] // needed by Story 7.3 (recipient deletion)
-    #[error("Unknown recipient: \"{0}\"")]
-    RecipientNotFound(String),
+    #[allow(dead_code)]
+    #[error("Unknown recipient: \"{key}\". Available: {}", available.join(", "))]
+    RecipientNotFound {
+        key: String,
+        available: Vec<String>,
+    },
 
     /// Cannot delete the last remaining recipient.
     #[allow(dead_code)] // needed by Story 7.6 (recipient guard)
@@ -124,13 +127,18 @@ mod tests {
     #[test]
     fn test_recipient_not_found_displays_key() {
         // Arrange
-        let err = AppError::RecipientNotFound("xyz".into());
+        let err = AppError::RecipientNotFound {
+            key: "xyz".into(),
+            available: vec!["acme".into(), "globex".into()],
+        };
 
         // Act
         let msg = format!("{err}");
 
         // Assert
         assert!(msg.contains("xyz"), "Expected 'xyz' in: {msg}");
+        assert!(msg.contains("acme"), "Expected 'acme' in: {msg}");
+        assert!(msg.contains("globex"), "Expected 'globex' in: {msg}");
     }
 
     #[test]

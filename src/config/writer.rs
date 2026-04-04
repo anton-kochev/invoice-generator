@@ -3,7 +3,7 @@ use std::path::Path;
 use crate::error::AppError;
 
 use super::loader::CONFIG_FILENAME;
-use super::types::{Config, Preset};
+use super::types::{Config, Preset, Recipient};
 
 /// Serialize `config` to YAML and write it to `dir/CONFIG_FILENAME`.
 pub fn save_config(dir: &Path, config: &Config) -> Result<(), AppError> {
@@ -71,6 +71,109 @@ pub fn append_preset(dir: &Path, preset: Preset) -> Result<(), AppError> {
     presets.push(preset);
     config.presets = Some(presets);
 
+    save_config(dir, &config)
+}
+
+/// Append a recipient to the config file in `dir`.
+///
+/// If `set_default` is true, also sets `default_recipient` to the new recipient's key.
+pub fn append_recipient(dir: &Path, recipient: Recipient, set_default: bool) -> Result<(), AppError> {
+    use super::loader::{load_config, LoadResult};
+
+    let config = match load_config(dir)? {
+        LoadResult::Loaded(config) => config,
+        LoadResult::NotFound => {
+            return Err(AppError::ConfigIo(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("config file not found in {}", dir.display()),
+            )));
+        }
+    };
+
+    let mut config = config;
+    let mut recipients = config.recipients.unwrap_or_default();
+
+    if set_default {
+        config.default_recipient = recipient.key.clone();
+    }
+
+    recipients.push(recipient);
+    config.recipients = Some(recipients);
+
+    save_config(dir, &config)
+}
+
+/// Remove a recipient by key from the config file in `dir`.
+///
+/// Returns the removed recipient on success.
+/// If the removed recipient was the default, clears `default_recipient` (caller handles reassignment).
+pub fn remove_recipient(dir: &Path, key: &str) -> Result<Recipient, AppError> {
+    use super::loader::{load_config, LoadResult};
+
+    let config = match load_config(dir)? {
+        LoadResult::Loaded(config) => config,
+        LoadResult::NotFound => {
+            return Err(AppError::ConfigIo(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("config file not found in {}", dir.display()),
+            )));
+        }
+    };
+
+    let mut config = config;
+    let mut recipients = config.recipients.unwrap_or_default();
+
+    if recipients.len() <= 1 {
+        return Err(AppError::LastRecipient);
+    }
+
+    let pos = recipients
+        .iter()
+        .position(|r| r.key.as_deref() == Some(key))
+        .ok_or_else(|| AppError::RecipientNotFound {
+            key: key.to_string(),
+            available: recipients.iter().filter_map(|r| r.key.clone()).collect(),
+        })?;
+
+    let removed = recipients.remove(pos);
+    config.recipients = Some(recipients);
+
+    // Clear default if it was the removed recipient
+    if config.default_recipient.as_deref() == Some(key) {
+        config.default_recipient = None;
+    }
+
+    save_config(dir, &config)?;
+    Ok(removed)
+}
+
+/// Set the default recipient key in the config file.
+///
+/// Verifies the key exists in the recipients list before updating.
+pub fn set_default_recipient(dir: &Path, key: &str) -> Result<(), AppError> {
+    use super::loader::{load_config, LoadResult};
+
+    let config = match load_config(dir)? {
+        LoadResult::Loaded(config) => config,
+        LoadResult::NotFound => {
+            return Err(AppError::ConfigIo(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("config file not found in {}", dir.display()),
+            )));
+        }
+    };
+
+    let mut config = config;
+    let recipients = config.recipients.as_deref().unwrap_or_default();
+
+    if !recipients.iter().any(|r| r.key.as_deref() == Some(key)) {
+        return Err(AppError::RecipientNotFound {
+            key: key.to_string(),
+            available: recipients.iter().filter_map(|r| r.key.clone()).collect(),
+        });
+    }
+
+    config.default_recipient = Some(key.to_string());
     save_config(dir, &config)
 }
 
@@ -573,6 +676,53 @@ mod tests {
         assert!(!raw.contains("null"), "YAML output should not contain 'null'");
     }
 
+    // ── v2 Config Helpers ──
+
+    fn complete_config_v2() -> Config {
+        Config {
+            sender: Some(synthetic_sender()),
+            recipient: None,
+            recipients: Some(vec![Recipient {
+                key: Some("acme".into()),
+                name: "Acme Corp".into(),
+                address: vec!["100 Acme Blvd".into()],
+                company_id: Some("AC-12345".into()),
+                vat_number: None,
+            }]),
+            default_recipient: Some("acme".into()),
+            payment: Some(synthetic_payment()),
+            presets: Some(synthetic_presets()),
+            defaults: Some(synthetic_defaults()),
+        }
+    }
+
+    fn complete_config_v2_two_recipients() -> Config {
+        Config {
+            sender: Some(synthetic_sender()),
+            recipient: None,
+            recipients: Some(vec![
+                Recipient {
+                    key: Some("acme".into()),
+                    name: "Acme Corp".into(),
+                    address: vec!["100 Acme Blvd".into()],
+                    company_id: Some("AC-12345".into()),
+                    vat_number: None,
+                },
+                Recipient {
+                    key: Some("globex".into()),
+                    name: "Globex Inc".into(),
+                    address: vec!["200 Globex Ave".into()],
+                    company_id: None,
+                    vat_number: Some("CZ87654321".into()),
+                },
+            ]),
+            default_recipient: Some("acme".into()),
+            payment: Some(synthetic_payment()),
+            presets: Some(synthetic_presets()),
+            defaults: Some(synthetic_defaults()),
+        }
+    }
+
     #[test]
     fn test_remove_preset_key_is_case_sensitive() {
         // Arrange
@@ -599,5 +749,233 @@ mod tests {
 
         // Assert
         assert!(matches!(result, Err(AppError::PresetNotFound(_))));
+    }
+
+    // ── append_recipient tests ──
+
+    #[test]
+    fn test_append_recipient_to_config_without_recipients() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        let config = Config {
+            sender: Some(synthetic_sender()),
+            ..Config::default()
+        };
+        save_config(dir.path(), &config).unwrap();
+
+        let recipient = Recipient {
+            key: Some("acme".into()),
+            name: "Acme Corp".into(),
+            address: vec!["100 Acme Blvd".into()],
+            company_id: None,
+            vat_number: None,
+        };
+
+        // Act
+        append_recipient(dir.path(), recipient, true).unwrap();
+
+        // Assert
+        let loaded = unwrap_loaded(load_config(dir.path()));
+        let recipients = loaded.recipients.unwrap();
+        assert_eq!(recipients.len(), 1);
+        assert_eq!(recipients[0].key, Some("acme".into()));
+        assert_eq!(loaded.default_recipient, Some("acme".into()));
+    }
+
+    #[test]
+    fn test_append_recipient_to_existing_recipients() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        save_config(dir.path(), &complete_config_v2()).unwrap();
+
+        let new_recipient = Recipient {
+            key: Some("globex".into()),
+            name: "Globex Inc".into(),
+            address: vec!["200 Globex Ave".into()],
+            company_id: None,
+            vat_number: None,
+        };
+
+        // Act
+        append_recipient(dir.path(), new_recipient, false).unwrap();
+
+        // Assert
+        let loaded = unwrap_loaded(load_config(dir.path()));
+        let recipients = loaded.recipients.unwrap();
+        assert_eq!(recipients.len(), 2);
+        assert_eq!(recipients[1].key, Some("globex".into()));
+        assert_eq!(loaded.default_recipient, Some("acme".into()));
+    }
+
+    #[test]
+    fn test_append_recipient_set_default_updates_key() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        save_config(dir.path(), &complete_config_v2()).unwrap();
+
+        let new_recipient = Recipient {
+            key: Some("globex".into()),
+            name: "Globex Inc".into(),
+            address: vec!["200 Globex Ave".into()],
+            company_id: None,
+            vat_number: None,
+        };
+
+        // Act
+        append_recipient(dir.path(), new_recipient, true).unwrap();
+
+        // Assert
+        let loaded = unwrap_loaded(load_config(dir.path()));
+        assert_eq!(loaded.default_recipient, Some("globex".into()));
+    }
+
+    #[test]
+    fn test_append_recipient_preserves_other_sections() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        let original = complete_config_v2();
+        save_config(dir.path(), &original).unwrap();
+
+        let new_recipient = Recipient {
+            key: Some("globex".into()),
+            name: "Globex Inc".into(),
+            address: vec!["200 Globex Ave".into()],
+            company_id: None,
+            vat_number: None,
+        };
+
+        // Act
+        append_recipient(dir.path(), new_recipient, false).unwrap();
+
+        // Assert
+        let loaded = unwrap_loaded(load_config(dir.path()));
+        assert_eq!(loaded.sender, original.sender);
+        assert_eq!(loaded.payment, original.payment);
+        assert_eq!(loaded.presets, original.presets);
+        assert_eq!(loaded.defaults, original.defaults);
+    }
+
+    #[test]
+    fn test_append_recipient_no_config_returns_error() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        let recipient = Recipient {
+            key: Some("acme".into()),
+            name: "Acme Corp".into(),
+            address: vec!["St".into()],
+            company_id: None,
+            vat_number: None,
+        };
+
+        // Act
+        let result = append_recipient(dir.path(), recipient, true);
+
+        // Assert
+        assert!(matches!(result, Err(AppError::ConfigIo(_))));
+    }
+
+    // ── remove_recipient tests ──
+
+    #[test]
+    fn test_remove_recipient_deletes_matching_key() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        save_config(dir.path(), &complete_config_v2_two_recipients()).unwrap();
+
+        // Act
+        let removed = remove_recipient(dir.path(), "globex").unwrap();
+
+        // Assert
+        assert_eq!(removed.name, "Globex Inc");
+        let loaded = unwrap_loaded(load_config(dir.path()));
+        let recipients = loaded.recipients.unwrap();
+        assert_eq!(recipients.len(), 1);
+        assert_eq!(recipients[0].key, Some("acme".into()));
+        assert_eq!(loaded.default_recipient, Some("acme".into()));
+    }
+
+    #[test]
+    fn test_remove_recipient_unknown_key_returns_error() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        save_config(dir.path(), &complete_config_v2_two_recipients()).unwrap();
+
+        // Act
+        let result = remove_recipient(dir.path(), "nope");
+
+        // Assert
+        assert!(matches!(result, Err(AppError::RecipientNotFound { .. })));
+    }
+
+    #[test]
+    fn test_remove_recipient_last_returns_error() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        save_config(dir.path(), &complete_config_v2()).unwrap();
+
+        // Act
+        let result = remove_recipient(dir.path(), "acme");
+
+        // Assert
+        assert!(matches!(result, Err(AppError::LastRecipient)));
+    }
+
+    #[test]
+    fn test_remove_recipient_preserves_other_sections() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        let original = complete_config_v2_two_recipients();
+        save_config(dir.path(), &original).unwrap();
+
+        // Act
+        remove_recipient(dir.path(), "globex").unwrap();
+
+        // Assert
+        let loaded = unwrap_loaded(load_config(dir.path()));
+        assert_eq!(loaded.sender, original.sender);
+        assert_eq!(loaded.payment, original.payment);
+        assert_eq!(loaded.presets, original.presets);
+        assert_eq!(loaded.defaults, original.defaults);
+    }
+
+    #[test]
+    fn test_remove_recipient_no_config_returns_error() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+
+        // Act
+        let result = remove_recipient(dir.path(), "acme");
+
+        // Assert
+        assert!(matches!(result, Err(AppError::ConfigIo(_))));
+    }
+
+    // ── set_default_recipient tests ──
+
+    #[test]
+    fn test_set_default_recipient_updates_key() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        save_config(dir.path(), &complete_config_v2_two_recipients()).unwrap();
+
+        // Act
+        set_default_recipient(dir.path(), "globex").unwrap();
+
+        // Assert
+        let loaded = unwrap_loaded(load_config(dir.path()));
+        assert_eq!(loaded.default_recipient, Some("globex".into()));
+    }
+
+    #[test]
+    fn test_set_default_recipient_unknown_key_returns_error() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        save_config(dir.path(), &complete_config_v2_two_recipients()).unwrap();
+
+        // Act
+        let result = set_default_recipient(dir.path(), "nope");
+
+        // Assert
+        assert!(matches!(result, Err(AppError::RecipientNotFound { .. })));
     }
 }

@@ -92,7 +92,7 @@ pub fn handle_generate(
     let period = validate_period(args.month, args.year)?;
     let line_items = resolve_line_items(args, &validated.presets)?;
     let summary = build_summary(period, line_items, &validated.defaults)?;
-    let pdf_bytes = generate_pdf(&summary, &validated)?;
+    let pdf_bytes = generate_pdf(&summary, &validated, &validated.recipient)?;
     let output_path = pdf_output_path(&validated.sender.name, &period, cwd);
     std::fs::write(&output_path, &pdf_bytes)?;
     writeln!(writer, "PDF saved: {}", output_path.display())?;
