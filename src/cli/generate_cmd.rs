@@ -1,0 +1,429 @@
+use std::io::Write;
+use std::path::Path;
+
+use crate::config::types::Preset;
+use crate::error::AppError;
+use crate::invoice::summary::build_summary;
+use crate::invoice::types::{InvoicePeriod, LineItem};
+use crate::pdf::generate_pdf;
+
+use super::common::pdf_output_path;
+use super::load_validated_config;
+use super::GenerateArgs;
+
+/// A single item entry from the `--items` JSON array.
+#[derive(Debug, serde::Deserialize)]
+struct ItemSpec {
+    preset: String,
+    days: f64,
+    rate: Option<f64>,
+}
+
+/// Validate month/year into an `InvoicePeriod`.
+fn validate_period(month: u32, year: u32) -> Result<InvoicePeriod, AppError> {
+    InvoicePeriod::new(month, year).ok_or_else(|| {
+        AppError::InvalidDate(format!("month={month}, year={year}"))
+    })
+}
+
+/// Validate that days is positive and finite.
+fn validate_days(days: f64) -> Result<(), AppError> {
+    if !days.is_finite() || days <= 0.0 {
+        return Err(AppError::InvalidDays(format!("{days}")));
+    }
+    Ok(())
+}
+
+/// Find a preset by key, returning `PresetNotFound` if absent.
+fn find_preset<'a>(key: &str, presets: &'a [Preset]) -> Result<&'a Preset, AppError> {
+    presets
+        .iter()
+        .find(|p| p.key == key)
+        .ok_or_else(|| AppError::PresetNotFound(key.to_string()))
+}
+
+/// Parse the `--items` JSON string into validated `ItemSpec` entries.
+fn parse_items(json: &str) -> Result<Vec<ItemSpec>, AppError> {
+    let items: Vec<ItemSpec> =
+        serde_json::from_str(json).map_err(|e| AppError::ItemsParse(e.to_string()))?;
+    if items.is_empty() {
+        return Err(AppError::ItemsParse("items array must not be empty".into()));
+    }
+    for item in &items {
+        validate_days(item.days)?;
+    }
+    Ok(items)
+}
+
+/// Resolve CLI arguments into concrete `LineItem`s using the config's presets.
+fn resolve_line_items(args: &GenerateArgs, presets: &[Preset]) -> Result<Vec<LineItem>, AppError> {
+    if let Some(ref json) = args.items {
+        // Multi-item mode: --items JSON
+        let specs = parse_items(json)?;
+        specs
+            .iter()
+            .map(|spec| {
+                let preset = find_preset(&spec.preset, presets)?;
+                let rate = spec.rate.unwrap_or(preset.default_rate);
+                Ok(LineItem::new(preset.description.clone(), spec.days, rate))
+            })
+            .collect()
+    } else {
+        // Single-item mode: --preset + --days
+        let key = args.preset.as_deref().expect("clap enforces preset or items");
+        let days = args.days.expect("clap enforces days with preset");
+        validate_days(days)?;
+        let preset = find_preset(key, presets)?;
+        Ok(vec![LineItem::new(
+            preset.description.clone(),
+            days,
+            preset.default_rate,
+        )])
+    }
+}
+
+/// Handle `invoice generate` — non-interactive invoice generation.
+pub fn handle_generate(
+    args: &GenerateArgs,
+    cwd: &Path,
+    writer: &mut dyn Write,
+) -> Result<(), AppError> {
+    let validated = load_validated_config(cwd)?;
+    let period = validate_period(args.month, args.year)?;
+    let line_items = resolve_line_items(args, &validated.presets)?;
+    let summary = build_summary(period, line_items, &validated.defaults)?;
+    let pdf_bytes = generate_pdf(&summary, &validated)?;
+    let output_path = pdf_output_path(&validated.sender.name, &period, cwd);
+    std::fs::write(&output_path, &pdf_bytes)?;
+    writeln!(writer, "PDF saved: {}", output_path.display())?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::setup::test_helpers::*;
+
+    // ── Test helper builders ──
+
+    fn generate_single_args(month: u32, year: u32, preset: &str, days: f64) -> GenerateArgs {
+        GenerateArgs {
+            month,
+            year,
+            preset: Some(preset.to_string()),
+            days: Some(days),
+            items: None,
+        }
+    }
+
+    fn generate_items_args(month: u32, year: u32, json: &str) -> GenerateArgs {
+        GenerateArgs {
+            month,
+            year,
+            preset: None,
+            days: None,
+            items: Some(json.to_string()),
+        }
+    }
+
+    fn config_with_named_presets(entries: &[(&str, f64)]) -> crate::config::types::Config {
+        use crate::config::types::{Config, Preset};
+        let presets: Vec<Preset> = entries
+            .iter()
+            .map(|(key, rate)| Preset {
+                key: key.to_string(),
+                description: format!("{key} services"),
+                default_rate: *rate,
+            })
+            .collect();
+        Config {
+            presets: Some(presets),
+            ..complete_config()
+        }
+    }
+
+    // ── Phase 2: JSON deserialization tests (pure) ──
+
+    #[test]
+    fn test_parse_items_malformed_json_returns_error() {
+        // Arrange
+        let json = "not json at all";
+
+        // Act
+        let result = parse_items(json);
+
+        // Assert
+        assert!(matches!(result, Err(AppError::ItemsParse(_))));
+    }
+
+    #[test]
+    fn test_parse_items_missing_preset_field_returns_error() {
+        // Arrange
+        let json = r#"[{"days": 10}]"#;
+
+        // Act
+        let result = parse_items(json);
+
+        // Assert
+        assert!(matches!(result, Err(AppError::ItemsParse(_))));
+    }
+
+    #[test]
+    fn test_parse_items_rate_override_parsed() {
+        // Arrange
+        let json = r#"[{"preset":"dev","days":5,"rate":999.0}]"#;
+
+        // Act
+        let items = parse_items(json).unwrap();
+
+        // Assert
+        assert_eq!(items.len(), 1);
+        assert!((items[0].rate.unwrap() - 999.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_parse_items_rate_absent_is_none() {
+        // Arrange
+        let json = r#"[{"preset":"dev","days":5}]"#;
+
+        // Act
+        let items = parse_items(json).unwrap();
+
+        // Assert
+        assert!(items[0].rate.is_none());
+    }
+
+    #[test]
+    fn test_parse_items_empty_array_returns_error() {
+        // Arrange
+        let json = "[]";
+
+        // Act
+        let result = parse_items(json);
+
+        // Assert
+        assert!(matches!(result, Err(AppError::ItemsParse(_))));
+    }
+
+    #[test]
+    fn test_parse_items_zero_days_returns_error() {
+        // Arrange
+        let json = r#"[{"preset":"dev","days":0}]"#;
+
+        // Act
+        let result = parse_items(json);
+
+        // Assert
+        assert!(matches!(result, Err(AppError::InvalidDays(_))));
+    }
+
+    // ── Phase 3: Validation tests (pure) ──
+
+    #[test]
+    fn test_validate_days_zero_returns_error() {
+        // Arrange
+        let days = 0.0;
+
+        // Act
+        let result = validate_days(days);
+
+        // Assert
+        assert!(matches!(result, Err(AppError::InvalidDays(_))));
+    }
+
+    #[test]
+    fn test_validate_days_positive_succeeds() {
+        // Arrange
+        let days = 5.5;
+
+        // Act
+        let result = validate_days(days);
+
+        // Assert
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_period_invalid_month_returns_error() {
+        // Arrange
+        let month = 13;
+        let year = 2026;
+
+        // Act
+        let result = validate_period(month, year);
+
+        // Assert
+        assert!(matches!(result, Err(AppError::InvalidDate(_))));
+    }
+
+    #[test]
+    fn test_find_preset_not_found_returns_error() {
+        // Arrange
+        let presets = synthetic_presets();
+
+        // Act
+        let result = find_preset("nonexistent", &presets);
+
+        // Assert
+        assert!(matches!(result, Err(AppError::PresetNotFound(_))));
+    }
+
+    #[test]
+    fn test_find_preset_found_returns_preset() {
+        // Arrange
+        let presets = synthetic_presets();
+
+        // Act
+        let result = find_preset("dev", &presets);
+
+        // Assert
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().key, "dev");
+    }
+
+    // ── Phase 4: Handler tests — single-item (tempdir) ──
+
+    #[test]
+    fn test_handle_generate_no_config_returns_error() {
+        // Arrange
+        let dir = setup_dir(None);
+        let args = generate_single_args(3, 2026, "dev", 10.0);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let result = handle_generate(&args, dir.path(), &mut buf);
+
+        // Assert
+        assert!(matches!(result, Err(AppError::ConfigNotFound)));
+    }
+
+    #[test]
+    fn test_handle_generate_preset_not_found_returns_error() {
+        // Arrange
+        let config = complete_config();
+        let dir = setup_dir(Some(&config));
+        let args = generate_single_args(3, 2026, "nonexistent", 10.0);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let result = handle_generate(&args, dir.path(), &mut buf);
+
+        // Assert
+        assert!(matches!(result, Err(AppError::PresetNotFound(_))));
+    }
+
+    #[test]
+    fn test_handle_generate_single_item_produces_pdf_file() {
+        // Arrange
+        let config = complete_config();
+        let dir = setup_dir(Some(&config));
+        let args = generate_single_args(3, 2026, "dev", 10.0);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        handle_generate(&args, dir.path(), &mut buf).unwrap();
+
+        // Assert
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("PDF saved:"), "Expected 'PDF saved:' in: {output}");
+        let pdf_path = dir.path().join("Invoice_Alice_Smith_Mar2026.pdf");
+        assert!(pdf_path.exists(), "PDF file should exist");
+        let bytes = std::fs::read(&pdf_path).unwrap();
+        assert!(bytes.starts_with(b"%PDF"), "File should start with %PDF header");
+    }
+
+    #[test]
+    fn test_handle_generate_single_item_overwrites_existing_pdf() {
+        // Arrange
+        let config = complete_config();
+        let dir = setup_dir(Some(&config));
+        let pdf_path = dir.path().join("Invoice_Alice_Smith_Mar2026.pdf");
+        std::fs::write(&pdf_path, b"old content").unwrap();
+        let args = generate_single_args(3, 2026, "dev", 10.0);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        handle_generate(&args, dir.path(), &mut buf).unwrap();
+
+        // Assert
+        let bytes = std::fs::read(&pdf_path).unwrap();
+        assert!(bytes.starts_with(b"%PDF"), "File should be overwritten with actual PDF");
+        assert_ne!(bytes, b"old content");
+    }
+
+    // ── Phase 5: Handler tests — multi-item (tempdir) ──
+
+    #[test]
+    fn test_handle_generate_items_single_entry_produces_pdf() {
+        // Arrange
+        let config = config_with_named_presets(&[("alpha", 800.0)]);
+        let dir = setup_dir(Some(&config));
+        let json = r#"[{"preset":"alpha","days":5}]"#;
+        let args = generate_items_args(3, 2026, json);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        handle_generate(&args, dir.path(), &mut buf).unwrap();
+
+        // Assert
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("PDF saved:"));
+    }
+
+    #[test]
+    fn test_handle_generate_items_unknown_preset_names_key() {
+        // Arrange
+        let config = complete_config();
+        let dir = setup_dir(Some(&config));
+        let json = r#"[{"preset":"bogus","days":5}]"#;
+        let args = generate_items_args(3, 2026, json);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let result = handle_generate(&args, dir.path(), &mut buf);
+
+        // Assert
+        match result {
+            Err(AppError::PresetNotFound(key)) => assert_eq!(key, "bogus"),
+            other => panic!("Expected PresetNotFound, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_handle_generate_items_multiple_entries_produces_pdf() {
+        // Arrange
+        let config = config_with_named_presets(&[("alpha", 800.0), ("beta", 500.0)]);
+        let dir = setup_dir(Some(&config));
+        let json = r#"[{"preset":"alpha","days":10},{"preset":"beta","days":5}]"#;
+        let args = generate_items_args(3, 2026, json);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        handle_generate(&args, dir.path(), &mut buf).unwrap();
+
+        // Assert
+        let pdf_path = dir.path().join("Invoice_Alice_Smith_Mar2026.pdf");
+        assert!(pdf_path.exists());
+        let bytes = std::fs::read(&pdf_path).unwrap();
+        assert!(bytes.starts_with(b"%PDF"));
+    }
+
+    #[test]
+    fn test_handle_generate_items_rate_override_used() {
+        // Arrange — preset default_rate is 800, but JSON overrides to 1200
+        let config = config_with_named_presets(&[("alpha", 800.0)]);
+        let dir = setup_dir(Some(&config));
+        let json = r#"[{"preset":"alpha","days":10,"rate":1200.0}]"#;
+        let args = generate_items_args(3, 2026, json);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        handle_generate(&args, dir.path(), &mut buf).unwrap();
+
+        // Assert — verify the PDF was generated (rate override is internal to line items)
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("PDF saved:"));
+        let pdf_path = dir.path().join("Invoice_Alice_Smith_Mar2026.pdf");
+        assert!(pdf_path.exists());
+    }
+}

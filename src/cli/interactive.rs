@@ -81,14 +81,11 @@ pub fn run_invoice_flow(
 
         if prompter.confirm("Generate PDF?", true)? {
             let pdf_bytes = pdf::generate_pdf(&summary, validated)?;
-            let name = validated.sender.name.replace(' ', "_");
-            let filename = format!(
-                "Invoice_{}_{}{}.pdf",
-                name,
-                summary.period.month_abbrev(),
-                summary.period.year()
+            let output_path = super::common::pdf_output_path(
+                &validated.sender.name,
+                &summary.period,
+                cwd,
             );
-            let output_path = cwd.join(&filename);
 
             if output_path.exists() {
                 if !prompter.confirm("File already exists. Overwrite?", false)? {

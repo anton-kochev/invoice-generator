@@ -36,6 +36,9 @@ fn run(cli: Cli) -> Result<(), error::AppError> {
 
     match cli.command {
         None => cli::interactive::run_interactive(&prompter, &cwd),
+        Some(Command::Generate(args)) => {
+            cli::generate_cmd::handle_generate(&args, &cwd, &mut std::io::stdout())
+        }
         Some(Command::Preset { action }) => match action {
             PresetAction::List => {
                 let validated = cli::load_validated_config(&cwd)?;

@@ -38,6 +38,14 @@ pub enum AppError {
     /// Config file is required but not found (for non-interactive subcommands).
     #[error("No config file found. Run `invoice` first to set up.")]
     ConfigNotFound,
+
+    /// Invalid days value in `--days` or `--items` JSON.
+    #[error("Invalid days value: {0} (must be > 0)")]
+    InvalidDays(String),
+
+    /// Failed to parse `--items` JSON.
+    #[error("Failed to parse --items JSON: {0}")]
+    ItemsParse(String),
 }
 
 #[cfg(test)]

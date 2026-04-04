@@ -1,3 +1,5 @@
+pub mod common;
+pub mod generate_cmd;
 pub mod interactive;
 pub mod preset_cmd;
 
@@ -24,6 +26,33 @@ pub enum Command {
         #[command(subcommand)]
         action: PresetAction,
     },
+    /// Generate an invoice (non-interactive)
+    Generate(GenerateArgs),
+}
+
+/// Arguments for the `generate` subcommand.
+#[derive(Debug, clap::Args)]
+#[command(
+    group = clap::ArgGroup::new("item-source")
+        .required(true)
+        .args(["preset", "items"])
+)]
+pub struct GenerateArgs {
+    /// Billing month (1-12)
+    #[arg(long)]
+    pub month: u32,
+    /// Billing year (e.g. 2026)
+    #[arg(long)]
+    pub year: u32,
+    /// Preset key to use for a single line item
+    #[arg(long, requires = "days", conflicts_with = "items")]
+    pub preset: Option<String>,
+    /// Number of days worked (required with --preset)
+    #[arg(long, requires = "preset", conflicts_with = "items")]
+    pub days: Option<f64>,
+    /// JSON array of line items: [{"preset":"key","days":N,"rate":N}]
+    #[arg(long, conflicts_with_all = ["preset", "days"])]
+    pub items: Option<String>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -127,6 +156,125 @@ mod tests {
     fn test_preset_unknown_action_is_error() {
         // Arrange
         let args = ["invoice", "preset", "bogus"];
+
+        // Act
+        let result = Cli::try_parse_from(args);
+
+        // Assert
+        assert!(result.is_err());
+    }
+
+    // ── Generate subcommand tests ──
+
+    #[test]
+    fn test_generate_single_item_parses_all_flags() {
+        // Arrange
+        let args = [
+            "invoice", "generate", "--month", "3", "--year", "2026",
+            "--preset", "pwc", "--days", "10",
+        ];
+
+        // Act
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        // Assert
+        match cli.command {
+            Some(Command::Generate(g)) => {
+                assert_eq!(g.month, 3);
+                assert_eq!(g.year, 2026);
+                assert_eq!(g.preset.as_deref(), Some("pwc"));
+                assert!((g.days.unwrap() - 10.0).abs() < f64::EPSILON);
+                assert!(g.items.is_none());
+            }
+            other => panic!("Expected Generate, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_generate_single_item_missing_month_is_error() {
+        // Arrange
+        let args = [
+            "invoice", "generate", "--year", "2026",
+            "--preset", "pwc", "--days", "10",
+        ];
+
+        // Act
+        let result = Cli::try_parse_from(args);
+
+        // Assert
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_generate_single_item_missing_preset_is_error() {
+        // Arrange — month+year but no preset or items
+        let args = ["invoice", "generate", "--month", "3", "--year", "2026"];
+
+        // Act
+        let result = Cli::try_parse_from(args);
+
+        // Assert
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_generate_items_json_parses() {
+        // Arrange
+        let json = r#"[{"preset":"pwc","days":10}]"#;
+        let args = [
+            "invoice", "generate", "--month", "3", "--year", "2026",
+            "--items", json,
+        ];
+
+        // Act
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        // Assert
+        match cli.command {
+            Some(Command::Generate(g)) => {
+                assert_eq!(g.items.as_deref(), Some(json));
+                assert!(g.preset.is_none());
+                assert!(g.days.is_none());
+            }
+            other => panic!("Expected Generate, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_generate_items_and_preset_mutually_exclusive() {
+        // Arrange
+        let args = [
+            "invoice", "generate", "--month", "3", "--year", "2026",
+            "--preset", "pwc", "--days", "10",
+            "--items", "[{}]",
+        ];
+
+        // Act
+        let result = Cli::try_parse_from(args);
+
+        // Assert
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_generate_items_and_days_mutually_exclusive() {
+        // Arrange
+        let args = [
+            "invoice", "generate", "--month", "3", "--year", "2026",
+            "--items", "[{}]", "--days", "5",
+        ];
+
+        // Act
+        let result = Cli::try_parse_from(args);
+
+        // Assert
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_generate_no_item_source_is_error() {
+        // Arrange — month+year only, no preset or items
+        let args = ["invoice", "generate", "--month", "3", "--year", "2026"];
 
         // Act
         let result = Cli::try_parse_from(args);
