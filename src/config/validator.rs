@@ -664,6 +664,35 @@ mod tests {
         assert_eq!(validated.active_recipient().name, "Bob Corp");
     }
 
+    // ── Story 11.1: v1 backwards compatibility verification ──
+
+    #[test]
+    fn test_v1_config_round_trips_through_validation_with_single_recipient() {
+        // Arrange — pure v1 config with no recipients list or default_recipient
+        let config = Config {
+            sender: Some(make_sender()),
+            recipient: Some(make_recipient()),
+            recipients: None,
+            default_recipient: None,
+            payment: Some(make_payment()),
+            presets: Some(make_presets()),
+            defaults: Some(Defaults::default()),
+        };
+
+        // Act
+        let result = config.validate().unwrap();
+
+        // Assert
+        match result {
+            ValidationOutcome::Complete(v) => {
+                assert_eq!(v.recipients.len(), 1, "v1 config should normalize to single-element recipients list");
+                assert_eq!(v.recipient.name, "Bob Corp");
+                assert!(!v.default_recipient_key.is_empty(), "default key should be auto-derived");
+            }
+            ValidationOutcome::Incomplete { .. } => panic!("Expected Complete for v1 config"),
+        }
+    }
+
     // ── Helpers ──
 
     fn make_sender() -> Sender {

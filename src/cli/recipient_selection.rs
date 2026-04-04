@@ -194,4 +194,27 @@ mod tests {
         assert_eq!(result.name, "Globex Inc");
         prompter.assert_exhausted();
     }
+
+    // ── Story 11.1: v1 backwards compatibility verification ──
+
+    #[test]
+    fn test_v1_config_single_recipient_auto_selects_without_prompt() {
+        // Arrange — simulate v1 config that was normalized: single recipient with derived key
+        let recipient = crate::config::types::Recipient {
+            key: Some("bob-corp".into()),
+            name: "Bob Corp".into(),
+            address: vec!["456 Ave".into()],
+            company_id: None,
+            vat_number: None,
+        };
+        let recipients = vec![recipient];
+        let prompter = MockPrompter::new(vec![]); // no prompts expected
+
+        // Act
+        let result = select_recipient(&prompter, &recipients, "bob-corp").unwrap();
+
+        // Assert
+        assert_eq!(result.name, "Bob Corp");
+        prompter.assert_exhausted(); // confirms no interactive prompt was needed
+    }
 }

@@ -558,4 +558,23 @@ mod tests {
         // Assert
         assert!(matches!(result, Err(AppError::RecipientNotFound { .. })));
     }
+
+    // ── Story 11.1: v1 backwards compatibility verification ──
+
+    #[test]
+    fn test_handle_generate_v1_config_without_client_flag_produces_pdf() {
+        // Arrange — v1 config (single recipient, no recipients list)
+        let config = complete_config(); // v1 format
+        let dir = setup_dir(Some(&config));
+        let args = generate_single_args(3, 2026, "dev", 10.0);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let result = handle_generate(&args, dir.path(), &mut buf);
+
+        // Assert
+        assert!(result.is_ok(), "v1 config should work without --client flag: {result:?}");
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("PDF saved:"));
+    }
 }
