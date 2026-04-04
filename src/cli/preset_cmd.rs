@@ -130,6 +130,7 @@ mod tests {
             description: "Development Services".to_string(),
             default_rate: 100.0,
             currency: None,
+            tax_rate: None,
         }
     }
 
@@ -188,6 +189,7 @@ mod tests {
                 description: "Design work".to_string(),
                 default_rate: 80.0,
                 currency: None,
+                tax_rate: None,
             },
         ];
 
@@ -221,6 +223,7 @@ mod tests {
             description: long_desc.clone(),
             default_rate: 50.0,
             currency: None,
+            tax_rate: None,
         }];
 
         // Act
@@ -409,6 +412,7 @@ mod tests {
             description: "Development".into(),
             default_rate: 800.0,
             currency: Some("CZK".into()),
+            tax_rate: None,
         }];
 
         // Act
@@ -430,6 +434,7 @@ mod tests {
             description: "Development".into(),
             default_rate: 800.0,
             currency: None,
+            tax_rate: None,
         }];
 
         // Act
@@ -450,12 +455,14 @@ mod tests {
                 description: "Development".into(),
                 default_rate: 800.0,
                 currency: Some("USD".into()),
+                tax_rate: None,
             },
             Preset {
                 key: "qa".into(),
                 description: "QA work".into(),
                 default_rate: 600.0,
                 currency: None,
+                tax_rate: None,
             },
         ];
 

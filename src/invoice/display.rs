@@ -41,14 +41,42 @@ pub fn format_summary(summary: &InvoiceSummary) -> String {
             ),
             w = width - 2
         ));
+        if item.tax_rate > 0.0 {
+            lines.push(format!(
+                "| {:<w$} |",
+                format!(
+                    "  tax {:.1}%: {:.2} {}",
+                    item.tax_rate, item.tax_amount, summary.currency
+                ),
+                w = width - 2
+            ));
+        }
     }
 
     lines.push(border.clone());
-    lines.push(format!(
-        "| {:<w$} |",
-        format!("TOTAL: {:.2} {}", summary.total, summary.currency),
-        w = width - 2
-    ));
+    if summary.tax_total > 0.0 {
+        lines.push(format!(
+            "| {:<w$} |",
+            format!("SUBTOTAL: {:.2} {}", summary.subtotal, summary.currency),
+            w = width - 2
+        ));
+        lines.push(format!(
+            "| {:<w$} |",
+            format!("TAX: {:.2} {}", summary.tax_total, summary.currency),
+            w = width - 2
+        ));
+        lines.push(format!(
+            "| {:<w$} |",
+            format!("TOTAL: {:.2} {}", summary.total, summary.currency),
+            w = width - 2
+        ));
+    } else {
+        lines.push(format!(
+            "| {:<w$} |",
+            format!("TOTAL: {:.2} {}", summary.total, summary.currency),
+            w = width - 2
+        ));
+    }
     lines.push(border);
 
     lines.join("\n")
@@ -71,6 +99,8 @@ mod tests {
                 LineItem::new("Software development".into(), 10.0, 800.0, "EUR".into()),
                 LineItem::new("Technical consulting".into(), 5.0, 1000.0, "EUR".into()),
             ],
+            subtotal: 13000.0,
+            tax_total: 0.0,
             total: 13000.0,
         }
     }
@@ -171,6 +201,87 @@ mod tests {
 
         // Assert
         assert!(output.contains("EUR"));
+    }
+
+    fn make_summary_with_tax() -> InvoiceSummary {
+        InvoiceSummary {
+            invoice_number: "INV-2026-03".into(),
+            period: InvoicePeriod::new(3, 2026).unwrap(),
+            invoice_date: Date::from_calendar_date(2026, Month::April, 9).unwrap(),
+            due_date: Date::from_calendar_date(2026, Month::May, 9).unwrap(),
+            currency: "EUR".into(),
+            line_items: vec![LineItem::with_tax(
+                "Software development".into(),
+                10.0,
+                800.0,
+                "EUR".into(),
+                21.0,
+            )],
+            subtotal: 8000.0,
+            tax_total: 1680.0,
+            total: 9680.0,
+        }
+    }
+
+    #[test]
+    fn format_summary_without_tax_shows_single_total() {
+        // Arrange
+        let summary = make_summary();
+
+        // Act
+        let output = format_summary(&summary);
+
+        // Assert
+        assert!(output.contains("TOTAL:"));
+        assert!(!output.contains("SUBTOTAL"));
+    }
+
+    #[test]
+    fn format_summary_with_tax_shows_subtotal_line() {
+        // Arrange
+        let summary = make_summary_with_tax();
+
+        // Act
+        let output = format_summary(&summary);
+
+        // Assert
+        assert!(output.contains("SUBTOTAL:"));
+    }
+
+    #[test]
+    fn format_summary_with_tax_shows_tax_line() {
+        // Arrange
+        let summary = make_summary_with_tax();
+
+        // Act
+        let output = format_summary(&summary);
+
+        // Assert
+        assert!(output.contains("TAX:"));
+    }
+
+    #[test]
+    fn format_summary_with_tax_shows_total_after_tax() {
+        // Arrange
+        let summary = make_summary_with_tax();
+
+        // Act
+        let output = format_summary(&summary);
+
+        // Assert
+        assert!(output.contains("9680.00"));
+    }
+
+    #[test]
+    fn format_summary_with_tax_shows_per_item_tax_rate() {
+        // Arrange
+        let summary = make_summary_with_tax();
+
+        // Act
+        let output = format_summary(&summary);
+
+        // Assert
+        assert!(output.contains("tax 21.0%"));
     }
 
     #[test]

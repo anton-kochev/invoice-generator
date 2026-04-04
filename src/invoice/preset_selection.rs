@@ -58,12 +58,14 @@ mod tests {
                 description: "Software development".into(),
                 default_rate: 800.0,
                 currency: None,
+                tax_rate: None,
             },
             Preset {
                 key: "consulting".into(),
                 description: "Technical consulting".into(),
                 default_rate: 1000.0,
                 currency: None,
+                tax_rate: None,
             },
         ]
     }
@@ -102,6 +104,7 @@ mod tests {
             description: "Graphic design".into(),
             default_rate: 500.0,
             currency: None,
+            tax_rate: None,
         }];
         let prompter = MockPrompter::new(vec![MockResponse::U32(1)]);
 
@@ -169,6 +172,7 @@ mod tests {
             description: "Solo work".into(),
             default_rate: 600.0,
             currency: None,
+            tax_rate: None,
         }];
         let prompter = MockPrompter::new(vec![MockResponse::U32(2)]);
 
@@ -269,6 +273,7 @@ mod tests {
             description: "Special project work".into(),
             default_rate: 1234.56,
             currency: None,
+            tax_rate: None,
         }];
         let prompter = MockPrompter::new(vec![MockResponse::U32(1)]);
 
@@ -296,6 +301,7 @@ mod tests {
                 description: format!("Preset number {i}"),
                 default_rate: i as f64 * 100.0,
                 currency: None,
+                tax_rate: None,
             })
             .collect();
         let prompter = MockPrompter::new(vec![MockResponse::U32(6)]);
@@ -322,6 +328,7 @@ mod tests {
             description: "Development".into(),
             default_rate: 800.0,
             currency: Some("USD".into()),
+            tax_rate: None,
         }];
         let prompter = MockPrompter::new(vec![MockResponse::U32(1)]);
 
@@ -343,6 +350,7 @@ mod tests {
             description: "Development".into(),
             default_rate: 800.0,
             currency: None,
+            tax_rate: None,
         }];
         let prompter = MockPrompter::new(vec![MockResponse::U32(1)]);
 

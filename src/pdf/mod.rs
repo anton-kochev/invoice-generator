@@ -57,6 +57,8 @@ mod tests {
                 LineItem::new("Software development".into(), 10.0, 800.0, "EUR".into()),
                 LineItem::new("Technical consulting".into(), 5.0, 1000.0, "EUR".into()),
             ],
+            subtotal: 13000.0,
+            tax_total: 0.0,
             total: 13000.0,
         }
     }
@@ -88,6 +90,7 @@ mod tests {
                 description: "Software development".into(),
                 default_rate: 800.0,
                 currency: None,
+                tax_rate: None,
             }],
             defaults: Defaults::default(),
         }

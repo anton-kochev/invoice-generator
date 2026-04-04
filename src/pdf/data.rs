@@ -40,6 +40,9 @@ pub struct InvoiceInfo {
     pub due_date: String,
     pub currency: String,
     pub line_items: Vec<LineItemData>,
+    pub has_tax: bool,
+    pub subtotal: String,
+    pub tax_total: String,
     pub total: String,
 }
 
@@ -50,6 +53,8 @@ pub struct LineItemData {
     pub days: String,
     pub rate: String,
     pub amount: String,
+    pub tax_rate: String,
+    pub tax_amount: String,
 }
 
 /// Payment method details for the template.
@@ -93,8 +98,21 @@ impl<'a> InvoiceData<'a> {
                         days: format!("{:.2}", item.days),
                         rate: format!("{:.2}", item.rate),
                         amount: format!("{:.2}", item.amount),
+                        tax_rate: if item.tax_rate > 0.0 {
+                            format!("{:.1}", item.tax_rate)
+                        } else {
+                            "0".to_string()
+                        },
+                        tax_amount: if item.tax_rate > 0.0 {
+                            format!("{:.2}", item.tax_amount)
+                        } else {
+                            "\u{2013}".to_string()
+                        },
                     })
                     .collect(),
+                has_tax: summary.line_items.iter().any(|i| i.tax_rate > 0.0),
+                subtotal: format!("{:.2}", summary.subtotal),
+                tax_total: format!("{:.2}", summary.tax_total),
                 total: format!("{:.2}", summary.total),
             },
             payment: config
@@ -128,6 +146,8 @@ mod tests {
                 LineItem::new("Software development".into(), 10.0, 800.0, "EUR".into()),
                 LineItem::new("Technical consulting".into(), 5.0, 1000.0, "EUR".into()),
             ],
+            subtotal: 13000.0,
+            tax_total: 0.0,
             total: 13000.0,
         }
     }
@@ -159,6 +179,7 @@ mod tests {
                 description: "Software development".into(),
                 default_rate: 800.0,
                 currency: None,
+                tax_rate: None,
             }],
             defaults: Defaults::default(),
         }
@@ -217,6 +238,108 @@ mod tests {
         assert_eq!(payments.len(), 1);
         assert_eq!(payments[0]["label"], "Primary Bank Account");
         assert_eq!(payments[0]["iban"], "DE89 3704 0044 0532 0130 00");
+    }
+
+    fn make_summary_with_tax() -> InvoiceSummary {
+        InvoiceSummary {
+            invoice_number: "INV-2026-03".into(),
+            period: InvoicePeriod::new(3, 2026).unwrap(),
+            invoice_date: Date::from_calendar_date(2026, Month::April, 9).unwrap(),
+            due_date: Date::from_calendar_date(2026, Month::May, 9).unwrap(),
+            currency: "EUR".into(),
+            line_items: vec![
+                LineItem::with_tax(
+                    "Software development".into(),
+                    10.0,
+                    800.0,
+                    "EUR".into(),
+                    21.0,
+                ),
+            ],
+            subtotal: 8000.0,
+            tax_total: 1680.0,
+            total: 9680.0,
+        }
+    }
+
+    #[test]
+    fn from_parts_line_item_includes_tax_rate_string() {
+        // Arrange
+        let summary = make_summary_with_tax();
+        let config = make_config();
+
+        // Act
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient);
+
+        // Assert
+        assert_eq!(data.invoice.line_items[0].tax_rate, "21.0");
+    }
+
+    #[test]
+    fn from_parts_line_item_includes_tax_amount_string() {
+        // Arrange
+        let summary = make_summary_with_tax();
+        let config = make_config();
+
+        // Act
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient);
+
+        // Assert
+        assert_eq!(data.invoice.line_items[0].tax_amount, "1680.00");
+    }
+
+    #[test]
+    fn from_parts_zero_tax_item_uses_dash_for_tax_amount() {
+        // Arrange
+        let summary = make_summary();
+        let config = make_config();
+
+        // Act
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient);
+
+        // Assert
+        assert_eq!(data.invoice.line_items[0].tax_rate, "0");
+        assert_eq!(data.invoice.line_items[0].tax_amount, "\u{2013}");
+    }
+
+    #[test]
+    fn from_parts_invoice_has_tax_true_when_any_item_taxed() {
+        // Arrange
+        let summary = make_summary_with_tax();
+        let config = make_config();
+
+        // Act
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient);
+
+        // Assert
+        assert!(data.invoice.has_tax);
+    }
+
+    #[test]
+    fn from_parts_invoice_has_tax_false_when_all_zero_tax() {
+        // Arrange
+        let summary = make_summary();
+        let config = make_config();
+
+        // Act
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient);
+
+        // Assert
+        assert!(!data.invoice.has_tax);
+    }
+
+    #[test]
+    fn from_parts_invoice_includes_subtotal_and_tax_total() {
+        // Arrange
+        let summary = make_summary_with_tax();
+        let config = make_config();
+
+        // Act
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient);
+
+        // Assert
+        assert_eq!(data.invoice.subtotal, "8000.00");
+        assert_eq!(data.invoice.tax_total, "1680.00");
     }
 
     #[test]

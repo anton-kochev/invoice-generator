@@ -105,6 +105,13 @@ impl Prompter for MockPrompter {
         }
     }
 
+    fn nonneg_f64_with_default(&self, _prompt: &str, _default: f64) -> Result<f64, AppError> {
+        match self.pop("F64") {
+            MockResponse::F64(v) => Ok(v),
+            other => panic!("Expected F64 for nonneg_f64_with_default, got {other:?}"),
+        }
+    }
+
     fn confirm(&self, prompt: &str, _default: bool) -> Result<bool, AppError> {
         self.prompts.borrow_mut().push(prompt.to_string());
         match self.pop("Confirm") {
@@ -183,6 +190,32 @@ mod tests {
 
         // Act & Assert
         prompter.assert_exhausted(); // should panic
+    }
+
+    #[test]
+    fn test_mock_nonneg_f64_with_default() {
+        // Arrange
+        let prompter = MockPrompter::new(vec![MockResponse::F64(21.0)]);
+
+        // Act
+        let result = prompter.nonneg_f64_with_default("Tax rate (%):", 21.0).unwrap();
+
+        // Assert
+        assert!((result - 21.0).abs() < f64::EPSILON);
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_mock_nonneg_f64_with_default_accepts_zero() {
+        // Arrange
+        let prompter = MockPrompter::new(vec![MockResponse::F64(0.0)]);
+
+        // Act
+        let result = prompter.nonneg_f64_with_default("Tax rate (%):", 21.0).unwrap();
+
+        // Assert
+        assert!((result - 0.0).abs() < f64::EPSILON);
+        prompter.assert_exhausted();
     }
 
     #[test]

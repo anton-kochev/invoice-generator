@@ -61,42 +61,79 @@
 #line(length: 100%, stroke: 0.5pt + rgb("#2c3e50"))
 #v(0.2cm)
 
-#table(
-  columns: (1fr, auto, auto, auto, auto),
-  align: (left, center, right, right, right),
-  stroke: none,
-  inset: (x: 8pt, y: 6pt),
-  fill: (_, y) => if calc.odd(y) and y > 0 { rgb("#f5f5f5") },
-
-  // Header row
-  table.header(
-    text(weight: "bold", size: 9pt)[Description],
-    text(weight: "bold", size: 9pt)[Period],
-    text(weight: "bold", size: 9pt)[Days],
-    text(weight: "bold", size: 9pt, fill: rgb("#555"))[Rate (#data.invoice.currency/MD)],
-    text(weight: "bold", size: 9pt)[Amount (#data.invoice.currency)],
-  ),
-
-  // Data rows
-  ..for item in data.invoice.line_items {
-    (
-      text(size: 9pt)[#item.description],
-      text(size: 9pt)[#data.invoice.period],
-      text(size: 9pt)[#item.days],
-      text(size: 9pt)[#item.rate],
-      text(size: 9pt, weight: "medium")[#item.amount],
-    )
-  },
-)
+#if data.invoice.has_tax {
+  table(
+    columns: (1fr, auto, auto, auto, auto, auto, auto),
+    align: (left, center, right, right, right, right, right),
+    stroke: none,
+    inset: (x: 8pt, y: 6pt),
+    fill: (_, y) => if calc.odd(y) and y > 0 { rgb("#f5f5f5") },
+    table.header(
+      text(weight: "bold", size: 9pt)[Description],
+      text(weight: "bold", size: 9pt)[Period],
+      text(weight: "bold", size: 9pt)[Days],
+      text(weight: "bold", size: 9pt, fill: rgb("#555"))[Rate (#data.invoice.currency/MD)],
+      text(weight: "bold", size: 9pt)[Amount (#data.invoice.currency)],
+      text(weight: "bold", size: 9pt)[Tax (%)],
+      text(weight: "bold", size: 9pt)[Tax Amt (#data.invoice.currency)],
+    ),
+    ..for item in data.invoice.line_items {
+      (
+        text(size: 9pt)[#item.description],
+        text(size: 9pt)[#data.invoice.period],
+        text(size: 9pt)[#item.days],
+        text(size: 9pt)[#item.rate],
+        text(size: 9pt, weight: "medium")[#item.amount],
+        text(size: 9pt)[#item.tax_rate],
+        text(size: 9pt, weight: "medium")[#item.tax_amount],
+      )
+    },
+  )
+} else {
+  table(
+    columns: (1fr, auto, auto, auto, auto),
+    align: (left, center, right, right, right),
+    stroke: none,
+    inset: (x: 8pt, y: 6pt),
+    fill: (_, y) => if calc.odd(y) and y > 0 { rgb("#f5f5f5") },
+    table.header(
+      text(weight: "bold", size: 9pt)[Description],
+      text(weight: "bold", size: 9pt)[Period],
+      text(weight: "bold", size: 9pt)[Days],
+      text(weight: "bold", size: 9pt, fill: rgb("#555"))[Rate (#data.invoice.currency/MD)],
+      text(weight: "bold", size: 9pt)[Amount (#data.invoice.currency)],
+    ),
+    ..for item in data.invoice.line_items {
+      (
+        text(size: 9pt)[#item.description],
+        text(size: 9pt)[#data.invoice.period],
+        text(size: 9pt)[#item.days],
+        text(size: 9pt)[#item.rate],
+        text(size: 9pt, weight: "medium")[#item.amount],
+      )
+    },
+  )
+}
 
 #v(0.1cm)
 #line(length: 100%, stroke: 0.5pt + rgb("#2c3e50"))
 
 // --- Total ---
-#align(right)[
-  #v(0.3cm)
-  #text(12pt, weight: "bold")[TOTAL #data.invoice.currency #data.invoice.total]
-]
+#if data.invoice.has_tax {
+  align(right)[
+    #v(0.3cm)
+    #text(10pt)[SUBTOTAL #data.invoice.currency #data.invoice.subtotal]
+    #v(0.1cm)
+    #text(10pt)[TAX #data.invoice.currency #data.invoice.tax_total]
+    #v(0.1cm)
+    #text(12pt, weight: "bold")[TOTAL #data.invoice.currency #data.invoice.total]
+  ]
+} else {
+  align(right)[
+    #v(0.3cm)
+    #text(12pt, weight: "bold")[TOTAL #data.invoice.currency #data.invoice.total]
+  ]
+}
 
 #v(1cm)
 

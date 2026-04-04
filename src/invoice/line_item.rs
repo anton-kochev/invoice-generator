@@ -72,12 +72,27 @@ pub fn collect_line_item_details(
         preset.default_rate,
     )?;
 
-    let item = LineItem::new(preset.description.clone(), days, rate, currency.to_string());
+    let tax_rate = match preset.tax_rate {
+        Some(rate) if rate > 0.0 => {
+            prompter.nonneg_f64_with_default(&format!("Tax rate (%) [{}]:", rate), rate)?
+        }
+        _ => 0.0,
+    };
+
+    let item = if tax_rate > 0.0 {
+        LineItem::with_tax(preset.description.clone(), days, rate, currency.to_string(), tax_rate)
+    } else {
+        LineItem::new(preset.description.clone(), days, rate, currency.to_string())
+    };
 
     prompter.message(&format!(
         "  => {:.2} days x {:.2}/day = {:.2}",
         item.days, item.rate, item.amount
     ));
+
+    if item.tax_rate > 0.0 {
+        prompter.message(&format!("  => tax {:.1}%: {:.2}", item.tax_rate, item.tax_amount));
+    }
 
     Ok(item)
 }
@@ -117,6 +132,7 @@ mod tests {
                 description: "Software development".into(),
                 default_rate: 800.0,
                 currency: None,
+                tax_rate: None,
             }]),
             defaults: Some(Defaults {
                 currency: "EUR".into(),
@@ -135,12 +151,14 @@ mod tests {
                 description: "Software development".into(),
                 default_rate: 800.0,
                 currency: None,
+                tax_rate: None,
             },
             Preset {
                 key: "consulting".into(),
                 description: "Technical consulting".into(),
                 default_rate: 1000.0,
                 currency: None,
+                tax_rate: None,
             },
         ]
     }
@@ -151,6 +169,7 @@ mod tests {
             description: "Software development".into(),
             default_rate: 800.0,
             currency: None,
+            tax_rate: None,
         }
     }
 
@@ -561,6 +580,7 @@ mod tests {
             description: "Software development".into(),
             default_rate: 800.0,
             currency: Some("CZK".into()),
+            tax_rate: None,
         };
         let prompter = MockPrompter::new(vec![
             MockResponse::F64(10.0),
@@ -575,6 +595,225 @@ mod tests {
         prompter.assert_exhausted();
     }
 
+    // --- Tax prompt tests (Story 9.2) ---
+
+    #[test]
+    fn collect_line_item_without_tax_preset_skips_tax_prompt() {
+        // Arrange
+        let preset = Preset {
+            key: "dev".into(),
+            description: "Software development".into(),
+            default_rate: 800.0,
+            currency: None,
+            tax_rate: None,
+        };
+        let prompter = MockPrompter::new(vec![
+            MockResponse::F64(10.0),
+            MockResponse::F64(800.0),
+        ]);
+
+        // Act
+        let item = collect_line_item_details(&prompter, &preset, 1, "EUR").unwrap();
+
+        // Assert
+        assert!((item.tax_rate - 0.0).abs() < f64::EPSILON);
+        assert!((item.tax_amount - 0.0).abs() < f64::EPSILON);
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn collect_line_item_with_zero_tax_preset_skips_tax_prompt() {
+        // Arrange
+        let preset = Preset {
+            key: "dev".into(),
+            description: "Software development".into(),
+            default_rate: 800.0,
+            currency: None,
+            tax_rate: Some(0.0),
+        };
+        let prompter = MockPrompter::new(vec![
+            MockResponse::F64(10.0),
+            MockResponse::F64(800.0),
+        ]);
+
+        // Act
+        let item = collect_line_item_details(&prompter, &preset, 1, "EUR").unwrap();
+
+        // Assert
+        assert!((item.tax_rate - 0.0).abs() < f64::EPSILON);
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn collect_line_item_with_tax_preset_prompts_for_tax_rate() {
+        // Arrange
+        let preset = Preset {
+            key: "dev".into(),
+            description: "Software development".into(),
+            default_rate: 800.0,
+            currency: None,
+            tax_rate: Some(21.0),
+        };
+        let prompter = MockPrompter::new(vec![
+            MockResponse::F64(10.0),
+            MockResponse::F64(800.0),
+            MockResponse::F64(21.0),
+        ]);
+
+        // Act
+        let item = collect_line_item_details(&prompter, &preset, 1, "EUR").unwrap();
+
+        // Assert
+        assert!((item.tax_rate - 21.0).abs() < f64::EPSILON);
+        assert!((item.tax_amount - 1680.0).abs() < f64::EPSILON);
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn collect_line_item_with_tax_preset_override_to_zero() {
+        // Arrange
+        let preset = Preset {
+            key: "dev".into(),
+            description: "Software development".into(),
+            default_rate: 800.0,
+            currency: None,
+            tax_rate: Some(21.0),
+        };
+        let prompter = MockPrompter::new(vec![
+            MockResponse::F64(10.0),
+            MockResponse::F64(800.0),
+            MockResponse::F64(0.0),
+        ]);
+
+        // Act
+        let item = collect_line_item_details(&prompter, &preset, 1, "EUR").unwrap();
+
+        // Assert
+        assert!((item.tax_rate - 0.0).abs() < f64::EPSILON);
+        assert!((item.tax_amount - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn collect_line_item_with_tax_preset_override_to_different_rate() {
+        // Arrange
+        let preset = Preset {
+            key: "dev".into(),
+            description: "Software development".into(),
+            default_rate: 800.0,
+            currency: None,
+            tax_rate: Some(21.0),
+        };
+        let prompter = MockPrompter::new(vec![
+            MockResponse::F64(10.0),
+            MockResponse::F64(800.0),
+            MockResponse::F64(10.0),
+        ]);
+
+        // Act
+        let item = collect_line_item_details(&prompter, &preset, 1, "EUR").unwrap();
+
+        // Assert
+        assert!((item.tax_rate - 10.0).abs() < f64::EPSILON);
+        assert!((item.tax_amount - 800.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn collect_line_item_with_tax_displays_tax_message() {
+        // Arrange
+        let preset = Preset {
+            key: "dev".into(),
+            description: "Software development".into(),
+            default_rate: 800.0,
+            currency: None,
+            tax_rate: Some(21.0),
+        };
+        let prompter = MockPrompter::new(vec![
+            MockResponse::F64(10.0),
+            MockResponse::F64(800.0),
+            MockResponse::F64(21.0),
+        ]);
+
+        // Act
+        let _ = collect_line_item_details(&prompter, &preset, 1, "EUR").unwrap();
+
+        // Assert
+        let messages = prompter.messages.borrow();
+        let all = messages.join("\n");
+        assert!(all.contains("tax 21.0%: 1680.00"), "Expected tax message in: {all}");
+    }
+
+    // --- collect_all_line_items with tax tests (Story 9.2) ---
+
+    #[test]
+    fn collect_all_single_item_with_tax_includes_tax() {
+        // Arrange
+        let dir = setup_test_dir();
+        let presets = vec![Preset {
+            key: "dev".into(),
+            description: "Software development".into(),
+            default_rate: 800.0,
+            currency: None,
+            tax_rate: Some(21.0),
+        }];
+        let prompter = MockPrompter::new(vec![
+            MockResponse::U32(1),          // select preset #1
+            MockResponse::F64(10.0),       // days
+            MockResponse::F64(800.0),      // rate
+            MockResponse::F64(21.0),       // tax rate
+            MockResponse::Confirm(false),  // add another? no
+        ]);
+
+        // Act
+        let items = collect_all_line_items(&prompter, &presets, "EUR", dir.path()).unwrap();
+
+        // Assert
+        assert_eq!(items.len(), 1);
+        assert!((items[0].tax_rate - 21.0).abs() < f64::EPSILON);
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn collect_all_two_items_mixed_tax() {
+        // Arrange
+        let dir = setup_test_dir();
+        let presets = vec![
+            Preset {
+                key: "dev".into(),
+                description: "Software development".into(),
+                default_rate: 800.0,
+                currency: None,
+                tax_rate: Some(21.0),
+            },
+            Preset {
+                key: "consulting".into(),
+                description: "Technical consulting".into(),
+                default_rate: 1000.0,
+                currency: None,
+                tax_rate: None,
+            },
+        ];
+        let prompter = MockPrompter::new(vec![
+            MockResponse::U32(1),          // select preset #1 (dev, taxed)
+            MockResponse::F64(10.0),       // days
+            MockResponse::F64(800.0),      // rate
+            MockResponse::F64(21.0),       // tax rate
+            MockResponse::Confirm(true),   // add another? yes
+            MockResponse::U32(2),          // select preset #2 (consulting, no tax)
+            MockResponse::F64(5.0),        // days
+            MockResponse::F64(1000.0),     // rate
+            MockResponse::Confirm(false),  // add another? no
+        ]);
+
+        // Act
+        let items = collect_all_line_items(&prompter, &presets, "EUR", dir.path()).unwrap();
+
+        // Assert
+        assert_eq!(items.len(), 2);
+        assert!((items[0].tax_rate - 21.0).abs() < f64::EPSILON);
+        assert!((items[1].tax_rate - 0.0).abs() < f64::EPSILON);
+        prompter.assert_exhausted();
+    }
+
     #[test]
     fn collect_line_item_uses_default_when_preset_none() {
         // Arrange
@@ -583,6 +822,7 @@ mod tests {
             description: "Software development".into(),
             default_rate: 800.0,
             currency: None,
+            tax_rate: None,
         };
         let prompter = MockPrompter::new(vec![
             MockResponse::F64(10.0),

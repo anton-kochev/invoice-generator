@@ -20,6 +20,7 @@ struct ItemSpec {
     preset: String,
     days: f64,
     rate: Option<f64>,
+    tax_rate: Option<f64>,
 }
 
 /// Validate month/year into an `InvoicePeriod`.
@@ -54,6 +55,11 @@ fn parse_items(json: &str) -> Result<Vec<ItemSpec>, AppError> {
     }
     for item in &items {
         validate_days(item.days)?;
+        if let Some(tr) = item.tax_rate {
+            if tr < 0.0 {
+                return Err(AppError::InvalidTaxRate(format!("{tr}")));
+            }
+        }
     }
     Ok(items)
 }
@@ -69,7 +75,13 @@ fn resolve_line_items(args: &GenerateArgs, presets: &[Preset], default_currency:
                 let preset = find_preset(&spec.preset, presets)?;
                 let rate = spec.rate.unwrap_or(preset.default_rate);
                 let currency = effective_currency(preset, default_currency).to_string();
-                Ok(LineItem::new(preset.description.clone(), spec.days, rate, currency))
+                let tax_rate = spec.tax_rate.or(preset.tax_rate).unwrap_or(0.0);
+                let item = if tax_rate > 0.0 {
+                    LineItem::with_tax(preset.description.clone(), spec.days, rate, currency, tax_rate)
+                } else {
+                    LineItem::new(preset.description.clone(), spec.days, rate, currency)
+                };
+                Ok(item)
             })
             .collect()
     } else {
@@ -79,12 +91,13 @@ fn resolve_line_items(args: &GenerateArgs, presets: &[Preset], default_currency:
         validate_days(days)?;
         let preset = find_preset(key, presets)?;
         let currency = effective_currency(preset, default_currency).to_string();
-        Ok(vec![LineItem::new(
-            preset.description.clone(),
-            days,
-            preset.default_rate,
-            currency,
-        )])
+        let tax_rate = preset.tax_rate.unwrap_or(0.0);
+        let item = if tax_rate > 0.0 {
+            LineItem::with_tax(preset.description.clone(), days, preset.default_rate, currency, tax_rate)
+        } else {
+            LineItem::new(preset.description.clone(), days, preset.default_rate, currency)
+        };
+        Ok(vec![item])
     }
 }
 
@@ -169,6 +182,7 @@ mod tests {
                 description: format!("{key} services"),
                 default_rate: *rate,
                 currency: None,
+                tax_rate: None,
             })
             .collect();
         Config {
@@ -595,6 +609,7 @@ mod tests {
                 description: format!("{key} services"),
                 default_rate: *rate,
                 currency: currency.map(|c| c.to_string()),
+                tax_rate: None,
             })
             .collect();
         Config {
@@ -634,6 +649,145 @@ mod tests {
 
         // Assert
         assert!(matches!(result, Err(AppError::MixedCurrency(_))));
+    }
+
+    fn config_with_tax_presets(entries: &[(&str, f64, Option<f64>)]) -> crate::config::types::Config {
+        use crate::config::types::{Config, Preset};
+        let presets: Vec<Preset> = entries
+            .iter()
+            .map(|(key, rate, tax)| Preset {
+                key: key.to_string(),
+                description: format!("{key} services"),
+                default_rate: *rate,
+                currency: None,
+                tax_rate: *tax,
+            })
+            .collect();
+        Config {
+            presets: Some(presets),
+            ..complete_config()
+        }
+    }
+
+    // ── Phase: tax_rate JSON parsing tests ──
+
+    #[test]
+    fn test_parse_items_tax_rate_present_parsed() {
+        // Arrange
+        let json = r#"[{"preset":"dev","days":5,"tax_rate":21.0}]"#;
+
+        // Act
+        let items = parse_items(json).unwrap();
+
+        // Assert
+        assert_eq!(items[0].tax_rate, Some(21.0));
+    }
+
+    #[test]
+    fn test_parse_items_tax_rate_absent_is_none() {
+        // Arrange
+        let json = r#"[{"preset":"dev","days":5}]"#;
+
+        // Act
+        let items = parse_items(json).unwrap();
+
+        // Assert
+        assert!(items[0].tax_rate.is_none());
+    }
+
+    #[test]
+    fn test_parse_items_negative_tax_rate_returns_error() {
+        // Arrange
+        let json = r#"[{"preset":"dev","days":5,"tax_rate":-1.0}]"#;
+
+        // Act
+        let result = parse_items(json);
+
+        // Assert
+        assert!(matches!(result, Err(AppError::InvalidTaxRate(_))));
+    }
+
+    #[test]
+    fn test_parse_items_zero_tax_rate_accepted() {
+        // Arrange
+        let json = r#"[{"preset":"dev","days":5,"tax_rate":0.0}]"#;
+
+        // Act
+        let items = parse_items(json).unwrap();
+
+        // Assert
+        assert_eq!(items[0].tax_rate, Some(0.0));
+    }
+
+    // ── Phase: tax_rate resolution integration tests ──
+
+    #[test]
+    fn test_handle_generate_items_with_tax_rate() {
+        // Arrange
+        let config = config_with_tax_presets(&[("dev", 800.0, None)]);
+        let dir = setup_dir(Some(&config));
+        let json = r#"[{"preset":"dev","days":10,"tax_rate":21.0}]"#;
+        let args = generate_items_args(3, 2026, json);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let result = handle_generate(&args, dir.path(), &mut buf);
+
+        // Assert
+        assert!(result.is_ok(), "Expected Ok, got {result:?}");
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("PDF saved:"));
+    }
+
+    #[test]
+    fn test_handle_generate_items_tax_falls_back_to_preset() {
+        // Arrange — preset has tax_rate 21.0, JSON omits it
+        let config = config_with_tax_presets(&[("dev", 800.0, Some(21.0))]);
+        let dir = setup_dir(Some(&config));
+        let json = r#"[{"preset":"dev","days":10}]"#;
+        let args = generate_items_args(3, 2026, json);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let result = handle_generate(&args, dir.path(), &mut buf);
+
+        // Assert
+        assert!(result.is_ok(), "Expected Ok, got {result:?}");
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("PDF saved:"));
+    }
+
+    #[test]
+    fn test_handle_generate_items_negative_tax_returns_error() {
+        // Arrange
+        let config = config_with_tax_presets(&[("dev", 800.0, None)]);
+        let dir = setup_dir(Some(&config));
+        let json = r#"[{"preset":"dev","days":10,"tax_rate":-1.0}]"#;
+        let args = generate_items_args(3, 2026, json);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let result = handle_generate(&args, dir.path(), &mut buf);
+
+        // Assert
+        assert!(matches!(result, Err(AppError::InvalidTaxRate(_))));
+    }
+
+    #[test]
+    fn test_handle_generate_single_item_uses_preset_tax() {
+        // Arrange — single-item mode with preset that has tax_rate
+        let config = config_with_tax_presets(&[("dev", 800.0, Some(21.0))]);
+        let dir = setup_dir(Some(&config));
+        let args = generate_single_args(3, 2026, "dev", 10.0);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let result = handle_generate(&args, dir.path(), &mut buf);
+
+        // Assert
+        assert!(result.is_ok(), "Expected Ok, got {result:?}");
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("PDF saved:"));
     }
 
     #[test]

@@ -99,10 +99,15 @@ pub struct LineItem {
     pub amount: f64,
     /// Currency code (e.g. "EUR", "USD").
     pub currency: String,
+    /// Tax rate as a percentage (e.g. 21.0 for 21%).
+    pub tax_rate: f64,
+    /// Computed tax amount: amount * tax_rate / 100, rounded to 2dp.
+    pub tax_amount: f64,
 }
 
 impl LineItem {
     /// Create a `LineItem`, computing amount as `days * rate` rounded to 2dp.
+    /// Tax fields default to 0.0 (no tax).
     pub fn new(description: String, days: f64, rate: f64, currency: String) -> Self {
         Self {
             description,
@@ -110,6 +115,24 @@ impl LineItem {
             rate,
             amount: round_half_up_2dp(days * rate),
             currency,
+            tax_rate: 0.0,
+            tax_amount: 0.0,
+        }
+    }
+
+    /// Create a `LineItem` with a tax rate applied.
+    /// Computes `tax_amount = amount * tax_rate / 100`, rounded to 2dp.
+    pub fn with_tax(description: String, days: f64, rate: f64, currency: String, tax_rate: f64) -> Self {
+        let amount = round_half_up_2dp(days * rate);
+        let tax_amount = round_half_up_2dp(amount * tax_rate / 100.0);
+        Self {
+            description,
+            days,
+            rate,
+            amount,
+            currency,
+            tax_rate,
+            tax_amount,
         }
     }
 }
@@ -129,7 +152,11 @@ pub struct InvoiceSummary {
     pub currency: String,
     /// The individual line items.
     pub line_items: Vec<LineItem>,
-    /// Sum of all line item amounts, rounded to 2dp.
+    /// Sum of all line item base amounts (before tax), rounded to 2dp.
+    pub subtotal: f64,
+    /// Sum of all line item tax amounts, rounded to 2dp.
+    pub tax_total: f64,
+    /// Grand total: subtotal + tax_total, rounded to 2dp.
     pub total: f64,
 }
 
@@ -408,5 +435,81 @@ mod tests {
             let period = InvoicePeriod::new(month, 2026).unwrap();
             assert_eq!(period.month_abbrev(), expected);
         }
+    }
+
+    // --- LineItem tax field tests ---
+
+    #[test]
+    fn line_item_new_default_tax_fields_are_zero() {
+        // Arrange
+        let days = 10.0;
+        let rate = 800.0;
+
+        // Act
+        let item = LineItem::new("Dev".into(), days, rate, "EUR".into());
+
+        // Assert
+        assert!((item.tax_rate - 0.0).abs() < f64::EPSILON);
+        assert!((item.tax_amount - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn line_item_with_tax_zero_rate_gives_zero_tax_amount() {
+        // Arrange & Act
+        let item = LineItem::with_tax("Dev".into(), 10.0, 800.0, "EUR".into(), 0.0);
+
+        // Assert
+        assert!((item.tax_amount - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn line_item_with_tax_computes_tax_amount() {
+        // Arrange & Act
+        let item = LineItem::with_tax("Dev".into(), 10.0, 800.0, "EUR".into(), 21.0);
+
+        // Assert
+        assert!((item.amount - 8000.0).abs() < f64::EPSILON);
+        assert!((item.tax_amount - 1680.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn line_item_with_tax_amount_rounds_half_up() {
+        // Arrange — amount = 100.03, tax = 100.03 * 21 / 100 = 21.0063 → 21.01
+        // Act
+        let item = LineItem::with_tax("Dev".into(), 1.0, 100.03, "EUR".into(), 21.0);
+
+        // Assert
+        assert!((item.tax_amount - 21.01).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn line_item_with_tax_does_not_affect_base_amount() {
+        // Arrange
+        let without = LineItem::new("Dev".into(), 10.0, 800.0, "EUR".into());
+
+        // Act
+        let with = LineItem::with_tax("Dev".into(), 10.0, 800.0, "EUR".into(), 21.0);
+
+        // Assert
+        assert!((with.amount - without.amount).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn line_item_with_tax_high_rate_100_percent() {
+        // Arrange & Act
+        let item = LineItem::with_tax("Dev".into(), 5.0, 200.0, "EUR".into(), 100.0);
+
+        // Assert — amount = 1000.0, tax = 1000.0
+        assert!((item.amount - 1000.0).abs() < f64::EPSILON);
+        assert!((item.tax_amount - 1000.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn line_item_with_tax_fractional_rate() {
+        // Arrange & Act
+        let item = LineItem::with_tax("Dev".into(), 10.0, 800.0, "EUR".into(), 7.5);
+
+        // Assert — amount = 8000.0, tax = 8000.0 * 7.5 / 100 = 600.0
+        assert!((item.tax_amount - 600.0).abs() < f64::EPSILON);
     }
 }

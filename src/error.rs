@@ -69,6 +69,10 @@ pub enum AppError {
     /// Line items have conflicting currencies.
     #[error("Mixed currencies in line items: {0}")]
     MixedCurrency(String),
+
+    /// Invalid tax rate (must be >= 0).
+    #[error("Invalid tax rate: {0} (must be >= 0)")]
+    InvalidTaxRate(String),
 }
 
 #[cfg(test)]
@@ -154,6 +158,19 @@ mod tests {
         // Assert
         assert!(msg.contains("EUR"), "Expected 'EUR' in: {msg}");
         assert!(msg.contains("USD"), "Expected 'USD' in: {msg}");
+    }
+
+    #[test]
+    fn test_invalid_tax_rate_displays_value() {
+        // Arrange
+        let err = AppError::InvalidTaxRate("-5.0".into());
+
+        // Act
+        let msg = format!("{err}");
+
+        // Assert
+        assert!(msg.contains("-5.0"), "Expected '-5.0' in: {msg}");
+        assert!(msg.contains(">= 0"), "Expected '>= 0' in: {msg}");
     }
 
     #[test]

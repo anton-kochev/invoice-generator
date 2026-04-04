@@ -53,7 +53,9 @@ pub fn build_summary(
     let invoice_date = compute_invoice_date(&period, defaults.invoice_date_day)?;
     let due_date = invoice_date + Duration::days(defaults.payment_terms_days as i64);
     let currency = validate_uniform_currency(&line_items)?;
-    let total = round_half_up_2dp(line_items.iter().map(|item| item.amount).sum());
+    let subtotal = round_half_up_2dp(line_items.iter().map(|item| item.amount).sum());
+    let tax_total = round_half_up_2dp(line_items.iter().map(|item| item.tax_amount).sum());
+    let total = round_half_up_2dp(subtotal + tax_total);
 
     Ok(InvoiceSummary {
         invoice_number,
@@ -62,6 +64,8 @@ pub fn build_summary(
         due_date,
         currency,
         line_items,
+        subtotal,
+        tax_total,
         total,
     })
 }
@@ -397,5 +401,123 @@ mod tests {
 
         // Assert
         assert!(matches!(result, Err(crate::error::AppError::MixedCurrency(_))));
+    }
+
+    // --- subtotal / tax_total tests ---
+
+    #[test]
+    fn build_summary_zero_tax_subtotal_equals_total() {
+        // Arrange
+        let period = InvoicePeriod::new(3, 2026).unwrap();
+        let items = make_items(); // all tax_rate 0
+
+        // Act
+        let summary = build_summary(period, items, &make_defaults()).unwrap();
+
+        // Assert
+        assert!((summary.subtotal - summary.total).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn build_summary_zero_tax_tax_total_is_zero() {
+        // Arrange
+        let period = InvoicePeriod::new(3, 2026).unwrap();
+        let items = make_items();
+
+        // Act
+        let summary = build_summary(period, items, &make_defaults()).unwrap();
+
+        // Assert
+        assert!((summary.tax_total - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn build_summary_with_tax_computes_subtotal() {
+        // Arrange
+        let period = InvoicePeriod::new(3, 2026).unwrap();
+        let items = vec![
+            LineItem::with_tax("Dev".into(), 10.0, 800.0, "EUR".into(), 21.0),
+            LineItem::with_tax("QA".into(), 5.0, 1000.0, "EUR".into(), 21.0),
+        ];
+
+        // Act
+        let summary = build_summary(period, items, &make_defaults()).unwrap();
+
+        // Assert — subtotal = 8000 + 5000 = 13000
+        assert!((summary.subtotal - 13000.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn build_summary_with_tax_computes_tax_total() {
+        // Arrange
+        let period = InvoicePeriod::new(3, 2026).unwrap();
+        let items = vec![
+            LineItem::with_tax("Dev".into(), 10.0, 800.0, "EUR".into(), 21.0),
+            LineItem::with_tax("QA".into(), 5.0, 1000.0, "EUR".into(), 21.0),
+        ];
+
+        // Act
+        let summary = build_summary(period, items, &make_defaults()).unwrap();
+
+        // Assert — tax_total = 1680 + 1050 = 2730
+        assert!((summary.tax_total - 2730.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn build_summary_with_tax_total_equals_subtotal_plus_tax() {
+        // Arrange
+        let period = InvoicePeriod::new(3, 2026).unwrap();
+        let items = vec![
+            LineItem::with_tax("Dev".into(), 10.0, 800.0, "EUR".into(), 21.0),
+            LineItem::with_tax("QA".into(), 5.0, 1000.0, "EUR".into(), 21.0),
+        ];
+
+        // Act
+        let summary = build_summary(period, items, &make_defaults()).unwrap();
+
+        // Assert — total = 13000 + 2730 = 15730
+        assert!((summary.total - (summary.subtotal + summary.tax_total)).abs() < f64::EPSILON);
+        assert!((summary.total - 15730.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn build_summary_mixed_tax_and_no_tax_items() {
+        // Arrange
+        let period = InvoicePeriod::new(3, 2026).unwrap();
+        let items = vec![
+            LineItem::with_tax("Dev".into(), 10.0, 800.0, "EUR".into(), 21.0),
+            LineItem::new("Admin".into(), 2.0, 500.0, "EUR".into()),
+        ];
+
+        // Act
+        let summary = build_summary(period, items, &make_defaults()).unwrap();
+
+        // Assert — subtotal = 8000 + 1000 = 9000, tax_total = 1680 + 0 = 1680
+        assert!((summary.subtotal - 9000.0).abs() < f64::EPSILON);
+        assert!((summary.tax_total - 1680.0).abs() < f64::EPSILON);
+        assert!((summary.total - 10680.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn build_summary_tax_total_rounds_half_up() {
+        // Arrange — items with tax_amounts that sum to a value needing rounding
+        let period = InvoicePeriod::new(3, 2026).unwrap();
+        // item1: amount=100.03, tax=21.0063 -> 21.01
+        // item2: amount=100.03, tax=21.0063 -> 21.01
+        // sum of tax_amounts = 42.02, which is already rounded
+        // Use amounts that produce a sum needing rounding:
+        // item1: 1 day * 33.33 = 33.33, tax at 10% = 3.333 -> 3.33
+        // item2: 1 day * 66.67 = 66.67, tax at 10% = 6.667 -> 6.67
+        // tax_total = round(3.33 + 6.67) = round(10.0) = 10.0
+        let items = vec![
+            LineItem::with_tax("A".into(), 1.0, 33.33, "EUR".into(), 10.0),
+            LineItem::with_tax("B".into(), 1.0, 66.67, "EUR".into(), 10.0),
+        ];
+
+        // Act
+        let summary = build_summary(period, items, &make_defaults()).unwrap();
+
+        // Assert
+        assert!((summary.tax_total - 10.0).abs() < f64::EPSILON);
     }
 }

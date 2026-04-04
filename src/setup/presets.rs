@@ -28,6 +28,7 @@ pub fn collect_presets(
             description,
             default_rate,
             currency: None,
+            tax_rate: None,
         });
 
         if !prompter.confirm("Add another preset?", false)? {

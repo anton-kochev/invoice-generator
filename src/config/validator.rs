@@ -737,6 +737,7 @@ mod tests {
             description: "Dev".into(),
             default_rate: 100.0,
             currency: None,
+            tax_rate: None,
         }]
     }
 

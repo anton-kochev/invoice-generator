@@ -64,6 +64,8 @@ pub struct Preset {
     pub default_rate: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub currency: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tax_rate: Option<f64>,
 }
 
 fn default_currency() -> String {
@@ -285,6 +287,7 @@ mod tests {
             description: "Development".into(),
             default_rate: 800.0,
             currency: None,
+            tax_rate: None,
         };
 
         // Act
@@ -302,6 +305,7 @@ mod tests {
             description: "Development".into(),
             default_rate: 800.0,
             currency: Some("CZK".into()),
+            tax_rate: None,
         };
 
         // Act
@@ -310,5 +314,84 @@ mod tests {
 
         // Assert
         assert_eq!(loaded.currency, Some("CZK".into()));
+    }
+
+    #[test]
+    fn test_preset_without_tax_rate_deserializes_as_none() {
+        // Arrange
+        let yaml = "key: dev\ndescription: Development\ndefault_rate: 800.0\n";
+
+        // Act
+        let preset: Preset = serde_yaml::from_str(yaml).unwrap();
+
+        // Assert
+        assert!(preset.tax_rate.is_none());
+    }
+
+    #[test]
+    fn test_preset_with_tax_rate_deserializes() {
+        // Arrange
+        let yaml = "key: dev\ndescription: Development\ndefault_rate: 800.0\ntax_rate: 21.0\n";
+
+        // Act
+        let preset: Preset = serde_yaml::from_str(yaml).unwrap();
+
+        // Assert
+        assert_eq!(preset.tax_rate, Some(21.0));
+    }
+
+    #[test]
+    fn test_preset_tax_rate_none_omitted_from_yaml() {
+        // Arrange
+        let preset = Preset {
+            key: "dev".into(),
+            description: "Development".into(),
+            default_rate: 800.0,
+            currency: None,
+            tax_rate: None,
+        };
+
+        // Act
+        let yaml = serde_yaml::to_string(&preset).unwrap();
+
+        // Assert
+        assert!(!yaml.contains("tax_rate"), "None tax_rate should be omitted from YAML");
+    }
+
+    #[test]
+    fn test_preset_with_tax_rate_round_trips() {
+        // Arrange
+        let preset = Preset {
+            key: "dev".into(),
+            description: "Development".into(),
+            default_rate: 800.0,
+            currency: None,
+            tax_rate: Some(21.0),
+        };
+
+        // Act
+        let yaml = serde_yaml::to_string(&preset).unwrap();
+        let loaded: Preset = serde_yaml::from_str(&yaml).unwrap();
+
+        // Assert
+        assert_eq!(loaded.tax_rate, Some(21.0));
+    }
+
+    #[test]
+    fn test_preset_with_zero_tax_rate_serializes() {
+        // Arrange
+        let preset = Preset {
+            key: "dev".into(),
+            description: "Development".into(),
+            default_rate: 800.0,
+            currency: None,
+            tax_rate: Some(0.0),
+        };
+
+        // Act
+        let yaml = serde_yaml::to_string(&preset).unwrap();
+
+        // Assert
+        assert!(yaml.contains("tax_rate: 0.0"), "Zero tax_rate should be serialized, got: {yaml}");
     }
 }
