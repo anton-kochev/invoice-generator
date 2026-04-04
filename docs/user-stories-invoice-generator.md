@@ -2,7 +2,7 @@
 
 ## Summary
 - **Epics**: 11 (5 v1.0 + 6 v2.0)
-- **Total User Stories**: 41 (18 v1.0 completed ✅ + 23 v2.0)
+- **Total User Stories**: 41 (24 completed ✅ + 17 remaining)
 - **User Roles Identified**: Freelance Developer (sole actor — referred to as "user" throughout)
 
 ---
@@ -320,7 +320,7 @@
 ## Epic 5: Error Handling & Input Validation
 > Cross-cutting robustness: graceful re-prompts, clear error messages, no crashes on bad input.
 
-### Story 5.1: Validate All Numeric Inputs
+### Story 5.1: Validate All Numeric Inputs ✅
 **As a** user,
 **I want** the app to re-prompt with a clear explanation when I enter invalid data,
 **So that** I can correct mistakes without the app crashing.
@@ -354,10 +354,15 @@
 
 | Concern | Crate |
 |---------|-------|
-| YAML config | `serde` + `serde_yaml` |
+| YAML config | `serde` + `serde_yaml` (yaml_serde 0.10) |
 | Interactive prompts | `inquire` |
-| PDF generation | `genpdf` or `printpdf` |
+| PDF generation | `typst` + `typst-kit` + `typst-pdf` |
 | Date handling | `time` |
+| CLI argument parsing | `clap` (derive mode) |
+| Error handling | `thiserror` |
+| JSON parsing | `serde_json` |
+| Memoization (Typst) | `comemo` |
+| Test utilities | `tempfile` (dev-dependency) |
 
 The application compiles to a single static binary with no runtime dependencies.
 
@@ -383,10 +388,10 @@ The application compiles to a single static binary with no runtime dependencies.
 
 **Recommended sprint ordering:**
 
-1. **Sprint 1**: Stories 1.1, 1.2, 1.3 (config foundation) + Rust project scaffolding
-2. **Sprint 2**: Stories 2.1–2.7 (full setup wizard)
-3. **Sprint 3**: Stories 3.1, 3.2, 3.4, 3.5, 3.6 (core invoice flow) + 5.1 (validation)
-4. **Sprint 4**: Stories 4.1, 4.2, 4.3 (PDF generation) + 3.3 (inline preset creation)
+1. **Sprint 1** ✅: Stories 1.1, 1.2, 1.3 (config foundation) + Rust project scaffolding
+2. **Sprint 2** ✅: Stories 2.1–2.7 (full setup wizard)
+3. **Sprint 3** ✅: Stories 3.1, 3.2, 3.4, 3.5, 3.6 (core invoice flow) + 5.1 (validation)
+4. **Sprint 4** ✅: Stories 4.1, 4.2, 4.3 (PDF generation) + 3.3 (inline preset creation)
 
 ---
 
@@ -399,7 +404,7 @@ The application compiles to a single static binary with no runtime dependencies.
 ## Epic 6: Subcommand CLI Architecture
 > Introduce a subcommand structure so the tool can be used both interactively and non-interactively from scripts.
 
-### Story 6.1: Subcommand Routing and Default Behavior
+### Story 6.1: Subcommand Routing and Default Behavior ✅
 **As a** user,
 **I want** the CLI to support subcommands (`invoice`, `invoice generate`, `invoice preset`),
 **So that** I can choose between interactive and scripted workflows.
@@ -414,7 +419,7 @@ The application compiles to a single static binary with no runtime dependencies.
 
 ---
 
-### Story 6.2: Non-Interactive Single-Item Generation
+### Story 6.2: Non-Interactive Single-Item Generation ✅
 **As a** user,
 **I want** to generate an invoice from the command line with `--month`, `--year`, `--preset`, and `--days` flags,
 **So that** I can script invoice generation without interactive prompts.
@@ -432,7 +437,7 @@ The application compiles to a single static binary with no runtime dependencies.
 
 ---
 
-### Story 6.3: Non-Interactive Multi-Item Generation
+### Story 6.3: Non-Interactive Multi-Item Generation ✅
 **As a** user,
 **I want** to pass multiple line items as JSON via `--items` flag,
 **So that** I can generate multi-line invoices in a single command.
@@ -450,7 +455,7 @@ The application compiles to a single static binary with no runtime dependencies.
 
 ---
 
-### Story 6.4: Preset Listing Subcommand
+### Story 6.4: Preset Listing Subcommand ✅
 **As a** user,
 **I want** to run `invoice preset list` to see all configured presets,
 **So that** I can check preset keys and rates without opening the config file.
@@ -464,7 +469,7 @@ The application compiles to a single static binary with no runtime dependencies.
 
 ---
 
-### Story 6.5: Preset Deletion Subcommand
+### Story 6.5: Preset Deletion Subcommand ✅
 **As a** user,
 **I want** to run `invoice preset delete <key>` to remove a preset,
 **So that** I can clean up presets I no longer use.
@@ -739,7 +744,7 @@ The application compiles to a single static binary with no runtime dependencies.
 
 ---
 
-### Story 11.2: CLI Error Messages for v2.0 Commands
+### Story 11.2: CLI Error Messages for v2.0 Commands (partial — Epic 6 criteria met)
 **As a** user,
 **I want** clear error messages for all v2.0 CLI mistakes,
 **So that** I can fix my command without guessing.
@@ -792,9 +797,9 @@ The application compiles to a single static binary with no runtime dependencies.
 **Critical path** (longest chain):
 
 ```
-6.1 (Subcommand routing)
-  → 6.2 (Single-item generate)
-    → 6.3 (Multi-item generate)
+6.1 (Subcommand routing) ✅
+  → 6.2 (Single-item generate) ✅
+    → 6.3 (Multi-item generate) ✅
       → 9.3 (Tax in CLI mode)
 ```
 
@@ -815,8 +820,8 @@ The application compiles to a single static binary with no runtime dependencies.
 
 **Recommended sprint ordering:**
 
-1. **Sprint 5**: Stories 6.1, 6.4, 6.5 (subcommand scaffold + preset management)
-2. **Sprint 6**: Stories 6.2, 6.3 (non-interactive generation)
+1. **Sprint 5** ✅: Stories 6.1, 6.4, 6.5 (subcommand scaffold + preset management)
+2. **Sprint 6** ✅: Stories 6.2, 6.3 (non-interactive generation)
 3. **Sprint 7**: Stories 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 11.1 (multi-recipient + backwards compat)
 4. **Sprint 8**: Stories 8.1, 8.2 (multi-currency)
 5. **Sprint 9**: Stories 9.1, 9.2, 9.3, 9.4 (tax/VAT)
