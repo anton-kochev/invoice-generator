@@ -2,7 +2,7 @@
 
 ## Summary
 - **Epics**: 11 (5 v1.0 + 6 v2.0)
-- **Total User Stories**: 41 (31 completed ✅ + 10 remaining)
+- **Total User Stories**: 41 (40 completed ✅ + 1 remaining)
 - **User Roles Identified**: Freelance Developer (sole actor — referred to as "user" throughout)
 
 ---
@@ -583,7 +583,7 @@ The application compiles to a single static binary with no runtime dependencies.
 ## Epic 8: Multi-Currency Support
 > Allow different currencies per preset and validate consistency within a single invoice.
 
-### Story 8.1: Per-Preset Currency Override
+### Story 8.1: Per-Preset Currency Override ✅
 **As a** user,
 **I want** each preset to optionally specify its own currency,
 **So that** I can have presets for clients who pay in different currencies.
@@ -599,7 +599,7 @@ The application compiles to a single static binary with no runtime dependencies.
 
 ---
 
-### Story 8.2: Mixed-Currency Validation
+### Story 8.2: Mixed-Currency Validation ✅
 **As a** user,
 **I want** the app to reject invoices with mixed currencies,
 **So that** I don't accidentally combine EUR and USD line items on one invoice.
@@ -617,7 +617,7 @@ The application compiles to a single static binary with no runtime dependencies.
 ## Epic 9: Tax / VAT Auto-Calculation
 > Optional tax rate per line item with automatic calculation and updated PDF layout.
 
-### Story 9.1: Tax Rate Config and Defaults
+### Story 9.1: Tax Rate Config and Defaults ✅
 **As a** user,
 **I want** each preset to optionally include a default tax rate,
 **So that** tax is calculated automatically for clients that require VAT.
@@ -632,7 +632,7 @@ The application compiles to a single static binary with no runtime dependencies.
 
 ---
 
-### Story 9.2: Tax Rate Override in Interactive Flow
+### Story 9.2: Tax Rate Override in Interactive Flow ✅
 **As a** user,
 **I want** to override the tax rate when entering line item details,
 **So that** I can adjust tax for special cases without changing the config.
@@ -647,7 +647,7 @@ The application compiles to a single static binary with no runtime dependencies.
 
 ---
 
-### Story 9.3: Tax Rate in Non-Interactive Mode
+### Story 9.3: Tax Rate in Non-Interactive Mode ✅
 **As a** user,
 **I want** to specify `tax_rate` in the `--items` JSON array,
 **So that** I can control tax per line item in scripted generation.
@@ -661,7 +661,7 @@ The application compiles to a single static binary with no runtime dependencies.
 
 ---
 
-### Story 9.4: PDF Layout with Tax Columns
+### Story 9.4: PDF Layout with Tax Columns ✅
 **As a** user,
 **I want** the PDF to show tax breakdown when any line item has tax,
 **So that** the invoice meets VAT requirements.
@@ -680,7 +680,7 @@ The application compiles to a single static binary with no runtime dependencies.
 ## Epic 10: Custom PDF Branding
 > Optional config section to customize the visual appearance of generated PDFs.
 
-### Story 10.1: Branding Config Section
+### Story 10.1: Branding Config Section ✅
 **As a** user,
 **I want** to configure logo, accent color, font, and footer text in my config,
 **So that** my invoices match my personal brand.
@@ -695,7 +695,7 @@ The application compiles to a single static binary with no runtime dependencies.
 
 ---
 
-### Story 10.2: Logo in PDF Header
+### Story 10.2: Logo in PDF Header ✅
 **As a** user,
 **I want** to place my logo in the invoice header,
 **So that** invoices look professional and branded.
@@ -710,7 +710,7 @@ The application compiles to a single static binary with no runtime dependencies.
 
 ---
 
-### Story 10.3: Accent Color, Font, and Footer
+### Story 10.3: Accent Color, Font, and Footer ✅
 **As a** user,
 **I want** to customize the accent color, font, and footer text,
 **So that** invoices are visually consistent with my brand.
@@ -823,7 +823,7 @@ The application compiles to a single static binary with no runtime dependencies.
 1. **Sprint 5** ✅: Stories 6.1, 6.4, 6.5 (subcommand scaffold + preset management)
 2. **Sprint 6** ✅: Stories 6.2, 6.3 (non-interactive generation)
 3. **Sprint 7** ✅: Stories 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 11.1 (multi-recipient + backwards compat)
-4. **Sprint 8**: Stories 8.1, 8.2 (multi-currency)
-5. **Sprint 9**: Stories 9.1, 9.2, 9.3, 9.4 (tax/VAT)
-6. **Sprint 10**: Stories 10.1, 10.2, 10.3 (branding)
+4. **Sprint 8** ✅: Stories 8.1, 8.2 (multi-currency)
+5. **Sprint 9** ✅: Stories 9.1, 9.2, 9.3, 9.4 (tax/VAT)
+6. **Sprint 10** ✅: Stories 10.1, 10.2, 10.3 (branding)
 7. **Sprint 11**: Stories 11.2, 11.3 (error handling polish + setup wizard update)

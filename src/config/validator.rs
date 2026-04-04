@@ -3,6 +3,60 @@ use std::fmt;
 use super::types::*;
 use crate::error::AppError;
 
+const DEFAULT_ACCENT_COLOR: &str = "#2c3e50";
+
+/// Validate a hex color string. Returns normalized #RRGGBB or None for invalid input.
+/// Accepts #RGB (expands to #RRGGBB) and #RRGGBB formats.
+fn validate_accent_color(input: &str) -> Option<String> {
+    let s = input.trim();
+    if !s.starts_with('#') {
+        return None;
+    }
+    let hex = &s[1..];
+    match hex.len() {
+        3 => {
+            if hex.chars().all(|c| c.is_ascii_hexdigit()) {
+                let expanded: String = hex.chars().flat_map(|c| [c, c]).collect();
+                Some(format!("#{}", expanded.to_lowercase()))
+            } else {
+                None
+            }
+        }
+        6 => {
+            if hex.chars().all(|c| c.is_ascii_hexdigit()) {
+                Some(format!("#{}", hex.to_lowercase()))
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Branding with validated values, ready for PDF generation.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ValidatedBranding {
+    /// Raw logo path from config (resolved to absolute path later in pdf module).
+    pub logo: Option<String>,
+    /// Validated hex color string (always 7-char #rrggbb).
+    pub accent_color: String,
+    /// Font family name override, or None for default.
+    pub font: Option<String>,
+    /// Custom footer text, or None for default.
+    pub footer_text: Option<String>,
+}
+
+impl Default for ValidatedBranding {
+    fn default() -> Self {
+        Self {
+            logo: None,
+            accent_color: DEFAULT_ACCENT_COLOR.to_string(),
+            font: None,
+            footer_text: None,
+        }
+    }
+}
+
 /// Identifies a top-level config section for validation reporting.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConfigSection {
@@ -37,6 +91,7 @@ pub struct ValidatedConfig {
     /// Guaranteed non-empty.
     pub presets: Vec<Preset>,
     pub defaults: Defaults,
+    pub branding: ValidatedBranding,
 }
 
 impl ValidatedConfig {
@@ -76,6 +131,7 @@ impl Config {
         let payment = self.payment;
         let presets = self.presets;
         let defaults = self.defaults;
+        let branding = self.branding;
 
         if sender.is_none() {
             missing.push(ConfigSection::Sender);
@@ -163,6 +219,23 @@ impl Config {
                 payment: payment.unwrap(),
                 presets: presets.unwrap(),
                 defaults: defaults.unwrap_or_default(),
+                branding: match branding {
+                    Some(b) => ValidatedBranding {
+                        logo: b.logo,
+                        accent_color: match &b.accent_color {
+                            Some(c) => validate_accent_color(c).unwrap_or_else(|| {
+                                eprintln!(
+                                    "Warning: invalid accent_color \"{c}\", using default {DEFAULT_ACCENT_COLOR}"
+                                );
+                                DEFAULT_ACCENT_COLOR.to_string()
+                            }),
+                            None => DEFAULT_ACCENT_COLOR.to_string(),
+                        },
+                        font: b.font,
+                        footer_text: b.footer_text,
+                    },
+                    None => ValidatedBranding::default(),
+                },
             }))
         } else {
             Ok(ValidationOutcome::Incomplete {
@@ -174,6 +247,7 @@ impl Config {
                     payment,
                     presets,
                     defaults,
+                    branding,
                 },
                 missing,
             })
@@ -367,6 +441,7 @@ mod tests {
             payment: Some(make_payment()),
             presets: Some(make_presets()),
             defaults: Some(Defaults::default()),
+            branding: None,
         };
 
         // Act
@@ -410,6 +485,7 @@ mod tests {
             payment: Some(make_payment()),
             presets: Some(make_presets()),
             defaults: Some(Defaults::default()),
+            branding: None,
         };
 
         // Act
@@ -437,6 +513,7 @@ mod tests {
             payment: Some(make_payment()),
             presets: Some(make_presets()),
             defaults: Some(Defaults::default()),
+            branding: None,
         };
 
         // Act
@@ -462,6 +539,7 @@ mod tests {
             payment: Some(make_payment()),
             presets: Some(make_presets()),
             defaults: Some(Defaults::default()),
+            branding: None,
         };
 
         // Act
@@ -487,6 +565,7 @@ mod tests {
             payment: Some(make_payment()),
             presets: Some(make_presets()),
             defaults: Some(Defaults::default()),
+            branding: None,
         };
 
         // Act
@@ -507,6 +586,7 @@ mod tests {
             payment: Some(make_payment()),
             presets: Some(make_presets()),
             defaults: Some(Defaults::default()),
+            branding: None,
         };
 
         // Act
@@ -542,6 +622,7 @@ mod tests {
             payment: Some(make_payment()),
             presets: Some(make_presets()),
             defaults: Some(Defaults::default()),
+            branding: None,
         };
 
         // Act
@@ -568,6 +649,7 @@ mod tests {
             payment: Some(make_payment()),
             presets: Some(make_presets()),
             defaults: Some(Defaults::default()),
+            branding: None,
         };
 
         // Act
@@ -594,6 +676,7 @@ mod tests {
             payment: Some(make_payment()),
             presets: Some(make_presets()),
             defaults: Some(Defaults::default()),
+            branding: None,
         };
 
         // Act
@@ -637,6 +720,7 @@ mod tests {
             payment: Some(make_payment()),
             presets: Some(make_presets()),
             defaults: Some(Defaults::default()),
+            branding: None,
         };
 
         // Act
@@ -677,6 +761,7 @@ mod tests {
             payment: Some(make_payment()),
             presets: Some(make_presets()),
             defaults: Some(Defaults::default()),
+            branding: None,
         };
 
         // Act
@@ -750,6 +835,184 @@ mod tests {
             payment: Some(make_payment()),
             presets: Some(make_presets()),
             defaults: Some(Defaults::default()),
+            branding: None,
+        }
+    }
+
+    // ── Sprint 10: validate_accent_color pure function tests ──
+
+    #[test]
+    fn test_validate_accent_color_valid_six_digit() {
+        // Arrange & Act & Assert
+        assert_eq!(validate_accent_color("#2c3e50"), Some("#2c3e50".into()));
+    }
+
+    #[test]
+    fn test_validate_accent_color_uppercase_normalized() {
+        // Arrange & Act & Assert
+        assert_eq!(validate_accent_color("#AABBCC"), Some("#aabbcc".into()));
+    }
+
+    #[test]
+    fn test_validate_accent_color_mixed_case_normalized() {
+        // Arrange & Act & Assert
+        assert_eq!(validate_accent_color("#aAbBcC"), Some("#aabbcc".into()));
+    }
+
+    #[test]
+    fn test_validate_accent_color_three_digit_expanded() {
+        // Arrange & Act & Assert
+        assert_eq!(validate_accent_color("#abc"), Some("#aabbcc".into()));
+    }
+
+    #[test]
+    fn test_validate_accent_color_missing_hash_returns_none() {
+        // Arrange & Act & Assert
+        assert_eq!(validate_accent_color("2c3e50"), None);
+    }
+
+    #[test]
+    fn test_validate_accent_color_invalid_chars_returns_none() {
+        // Arrange & Act & Assert
+        assert_eq!(validate_accent_color("#zzzzzz"), None);
+    }
+
+    #[test]
+    fn test_validate_accent_color_wrong_length_returns_none() {
+        // Arrange & Act & Assert
+        assert_eq!(validate_accent_color("#12345"), None);
+    }
+
+    #[test]
+    fn test_validate_accent_color_empty_returns_none() {
+        // Arrange & Act & Assert
+        assert_eq!(validate_accent_color(""), None);
+    }
+
+    // ── Sprint 10: ValidatedBranding integration tests ──
+
+    #[test]
+    fn test_validate_no_branding_uses_defaults() {
+        // Arrange
+        let config = make_complete_config(); // branding: None
+
+        // Act
+        let result = config.validate().unwrap();
+
+        // Assert
+        match result {
+            ValidationOutcome::Complete(v) => {
+                assert_eq!(v.branding.accent_color, "#2c3e50");
+                assert!(v.branding.font.is_none());
+                assert!(v.branding.footer_text.is_none());
+                assert!(v.branding.logo.is_none());
+            }
+            _ => panic!("Expected Complete"),
+        }
+    }
+
+    #[test]
+    fn test_validate_branding_accent_color_passthrough() {
+        // Arrange
+        let mut config = make_complete_config();
+        config.branding = Some(crate::config::types::Branding {
+            accent_color: Some("#ff0000".into()),
+            ..Default::default()
+        });
+
+        // Act
+        let result = config.validate().unwrap();
+
+        // Assert
+        match result {
+            ValidationOutcome::Complete(v) => {
+                assert_eq!(v.branding.accent_color, "#ff0000");
+            }
+            _ => panic!("Expected Complete"),
+        }
+    }
+
+    #[test]
+    fn test_validate_branding_invalid_accent_falls_back_to_default() {
+        // Arrange
+        let mut config = make_complete_config();
+        config.branding = Some(crate::config::types::Branding {
+            accent_color: Some("red".into()),
+            ..Default::default()
+        });
+
+        // Act
+        let result = config.validate().unwrap();
+
+        // Assert
+        match result {
+            ValidationOutcome::Complete(v) => {
+                assert_eq!(v.branding.accent_color, "#2c3e50");
+            }
+            _ => panic!("Expected Complete"),
+        }
+    }
+
+    #[test]
+    fn test_validate_branding_font_passthrough() {
+        // Arrange
+        let mut config = make_complete_config();
+        config.branding = Some(crate::config::types::Branding {
+            font: Some("Fira Code".into()),
+            ..Default::default()
+        });
+
+        // Act
+        let result = config.validate().unwrap();
+
+        // Assert
+        match result {
+            ValidationOutcome::Complete(v) => {
+                assert_eq!(v.branding.font, Some("Fira Code".into()));
+            }
+            _ => panic!("Expected Complete"),
+        }
+    }
+
+    #[test]
+    fn test_validate_branding_footer_text_passthrough() {
+        // Arrange
+        let mut config = make_complete_config();
+        config.branding = Some(crate::config::types::Branding {
+            footer_text: Some("Thanks!".into()),
+            ..Default::default()
+        });
+
+        // Act
+        let result = config.validate().unwrap();
+
+        // Assert
+        match result {
+            ValidationOutcome::Complete(v) => {
+                assert_eq!(v.branding.footer_text, Some("Thanks!".into()));
+            }
+            _ => panic!("Expected Complete"),
+        }
+    }
+
+    #[test]
+    fn test_validate_branding_logo_passthrough() {
+        // Arrange
+        let mut config = make_complete_config();
+        config.branding = Some(crate::config::types::Branding {
+            logo: Some("logo.png".into()),
+            ..Default::default()
+        });
+
+        // Act
+        let result = config.validate().unwrap();
+
+        // Assert
+        match result {
+            ValidationOutcome::Complete(v) => {
+                assert_eq!(v.branding.logo, Some("logo.png".into()));
+            }
+            _ => panic!("Expected Complete"),
         }
     }
 }

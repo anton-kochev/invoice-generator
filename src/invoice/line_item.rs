@@ -139,6 +139,7 @@ mod tests {
                 invoice_date_day: 9,
                 payment_terms_days: 30,
             }),
+            branding: None,
         };
         save_config(dir.path(), &config).unwrap();
         dir

@@ -1,24 +1,69 @@
 mod data;
 mod world;
 
+use std::path::Path;
+
 use typst::layout::PagedDocument;
 
 use crate::config::validator::ValidatedConfig;
 use crate::error::AppError;
 use crate::invoice::types::InvoiceSummary;
 
+/// Resolve a logo path relative to the config directory.
+/// Returns (virtual_filename, bytes) if the file exists and is a supported format.
+/// Prints a warning and returns None if missing or unsupported.
+fn resolve_logo(raw_path: &str, config_dir: &Path) -> Option<(String, Vec<u8>)> {
+    let path = config_dir.join(raw_path);
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_lowercase());
+
+    match ext.as_deref() {
+        Some("png") | Some("jpg") | Some("jpeg") => {}
+        _ => {
+            eprintln!(
+                "Warning: unsupported logo format '{}', skipping logo",
+                raw_path
+            );
+            return None;
+        }
+    }
+
+    match std::fs::read(&path) {
+        Ok(bytes) => {
+            let virtual_name = format!("logo.{}", ext.unwrap());
+            Some((virtual_name, bytes))
+        }
+        Err(e) => {
+            eprintln!(
+                "Warning: could not read logo '{}': {e}, generating PDF without logo",
+                raw_path
+            );
+            None
+        }
+    }
+}
+
 /// Generate a PDF from a computed invoice summary and validated config.
 pub fn generate_pdf(
     summary: &InvoiceSummary,
     config: &ValidatedConfig,
     recipient: &crate::config::types::Recipient,
+    config_dir: &Path,
 ) -> Result<Vec<u8>, AppError> {
-    let invoice_data = data::InvoiceData::from_parts(summary, config, recipient);
+    let logo = config
+        .branding
+        .logo
+        .as_deref()
+        .and_then(|p| resolve_logo(p, config_dir));
+    let logo_file = logo.as_ref().map(|(name, _)| name.clone());
+    let invoice_data = data::InvoiceData::from_parts(summary, config, recipient, logo_file);
 
     let json = serde_json::to_vec(&invoice_data)
         .map_err(|e| AppError::PdfCompile(format!("JSON serialization failed: {e}")))?;
 
-    let world = world::InvoiceWorld::new(json);
+    let world = world::InvoiceWorld::new(json, logo);
 
     let warned = typst::compile::<PagedDocument>(&world);
     let document = warned.output.map_err(|diagnostics| {
@@ -43,6 +88,7 @@ pub fn generate_pdf(
 mod tests {
     use super::*;
     use crate::config::types::*;
+    use crate::config::validator::ValidatedBranding;
     use crate::invoice::types::*;
     use time::{Date, Month};
 
@@ -93,6 +139,7 @@ mod tests {
                 tax_rate: None,
             }],
             defaults: Defaults::default(),
+            branding: ValidatedBranding::default(),
         }
     }
 
@@ -103,7 +150,7 @@ mod tests {
         let config = make_config();
 
         // Act
-        let result = generate_pdf(&summary, &config, &config.recipient);
+        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."));
 
         // Assert
         let pdf = result.expect("PDF generation should succeed");
@@ -117,7 +164,7 @@ mod tests {
         let config = make_config();
 
         // Act
-        let pdf = generate_pdf(&summary, &config, &config.recipient).unwrap();
+        let pdf = generate_pdf(&summary, &config, &config.recipient, Path::new(".")).unwrap();
 
         // Assert
         assert!(pdf.len() > 100, "PDF should have substantial content");
@@ -130,10 +177,102 @@ mod tests {
         let config = make_config();
 
         // Act
-        let pdf1 = generate_pdf(&summary, &config, &config.recipient).unwrap();
-        let pdf2 = generate_pdf(&summary, &config, &config.recipient).unwrap();
+        let pdf1 = generate_pdf(&summary, &config, &config.recipient, Path::new(".")).unwrap();
+        let pdf2 = generate_pdf(&summary, &config, &config.recipient, Path::new(".")).unwrap();
 
         // Assert
         assert_eq!(pdf1, pdf2, "Same input should produce identical PDF bytes");
+    }
+
+    // ── Sprint 10 Step 5: resolve_logo + logo integration tests ──
+
+    #[test]
+    fn test_resolve_logo_existing_file_returns_bytes() {
+        // Arrange
+        let dir = tempfile::tempdir().unwrap();
+        let logo_path = dir.path().join("logo.png");
+        // Minimal PNG header (8 bytes)
+        std::fs::write(&logo_path, b"\x89PNG\r\n\x1a\n").unwrap();
+        // Act
+        let result = resolve_logo("logo.png", dir.path());
+        // Assert
+        assert!(result.is_some());
+        let (name, bytes) = result.unwrap();
+        assert_eq!(name, "logo.png");
+        assert_eq!(bytes, b"\x89PNG\r\n\x1a\n");
+    }
+
+    #[test]
+    fn test_resolve_logo_missing_file_returns_none() {
+        // Arrange
+        let dir = tempfile::tempdir().unwrap();
+        // Act
+        let result = resolve_logo("nonexistent.png", dir.path());
+        // Assert
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_resolve_logo_relative_path_resolved() {
+        // Arrange
+        let dir = tempfile::tempdir().unwrap();
+        let subdir = dir.path().join("assets");
+        std::fs::create_dir(&subdir).unwrap();
+        std::fs::write(subdir.join("logo.jpg"), b"\xFF\xD8\xFF").unwrap();
+        // Act
+        let result = resolve_logo("assets/logo.jpg", dir.path());
+        // Assert
+        assert!(result.is_some());
+        let (name, _) = result.unwrap();
+        assert_eq!(name, "logo.jpg");
+    }
+
+    #[test]
+    fn test_resolve_logo_unsupported_format_returns_none() {
+        // Arrange
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("logo.svg"), b"<svg></svg>").unwrap();
+        // Act
+        let result = resolve_logo("logo.svg", dir.path());
+        // Assert
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_generate_pdf_with_logo_none_succeeds() {
+        // Arrange
+        let summary = make_summary();
+        let config = make_config(); // branding.logo is None
+        // Act
+        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."));
+        // Assert
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_generate_pdf_with_custom_branding_succeeds() {
+        // Arrange
+        let summary = make_summary();
+        let mut config = make_config();
+        config.branding.accent_color = "#ff5500".into();
+        config.branding.font = Some("Arial".into());
+        config.branding.footer_text = Some("Custom footer text".into());
+        // Act
+        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."));
+        // Assert
+        let pdf = result.expect("PDF with custom branding should succeed");
+        assert!(pdf.starts_with(b"%PDF"));
+    }
+
+    #[test]
+    fn test_generate_pdf_with_empty_footer_succeeds() {
+        // Arrange
+        let summary = make_summary();
+        let mut config = make_config();
+        config.branding.footer_text = Some("".into());
+        // Act
+        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."));
+        // Assert
+        assert!(result.is_ok());
     }
 }

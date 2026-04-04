@@ -84,7 +84,7 @@ pub fn run_invoice_flow(
         prompter.message(&formatted);
 
         if prompter.confirm("Generate PDF?", true)? {
-            let pdf_bytes = pdf::generate_pdf(&summary, validated, recipient)?;
+            let pdf_bytes = pdf::generate_pdf(&summary, validated, recipient, cwd)?;
             let output_path = super::common::pdf_output_path(
                 &validated.sender.name,
                 &summary.period,

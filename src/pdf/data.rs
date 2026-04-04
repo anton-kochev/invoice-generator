@@ -10,6 +10,7 @@ pub struct InvoiceData<'a> {
     pub recipient: RecipientData<'a>,
     pub invoice: InvoiceInfo,
     pub payment: Vec<PaymentData<'a>>,
+    pub branding: BrandingData,
 }
 
 /// Sender information for the template.
@@ -65,12 +66,27 @@ pub struct PaymentData<'a> {
     pub bic_swift: &'a str,
 }
 
+/// Default font fallback chain matching v1.0 styling.
+const DEFAULT_FONTS: &[&str] = &["Helvetica", "Noto Sans", "Liberation Sans"];
+
+/// Branding data for the template.
+#[derive(Debug, Serialize)]
+pub struct BrandingData {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub logo_file: Option<String>,
+    pub accent_color: String,
+    pub font: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub footer_text: Option<String>,
+}
+
 impl<'a> InvoiceData<'a> {
     /// Build template data from a computed summary and validated config.
     pub fn from_parts(
         summary: &'a InvoiceSummary,
         config: &'a ValidatedConfig,
         recipient: &'a crate::config::types::Recipient,
+        logo_file: Option<String>,
     ) -> Self {
         Self {
             sender: SenderData {
@@ -124,6 +140,18 @@ impl<'a> InvoiceData<'a> {
                     bic_swift: &p.bic_swift,
                 })
                 .collect(),
+            branding: BrandingData {
+                logo_file,
+                accent_color: config.branding.accent_color.clone(),
+                font: config
+                    .branding
+                    .font
+                    .iter()
+                    .cloned()
+                    .chain(DEFAULT_FONTS.iter().map(|s| (*s).to_string()))
+                    .collect(),
+                footer_text: config.branding.footer_text.clone(),
+            },
         }
     }
 }
@@ -132,6 +160,7 @@ impl<'a> InvoiceData<'a> {
 mod tests {
     use super::*;
     use crate::config::types::*;
+    use crate::config::validator::ValidatedBranding;
     use crate::invoice::types::*;
     use time::{Date, Month};
 
@@ -182,6 +211,7 @@ mod tests {
                 tax_rate: None,
             }],
             defaults: Defaults::default(),
+            branding: ValidatedBranding::default(),
         }
     }
 
@@ -192,7 +222,7 @@ mod tests {
         let config = make_config();
 
         // Act
-        let data = InvoiceData::from_parts(&summary, &config, &config.recipient);
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
         let json = serde_json::to_value(&data).unwrap();
 
         // Assert
@@ -212,7 +242,7 @@ mod tests {
         let config = make_config();
 
         // Act
-        let data = InvoiceData::from_parts(&summary, &config, &config.recipient);
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
         let json = serde_json::to_value(&data).unwrap();
 
         // Assert
@@ -230,7 +260,7 @@ mod tests {
         let config = make_config();
 
         // Act
-        let data = InvoiceData::from_parts(&summary, &config, &config.recipient);
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
         let json = serde_json::to_value(&data).unwrap();
 
         // Assert
@@ -269,7 +299,7 @@ mod tests {
         let config = make_config();
 
         // Act
-        let data = InvoiceData::from_parts(&summary, &config, &config.recipient);
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
 
         // Assert
         assert_eq!(data.invoice.line_items[0].tax_rate, "21.0");
@@ -282,7 +312,7 @@ mod tests {
         let config = make_config();
 
         // Act
-        let data = InvoiceData::from_parts(&summary, &config, &config.recipient);
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
 
         // Assert
         assert_eq!(data.invoice.line_items[0].tax_amount, "1680.00");
@@ -295,7 +325,7 @@ mod tests {
         let config = make_config();
 
         // Act
-        let data = InvoiceData::from_parts(&summary, &config, &config.recipient);
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
 
         // Assert
         assert_eq!(data.invoice.line_items[0].tax_rate, "0");
@@ -309,7 +339,7 @@ mod tests {
         let config = make_config();
 
         // Act
-        let data = InvoiceData::from_parts(&summary, &config, &config.recipient);
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
 
         // Assert
         assert!(data.invoice.has_tax);
@@ -322,7 +352,7 @@ mod tests {
         let config = make_config();
 
         // Act
-        let data = InvoiceData::from_parts(&summary, &config, &config.recipient);
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
 
         // Assert
         assert!(!data.invoice.has_tax);
@@ -335,7 +365,7 @@ mod tests {
         let config = make_config();
 
         // Act
-        let data = InvoiceData::from_parts(&summary, &config, &config.recipient);
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
 
         // Assert
         assert_eq!(data.invoice.subtotal, "8000.00");
@@ -351,11 +381,120 @@ mod tests {
         config.recipient.vat_number = None;
 
         // Act
-        let data = InvoiceData::from_parts(&summary, &config, &config.recipient);
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
         let json = serde_json::to_value(&data).unwrap();
 
         // Assert
         assert!(json["recipient"].get("company_id").is_none());
         assert!(json["recipient"].get("vat_number").is_none());
+    }
+
+    // ── Sprint 10: BrandingData tests ──
+
+    #[test]
+    fn test_from_parts_includes_branding_with_defaults() {
+        // Arrange
+        let summary = make_summary();
+        let config = make_config();
+        // Act
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
+        let json = serde_json::to_value(&data).unwrap();
+        // Assert
+        assert_eq!(json["branding"]["accent_color"], "#2c3e50");
+        let fonts = json["branding"]["font"].as_array().unwrap();
+        assert_eq!(fonts.len(), 3);
+        assert_eq!(fonts[0], "Helvetica");
+    }
+
+    #[test]
+    fn test_from_parts_branding_custom_accent_color() {
+        // Arrange
+        let summary = make_summary();
+        let mut config = make_config();
+        config.branding.accent_color = "#ff0000".into();
+        // Act
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
+        let json = serde_json::to_value(&data).unwrap();
+        // Assert
+        assert_eq!(json["branding"]["accent_color"], "#ff0000");
+    }
+
+    #[test]
+    fn test_from_parts_branding_custom_font_prepended() {
+        // Arrange
+        let summary = make_summary();
+        let mut config = make_config();
+        config.branding.font = Some("Fira Code".into());
+        // Act
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
+        let json = serde_json::to_value(&data).unwrap();
+        // Assert
+        let fonts = json["branding"]["font"].as_array().unwrap();
+        assert_eq!(fonts.len(), 4);
+        assert_eq!(fonts[0], "Fira Code");
+        assert_eq!(fonts[1], "Helvetica");
+    }
+
+    #[test]
+    fn test_from_parts_branding_no_custom_font_uses_defaults() {
+        // Arrange
+        let summary = make_summary();
+        let config = make_config(); // font: None
+        // Act
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
+        // Assert
+        assert_eq!(
+            data.branding.font,
+            vec!["Helvetica", "Noto Sans", "Liberation Sans"]
+        );
+    }
+
+    #[test]
+    fn test_from_parts_branding_footer_text_included() {
+        // Arrange
+        let summary = make_summary();
+        let mut config = make_config();
+        config.branding.footer_text = Some("Thanks!".into());
+        // Act
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
+        let json = serde_json::to_value(&data).unwrap();
+        // Assert
+        assert_eq!(json["branding"]["footer_text"], "Thanks!");
+    }
+
+    #[test]
+    fn test_from_parts_branding_footer_text_none_omitted() {
+        // Arrange
+        let summary = make_summary();
+        let config = make_config(); // footer_text: None
+        // Act
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
+        let json = serde_json::to_value(&data).unwrap();
+        // Assert
+        assert!(json["branding"].get("footer_text").is_none());
+    }
+
+    #[test]
+    fn test_from_parts_branding_logo_file_included() {
+        // Arrange
+        let summary = make_summary();
+        let config = make_config();
+        // Act
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, Some("logo.png".into()));
+        let json = serde_json::to_value(&data).unwrap();
+        // Assert
+        assert_eq!(json["branding"]["logo_file"], "logo.png");
+    }
+
+    #[test]
+    fn test_from_parts_branding_logo_file_none_omitted() {
+        // Arrange
+        let summary = make_summary();
+        let config = make_config();
+        // Act
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
+        let json = serde_json::to_value(&data).unwrap();
+        // Assert
+        assert!(json["branding"].get("logo_file").is_none());
     }
 }

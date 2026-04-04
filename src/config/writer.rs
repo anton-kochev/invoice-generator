@@ -239,6 +239,7 @@ mod tests {
             payment: Some(synthetic_payment()),
             presets: Some(synthetic_presets()),
             defaults: Some(synthetic_defaults()),
+            branding: None,
         }
     }
 
@@ -655,6 +656,7 @@ mod tests {
             payment: Some(synthetic_payment()),
             presets: Some(synthetic_presets()),
             defaults: Some(synthetic_defaults()),
+            branding: None,
         };
 
         // Act
@@ -688,6 +690,7 @@ mod tests {
             payment: Some(synthetic_payment()),
             presets: Some(synthetic_presets()),
             defaults: Some(synthetic_defaults()),
+            branding: None,
         };
 
         // Act
@@ -715,6 +718,7 @@ mod tests {
             payment: Some(synthetic_payment()),
             presets: Some(synthetic_presets()),
             defaults: Some(synthetic_defaults()),
+            branding: None,
         }
     }
 
@@ -742,6 +746,7 @@ mod tests {
             payment: Some(synthetic_payment()),
             presets: Some(synthetic_presets()),
             defaults: Some(synthetic_defaults()),
+            branding: None,
         }
     }
 

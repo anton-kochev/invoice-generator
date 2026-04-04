@@ -1,5 +1,22 @@
 use serde::{Deserialize, Serialize};
 
+/// Branding options for invoice appearance.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Branding {
+    /// Path to the logo image file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logo: Option<String>,
+    /// Accent color (e.g. hex code like "#ff0000").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accent_color: Option<String>,
+    /// Font family name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font: Option<String>,
+    /// Custom footer text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub footer_text: Option<String>,
+}
+
 /// Top-level invoice generator configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct Config {
@@ -24,6 +41,9 @@ pub struct Config {
     /// Default values for new invoices.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub defaults: Option<Defaults>,
+    /// Branding / appearance options.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branding: Option<Branding>,
 }
 
 /// Information about the invoice sender.
@@ -393,5 +413,98 @@ mod tests {
 
         // Assert
         assert!(yaml.contains("tax_rate: 0.0"), "Zero tax_rate should be serialized, got: {yaml}");
+    }
+
+    #[test]
+    fn test_config_without_branding_deserializes_as_none() {
+        // Arrange — YAML with no branding section (like existing v1 configs)
+        let yaml = "sender:\n  name: Alice\n  address:\n    - 123 St\n  email: a@b.com\n";
+
+        // Act
+        let config: Config = serde_yaml::from_str(yaml).unwrap();
+
+        // Assert
+        assert!(config.branding.is_none());
+    }
+
+    #[test]
+    fn test_branding_none_omitted_from_yaml() {
+        // Arrange
+        let config = Config { branding: None, ..Config::default() };
+
+        // Act
+        let yaml = serde_yaml::to_string(&config).unwrap();
+
+        // Assert
+        assert!(!yaml.contains("branding"), "None branding should be omitted from YAML");
+    }
+
+    #[test]
+    fn test_branding_all_fields_round_trips() {
+        // Arrange
+        let branding = Branding {
+            logo: Some("logo.png".into()),
+            accent_color: Some("#ff0000".into()),
+            font: Some("Fira Code".into()),
+            footer_text: Some("Custom footer".into()),
+        };
+        let config = Config { branding: Some(branding), ..Config::default() };
+
+        // Act
+        let yaml = serde_yaml::to_string(&config).unwrap();
+        let loaded: Config = serde_yaml::from_str(&yaml).unwrap();
+
+        // Assert
+        let b = loaded.branding.unwrap();
+        assert_eq!(b.logo, Some("logo.png".into()));
+        assert_eq!(b.accent_color, Some("#ff0000".into()));
+        assert_eq!(b.font, Some("Fira Code".into()));
+        assert_eq!(b.footer_text, Some("Custom footer".into()));
+    }
+
+    #[test]
+    fn test_branding_partial_fields_round_trips() {
+        // Arrange — only accent_color set
+        let branding = Branding { accent_color: Some("#abc".into()), ..Branding::default() };
+        let config = Config { branding: Some(branding), ..Config::default() };
+
+        // Act
+        let yaml = serde_yaml::to_string(&config).unwrap();
+        let loaded: Config = serde_yaml::from_str(&yaml).unwrap();
+
+        // Assert
+        let b = loaded.branding.unwrap();
+        assert_eq!(b.accent_color, Some("#abc".into()));
+        assert!(b.logo.is_none());
+        assert!(b.font.is_none());
+        assert!(b.footer_text.is_none());
+    }
+
+    #[test]
+    fn test_branding_empty_struct_round_trips() {
+        // Arrange — all fields None
+        let config = Config { branding: Some(Branding::default()), ..Config::default() };
+
+        // Act
+        let yaml = serde_yaml::to_string(&config).unwrap();
+        let loaded: Config = serde_yaml::from_str(&yaml).unwrap();
+
+        // Assert
+        assert!(loaded.branding.is_some());
+    }
+
+    #[test]
+    fn test_branding_optional_fields_omitted_when_none() {
+        // Arrange
+        let branding = Branding { logo: Some("logo.png".into()), ..Branding::default() };
+
+        // Act
+        let yaml = serde_yaml::to_string(&branding).unwrap();
+
+        // Assert
+        assert!(yaml.contains("logo"));
+        assert!(!yaml.contains("accent_color"));
+        assert!(!yaml.contains("font"));
+        assert!(!yaml.contains("footer_text"));
     }
 }

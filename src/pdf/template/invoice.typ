@@ -6,12 +6,25 @@
   margin: (top: 2.5cm, bottom: 2cm, left: 2.5cm, right: 2.5cm),
 )
 
-#set text(font: ("Helvetica", "Noto Sans", "Liberation Sans"), size: 10pt)
+#set text(font: data.branding.font, size: 10pt)
+
+#let accent = rgb(data.branding.accent_color)
 
 // --- Header ---
-#align(right)[
-  #text(24pt, weight: "bold", fill: rgb("#2c3e50"))[INVOICE]
-]
+#if "logo_file" in data.branding {
+  grid(
+    columns: (auto, 1fr),
+    gutter: 1cm,
+    image(data.branding.logo_file, height: 1.5cm),
+    align(right)[
+      #text(24pt, weight: "bold", fill: accent)[INVOICE]
+    ],
+  )
+} else {
+  align(right)[
+    #text(24pt, weight: "bold", fill: accent)[INVOICE]
+  ]
+}
 
 #v(0.3cm)
 
@@ -29,7 +42,7 @@
   columns: (1fr, 1fr),
   gutter: 1cm,
   [
-    #text(9pt, weight: "bold", fill: rgb("#2c3e50"))[FROM]
+    #text(9pt, weight: "bold", fill: accent)[FROM]
     #v(0.2cm)
     #set text(size: 9pt)
     *#data.sender.name* \
@@ -39,7 +52,7 @@
     #data.sender.email
   ],
   [
-    #text(9pt, weight: "bold", fill: rgb("#2c3e50"))[TO]
+    #text(9pt, weight: "bold", fill: accent)[TO]
     #v(0.2cm)
     #set text(size: 9pt)
     *#data.recipient.name* \
@@ -58,7 +71,7 @@
 #v(0.8cm)
 
 // --- Line Items Table ---
-#line(length: 100%, stroke: 0.5pt + rgb("#2c3e50"))
+#line(length: 100%, stroke: 0.5pt + accent)
 #v(0.2cm)
 
 #if data.invoice.has_tax {
@@ -116,7 +129,7 @@
 }
 
 #v(0.1cm)
-#line(length: 100%, stroke: 0.5pt + rgb("#2c3e50"))
+#line(length: 100%, stroke: 0.5pt + accent)
 
 // --- Total ---
 #if data.invoice.has_tax {
@@ -138,7 +151,7 @@
 #v(1cm)
 
 // --- Payment Details ---
-#text(10pt, weight: "bold", fill: rgb("#2c3e50"))[Payment Details]
+#text(10pt, weight: "bold", fill: accent)[Payment Details]
 #v(0.3cm)
 
 #for method in data.payment {
@@ -153,10 +166,15 @@
 #v(1fr)
 
 // --- Footer ---
+#let footer_content = if "footer_text" in data.branding and data.branding.footer_text != "" {
+  data.branding.footer_text
+} else {
+  [Thank you for the opportunity to work together. \
+   #data.sender.name · #data.sender.email]
+}
 #line(length: 100%, stroke: 0.3pt + rgb("#cccccc"))
 #v(0.3cm)
 #align(center)[
   #set text(size: 8pt, fill: rgb("#888888"))
-  Thank you for the opportunity to work together. \
-  #data.sender.name · #data.sender.email
+  #footer_content
 ]

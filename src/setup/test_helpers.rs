@@ -72,6 +72,7 @@ pub fn complete_config() -> Config {
         payment: Some(synthetic_payment()),
         presets: Some(synthetic_presets()),
         defaults: Some(synthetic_defaults()),
+        branding: None,
     }
 }
 
@@ -137,6 +138,7 @@ pub fn v2_complete_config() -> Config {
         payment: Some(synthetic_payment()),
         presets: Some(synthetic_presets()),
         defaults: Some(synthetic_defaults()),
+        branding: None,
     }
 }
 
@@ -149,6 +151,7 @@ pub fn v2_config_two_recipients() -> Config {
         payment: Some(synthetic_payment()),
         presets: Some(synthetic_presets()),
         defaults: Some(synthetic_defaults()),
+        branding: None,
     }
 }
 
