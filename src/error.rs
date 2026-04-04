@@ -26,4 +26,48 @@ pub enum AppError {
     /// PDF export failed.
     #[error("PDF export failed: {0}")]
     PdfExport(String),
+
+    /// Requested preset key does not exist.
+    #[error("Unknown preset: \"{0}\"")]
+    PresetNotFound(String),
+
+    /// Cannot delete the last remaining preset.
+    #[error("Cannot delete — at least one preset must exist.")]
+    LastPreset,
+
+    /// Config file is required but not found (for non-interactive subcommands).
+    #[error("No config file found. Run `invoice` first to set up.")]
+    ConfigNotFound,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_preset_not_found_error_displays_key() {
+        // Arrange
+        let err = AppError::PresetNotFound("xyz".into());
+
+        // Act
+        let msg = format!("{err}");
+
+        // Assert
+        assert!(msg.contains("xyz"), "Expected 'xyz' in: {msg}");
+    }
+
+    #[test]
+    fn test_last_preset_error_displays_message() {
+        // Arrange
+        let err = AppError::LastPreset;
+
+        // Act
+        let msg = format!("{err}");
+
+        // Assert
+        assert!(
+            msg.contains("at least one preset"),
+            "Expected 'at least one preset' in: {msg}"
+        );
+    }
 }

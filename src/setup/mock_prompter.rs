@@ -20,6 +20,8 @@ pub struct MockPrompter {
     responses: RefCell<VecDeque<MockResponse>>,
     /// Captured messages sent via [`Prompter::message`].
     pub messages: RefCell<Vec<String>>,
+    /// Captured prompt strings from confirm() calls.
+    pub prompts: RefCell<Vec<String>>,
 }
 
 impl MockPrompter {
@@ -27,6 +29,7 @@ impl MockPrompter {
         Self {
             responses: RefCell::new(VecDeque::from(responses)),
             messages: RefCell::new(Vec::new()),
+            prompts: RefCell::new(Vec::new()),
         }
     }
 
@@ -102,7 +105,8 @@ impl Prompter for MockPrompter {
         }
     }
 
-    fn confirm(&self, _prompt: &str, _default: bool) -> Result<bool, AppError> {
+    fn confirm(&self, prompt: &str, _default: bool) -> Result<bool, AppError> {
+        self.prompts.borrow_mut().push(prompt.to_string());
         match self.pop("Confirm") {
             MockResponse::Confirm(b) => Ok(b),
             other => panic!("MockPrompter: expected Confirm, got {other:?}"),

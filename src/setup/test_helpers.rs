@@ -1,6 +1,6 @@
 use tempfile::TempDir;
 
-use crate::config::loader::{load_config, LoadResult};
+use crate::config::loader::LoadResult;
 use crate::config::types::*;
 use crate::config::writer::save_config;
 use crate::error::AppError;
@@ -68,6 +68,23 @@ pub fn complete_config() -> Config {
         presets: Some(synthetic_presets()),
         defaults: Some(synthetic_defaults()),
     }
+}
+
+pub fn config_with_two_presets() -> Config {
+    let mut cfg = complete_config();
+    cfg.presets = Some(vec![
+        Preset {
+            key: "dev".into(),
+            description: "Development Services".into(),
+            default_rate: 100.0,
+        },
+        Preset {
+            key: "design".into(),
+            description: "Design Work".into(),
+            default_rate: 80.0,
+        },
+    ]);
+    cfg
 }
 
 // ── Tempdir Helper ──

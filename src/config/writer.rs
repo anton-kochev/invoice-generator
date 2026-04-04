@@ -13,6 +13,42 @@ pub fn save_config(dir: &Path, config: &Config) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Remove a preset by key from the config file in `dir`.
+///
+/// Returns the removed preset on success.
+/// Checks the last-preset guard BEFORE key lookup.
+pub fn remove_preset(dir: &Path, key: &str) -> Result<Preset, AppError> {
+    use super::loader::{load_config, LoadResult};
+
+    let config = match load_config(dir)? {
+        LoadResult::Loaded(config) => config,
+        LoadResult::NotFound => {
+            return Err(AppError::ConfigIo(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("config file not found in {}", dir.display()),
+            )));
+        }
+    };
+
+    let mut config = config;
+    let mut presets = config.presets.unwrap_or_default();
+
+    if presets.len() <= 1 {
+        return Err(AppError::LastPreset);
+    }
+
+    let pos = presets
+        .iter()
+        .position(|p| p.key == key)
+        .ok_or_else(|| AppError::PresetNotFound(key.to_string()))?;
+
+    let removed = presets.remove(pos);
+    config.presets = Some(presets);
+
+    save_config(dir, &config)?;
+    Ok(removed)
+}
+
 /// Append a preset to the config file in `dir`.
 ///
 /// Loads the existing config, pushes the new preset, and saves it back.
@@ -333,5 +369,169 @@ mod tests {
         // Assert
         assert!(result.is_err());
         assert!(matches!(result, Err(AppError::ConfigIo(_))));
+    }
+
+    // ── remove_preset tests ──
+
+    #[test]
+    fn test_remove_preset_deletes_matching_key() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        let mut config = complete_config();
+        let mut presets = config.presets.take().unwrap();
+        presets.push(Preset {
+            key: "design".to_string(),
+            description: "Design work".to_string(),
+            default_rate: 80.0,
+        });
+        config.presets = Some(presets);
+        save_config(dir.path(), &config).unwrap();
+
+        // Act
+        let removed = remove_preset(dir.path(), "design").unwrap();
+
+        // Assert
+        assert_eq!(removed.key, "design");
+        let loaded = unwrap_loaded(load_config(dir.path()));
+        let remaining = loaded.presets.unwrap();
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].key, "dev");
+    }
+
+    #[test]
+    fn test_remove_preset_unknown_key_returns_preset_not_found() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        let mut config = complete_config();
+        let mut presets = config.presets.take().unwrap();
+        presets.push(Preset {
+            key: "design".to_string(),
+            description: "Design work".to_string(),
+            default_rate: 80.0,
+        });
+        config.presets = Some(presets);
+        save_config(dir.path(), &config).unwrap();
+
+        // Act
+        let result = remove_preset(dir.path(), "nope");
+
+        // Assert
+        assert!(matches!(result, Err(AppError::PresetNotFound(_))));
+    }
+
+    #[test]
+    fn test_remove_preset_last_preset_returns_last_preset_error() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        save_config(dir.path(), &complete_config()).unwrap();
+
+        // Act
+        let result = remove_preset(dir.path(), "dev");
+
+        // Assert
+        assert!(matches!(result, Err(AppError::LastPreset)));
+    }
+
+    #[test]
+    fn test_remove_preset_preserves_other_sections() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        let mut config = complete_config();
+        let mut presets = config.presets.take().unwrap();
+        presets.push(Preset {
+            key: "design".to_string(),
+            description: "Design work".to_string(),
+            default_rate: 80.0,
+        });
+        config.presets = Some(presets);
+        save_config(dir.path(), &config).unwrap();
+
+        // Act
+        remove_preset(dir.path(), "design").unwrap();
+
+        // Assert
+        let loaded = unwrap_loaded(load_config(dir.path()));
+        assert_eq!(loaded.sender, config.sender);
+        assert_eq!(loaded.recipient, config.recipient);
+        assert_eq!(loaded.payment, config.payment);
+        assert_eq!(loaded.defaults, config.defaults);
+    }
+
+    #[test]
+    fn test_remove_preset_no_config_file_returns_config_io() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+
+        // Act
+        let result = remove_preset(dir.path(), "dev");
+
+        // Assert
+        assert!(matches!(result, Err(AppError::ConfigIo(_))));
+    }
+
+    #[test]
+    fn test_remove_preset_from_three_presets_removes_middle() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        let config = Config {
+            presets: Some(vec![
+                Preset {
+                    key: "dev".to_string(),
+                    description: "Development".to_string(),
+                    default_rate: 100.0,
+                },
+                Preset {
+                    key: "design".to_string(),
+                    description: "Design".to_string(),
+                    default_rate: 80.0,
+                },
+                Preset {
+                    key: "qa".to_string(),
+                    description: "QA".to_string(),
+                    default_rate: 60.0,
+                },
+            ]),
+            ..complete_config()
+        };
+        save_config(dir.path(), &config).unwrap();
+
+        // Act
+        let removed = remove_preset(dir.path(), "design").unwrap();
+
+        // Assert
+        assert_eq!(removed.key, "design");
+        let loaded = unwrap_loaded(load_config(dir.path()));
+        let remaining = loaded.presets.unwrap();
+        assert_eq!(remaining.len(), 2);
+        assert_eq!(remaining[0].key, "dev");
+        assert_eq!(remaining[1].key, "qa");
+    }
+
+    #[test]
+    fn test_remove_preset_key_is_case_sensitive() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        let config = Config {
+            presets: Some(vec![
+                Preset {
+                    key: "dev".to_string(),
+                    description: "Development".to_string(),
+                    default_rate: 100.0,
+                },
+                Preset {
+                    key: "design".to_string(),
+                    description: "Design".to_string(),
+                    default_rate: 80.0,
+                },
+            ]),
+            ..complete_config()
+        };
+        save_config(dir.path(), &config).unwrap();
+
+        // Act
+        let result = remove_preset(dir.path(), "Dev");
+
+        // Assert
+        assert!(matches!(result, Err(AppError::PresetNotFound(_))));
     }
 }
