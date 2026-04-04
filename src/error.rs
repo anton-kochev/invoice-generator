@@ -51,6 +51,10 @@ pub enum AppError {
     #[error("Default recipient key \"{0}\" not found in recipients list")]
     InvalidDefaultRecipient(String),
 
+    /// default_recipient is missing but recipients are defined.
+    #[error("default_recipient is required when recipients are defined")]
+    MissingDefaultRecipient,
+
     /// Two recipients share the same key.
     #[error("Duplicate recipient key: \"{0}\"")]
     DuplicateRecipientKey(String),
@@ -171,6 +175,16 @@ mod tests {
         // Assert
         assert!(msg.contains("-5.0"), "Expected '-5.0' in: {msg}");
         assert!(msg.contains(">= 0"), "Expected '>= 0' in: {msg}");
+    }
+
+    #[test]
+    fn test_missing_default_recipient_displays_message() {
+        // Arrange
+        let err = AppError::MissingDefaultRecipient;
+        // Act
+        let msg = format!("{err}");
+        // Assert
+        assert!(msg.contains("required"), "Expected 'required' in: {msg}");
     }
 
     #[test]

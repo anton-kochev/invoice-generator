@@ -186,9 +186,7 @@ impl Config {
                     }
                 }
                 None => {
-                    return Err(AppError::InvalidDefaultRecipient(
-                        "default_recipient is required when recipients are defined".into(),
-                    ));
+                    return Err(AppError::MissingDefaultRecipient);
                 }
             }
         }
@@ -593,7 +591,7 @@ mod tests {
         let result = config.validate();
 
         // Assert
-        assert!(matches!(result, Err(AppError::InvalidDefaultRecipient(_))));
+        assert!(matches!(result, Err(AppError::MissingDefaultRecipient)));
     }
 
     #[test]

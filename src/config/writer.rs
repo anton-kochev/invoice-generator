@@ -74,6 +74,27 @@ pub fn append_preset(dir: &Path, preset: Preset) -> Result<(), AppError> {
     save_config(dir, &config)
 }
 
+/// Migrate a v1 Config (single `recipient:`) to v2 (`recipients:` list).
+/// No-op if already v2. Consumes the `recipient` field via `.take()`.
+fn ensure_recipients_v2(config: &mut Config) {
+    use super::types::derive_recipient_key;
+
+    if config.recipients.is_some() {
+        return;
+    }
+    if let Some(mut legacy) = config.recipient.take() {
+        let key = legacy
+            .key
+            .clone()
+            .unwrap_or_else(|| derive_recipient_key(&legacy.name));
+        legacy.key = Some(key.clone());
+        config.recipients = Some(vec![legacy]);
+        if config.default_recipient.is_none() {
+            config.default_recipient = Some(key);
+        }
+    }
+}
+
 /// Append a recipient to the config file in `dir`.
 ///
 /// If `set_default` is true, also sets `default_recipient` to the new recipient's key.
@@ -91,7 +112,8 @@ pub fn append_recipient(dir: &Path, recipient: Recipient, set_default: bool) -> 
     };
 
     let mut config = config;
-    let mut recipients = config.recipients.unwrap_or_default();
+    ensure_recipients_v2(&mut config);
+    let mut recipients = config.recipients.take().unwrap_or_default();
 
     if set_default {
         config.default_recipient = recipient.key.clone();
@@ -121,7 +143,8 @@ pub fn remove_recipient(dir: &Path, key: &str) -> Result<Recipient, AppError> {
     };
 
     let mut config = config;
-    let mut recipients = config.recipients.unwrap_or_default();
+    ensure_recipients_v2(&mut config);
+    let mut recipients = config.recipients.take().unwrap_or_default();
 
     if recipients.len() <= 1 {
         return Err(AppError::LastRecipient);
@@ -164,6 +187,7 @@ pub fn set_default_recipient(dir: &Path, key: &str) -> Result<(), AppError> {
     };
 
     let mut config = config;
+    ensure_recipients_v2(&mut config);
     let recipients = config.recipients.as_deref().unwrap_or_default();
 
     if !recipients.iter().any(|r| r.key.as_deref() == Some(key)) {
@@ -995,6 +1019,123 @@ mod tests {
         // Assert
         let loaded = unwrap_loaded(load_config(dir.path()));
         assert_eq!(loaded.default_recipient, Some("globex".into()));
+    }
+
+    // ── v1 migration helpers ──
+
+    fn v1_config_with_recipient() -> Config {
+        Config {
+            sender: Some(synthetic_sender()),
+            recipient: Some(Recipient {
+                key: None,
+                name: "Client Corp".into(),
+                address: vec!["456 Client Ave".into()],
+                company_id: Some("CC-12345".into()),
+                vat_number: Some("VAT-999".into()),
+            }),
+            recipients: None,
+            default_recipient: None,
+            payment: Some(synthetic_payment()),
+            presets: Some(synthetic_presets()),
+            defaults: Some(Defaults::default()),
+            branding: None,
+        }
+    }
+
+    fn new_recipient() -> Recipient {
+        Recipient {
+            key: Some("macrosoft".into()),
+            name: "Macrosoft".into(),
+            address: vec!["654 Street".into(), "United States".into()],
+            company_id: Some("MS-54321".into()),
+            vat_number: None,
+        }
+    }
+
+    // ── v1→v2 migration tests ──
+
+    #[test]
+    fn test_append_recipient_v1_no_key_set_default_false_migrates() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        save_config(dir.path(), &v1_config_with_recipient()).unwrap();
+
+        // Act
+        append_recipient(dir.path(), new_recipient(), false).unwrap();
+
+        // Assert
+        let loaded = unwrap_loaded(load_config(dir.path()));
+        let recipients = loaded.recipients.unwrap();
+        assert_eq!(recipients.len(), 2);
+        assert_eq!(recipients[0].key, Some("client-corp".into()));
+        assert_eq!(recipients[1].key, Some("macrosoft".into()));
+        assert_eq!(loaded.default_recipient, Some("client-corp".into()));
+    }
+
+    #[test]
+    fn test_append_recipient_v1_with_key_set_default_false_migrates() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        let mut config = v1_config_with_recipient();
+        config.recipient.as_mut().unwrap().key = Some("cc".into());
+        save_config(dir.path(), &config).unwrap();
+
+        // Act
+        append_recipient(dir.path(), new_recipient(), false).unwrap();
+
+        // Assert
+        let loaded = unwrap_loaded(load_config(dir.path()));
+        let recipients = loaded.recipients.unwrap();
+        assert_eq!(recipients[0].key, Some("cc".into()));
+        assert_eq!(loaded.default_recipient, Some("cc".into()));
+    }
+
+    #[test]
+    fn test_append_recipient_v1_set_default_true_new_becomes_default() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        save_config(dir.path(), &v1_config_with_recipient()).unwrap();
+
+        // Act
+        append_recipient(dir.path(), new_recipient(), true).unwrap();
+
+        // Assert
+        let loaded = unwrap_loaded(load_config(dir.path()));
+        let recipients = loaded.recipients.unwrap();
+        assert_eq!(recipients.len(), 2);
+        assert_eq!(loaded.default_recipient, Some("macrosoft".into()));
+    }
+
+    #[test]
+    fn test_append_recipient_v1_clears_v1_field() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        save_config(dir.path(), &v1_config_with_recipient()).unwrap();
+
+        // Act
+        append_recipient(dir.path(), new_recipient(), false).unwrap();
+
+        // Assert
+        let loaded = unwrap_loaded(load_config(dir.path()));
+        assert!(loaded.recipient.is_none(), "v1 recipient field should be cleared after migration");
+    }
+
+    #[test]
+    fn test_append_recipient_v1_preserves_recipient_data() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        save_config(dir.path(), &v1_config_with_recipient()).unwrap();
+
+        // Act
+        append_recipient(dir.path(), new_recipient(), false).unwrap();
+
+        // Assert
+        let loaded = unwrap_loaded(load_config(dir.path()));
+        let migrated = &loaded.recipients.unwrap()[0];
+        assert_eq!(migrated.name, "Client Corp");
+        assert_eq!(migrated.address, vec!["456 Client Ave"]);
+        assert_eq!(migrated.company_id, Some("CC-12345".into()));
+        assert_eq!(migrated.vat_number, Some("VAT-999".into()));
     }
 
     #[test]
