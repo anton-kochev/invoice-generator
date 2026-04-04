@@ -2,7 +2,7 @@
 
 ## Summary
 - **Epics**: 11 (5 v1.0 + 6 v2.0)
-- **Total User Stories**: 41 (24 completed ✅ + 17 remaining)
+- **Total User Stories**: 41 (25 completed ✅ + 16 remaining)
 - **User Roles Identified**: Freelance Developer (sole actor — referred to as "user" throughout)
 
 ---
@@ -488,7 +488,7 @@ The application compiles to a single static binary with no runtime dependencies.
 ## Epic 7: Multiple Client Profiles
 > Support multiple recipients in the config so users who invoice different clients don't need multiple config files.
 
-### Story 7.1: Multi-Recipient Config Structure
+### Story 7.1: Multi-Recipient Config Structure ✅
 **As a** user,
 **I want** the config file to support a named list of recipients with a default,
 **So that** I can store multiple client profiles in one config.
