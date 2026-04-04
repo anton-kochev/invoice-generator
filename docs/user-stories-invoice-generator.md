@@ -2,7 +2,7 @@
 
 ## Summary
 - **Epics**: 5
-- **Total User Stories**: 18 (17 completed ✅, 1 remaining)
+- **Total User Stories**: 18 (18 completed ✅)
 - **User Roles Identified**: Freelance Developer (sole actor — referred to as "user" throughout)
 
 ---
@@ -196,7 +196,7 @@
 
 ---
 
-### Story 3.3: Create New Preset Inline
+### Story 3.3: Create New Preset Inline ✅
 **As a** user,
 **I want** to create a new preset on the fly during invoice generation,
 **So that** I don't have to abort and edit the config file when I have a new type of work.
