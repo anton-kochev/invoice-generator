@@ -63,7 +63,6 @@ pub enum AppError {
     },
 
     /// Cannot delete the last remaining recipient.
-    #[allow(dead_code)] // needed by Story 7.6 (recipient guard)
     #[error("Cannot delete — at least one recipient must exist.")]
     LastRecipient,
 }

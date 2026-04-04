@@ -145,14 +145,86 @@ pub fn handle_recipient_add(
 }
 
 /// Handle `invoice recipient delete <key>` — confirm and remove a recipient.
-/// (Full implementation in Story 7.6)
 pub fn handle_recipient_delete(
-    _prompter: &dyn Prompter,
-    _dir: &Path,
-    _key: &str,
-    _writer: &mut dyn Write,
+    prompter: &dyn Prompter,
+    dir: &Path,
+    key: &str,
+    writer: &mut dyn Write,
 ) -> Result<(), AppError> {
-    todo!("Story 7.6")
+    use crate::config::loader::{load_config, LoadResult, CONFIG_FILENAME};
+    use crate::config::writer::{remove_recipient, set_default_recipient};
+
+    // Load config to get recipient details for confirmation
+    let config = match load_config(dir)? {
+        LoadResult::Loaded(c) => c,
+        LoadResult::NotFound => return Err(AppError::ConfigNotFound),
+    };
+
+    let recipients = config.recipients.as_deref().unwrap_or_default();
+
+    // Find the recipient first to get its name for the confirmation prompt
+    let recipient = recipients
+        .iter()
+        .find(|r| r.key.as_deref() == Some(key))
+        .ok_or_else(|| AppError::RecipientNotFound {
+            key: key.to_string(),
+            available: recipients.iter().filter_map(|r| r.key.clone()).collect(),
+        })?;
+
+    // Guard: cannot delete the last recipient
+    if recipients.len() <= 1 {
+        return Err(AppError::LastRecipient);
+    }
+
+    let prompt = format!("Delete recipient \"{}\" ({})?", key, recipient.name);
+
+    if !prompter.confirm(&prompt, false)? {
+        return Ok(());
+    }
+
+    let is_default = config.default_recipient.as_deref() == Some(key);
+
+    remove_recipient(dir, key)?;
+
+    // If deleting the default, reassign
+    if is_default {
+        // Reload to get remaining recipients
+        let updated = match load_config(dir)? {
+            LoadResult::Loaded(c) => c,
+            LoadResult::NotFound => return Err(AppError::ConfigNotFound),
+        };
+        let remaining = updated.recipients.as_deref().unwrap_or_default();
+
+        if remaining.len() == 1 {
+            // Auto-assign the only remaining recipient
+            let new_key = remaining[0].key.as_deref().unwrap_or("");
+            set_default_recipient(dir, new_key)?;
+        } else if remaining.len() > 1 {
+            // Prompt for new default
+            prompter.message("\nSelect new default recipient:\n");
+            for (i, r) in remaining.iter().enumerate() {
+                prompter.message(&format!(
+                    "  [{}] {} \u{2014} {}",
+                    i + 1,
+                    r.key.as_deref().unwrap_or(""),
+                    r.name,
+                ));
+            }
+            let max = remaining.len();
+            let choice = loop {
+                let n = prompter.u32_with_default("Select recipient number:", 1)?;
+                if n >= 1 && n as usize <= max {
+                    break n;
+                }
+                prompter.message(&format!("Please enter a number between 1 and {max}."));
+            };
+            let new_key = remaining[choice as usize - 1].key.as_deref().unwrap_or("");
+            set_default_recipient(dir, new_key)?;
+        }
+    }
+
+    writeln!(writer, "✓ Recipient \"{key}\" deleted from {CONFIG_FILENAME}")?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -413,6 +485,178 @@ mod tests {
 
         // Act
         let result = handle_recipient_add(&prompter, dir.path(), &mut buf);
+
+        // Assert
+        assert!(matches!(result, Err(AppError::ConfigNotFound)));
+        prompter.assert_exhausted();
+    }
+
+    // ── handle_recipient_delete tests ──
+
+    #[test]
+    fn test_handle_recipient_delete_confirmed_removes_recipient() {
+        // Arrange
+        let config = v2_config_two_recipients();
+        let dir = setup_dir(Some(&config));
+        let prompter = MockPrompter::new(vec![MockResponse::Confirm(true)]);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let result = handle_recipient_delete(&prompter, dir.path(), "globex", &mut buf);
+
+        // Assert
+        assert!(result.is_ok());
+        let loaded = match load_config(dir.path()).unwrap() {
+            LoadResult::Loaded(c) => c,
+            _ => panic!("Expected Loaded"),
+        };
+        let recipients = loaded.recipients.unwrap();
+        assert_eq!(recipients.len(), 1);
+        assert_eq!(recipients[0].key, Some("acme".into()));
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("deleted"), "Expected 'deleted' in output");
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_handle_recipient_delete_user_declines() {
+        // Arrange
+        let config = v2_config_two_recipients();
+        let dir = setup_dir(Some(&config));
+        let prompter = MockPrompter::new(vec![MockResponse::Confirm(false)]);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let result = handle_recipient_delete(&prompter, dir.path(), "globex", &mut buf);
+
+        // Assert
+        assert!(result.is_ok());
+        let loaded = match load_config(dir.path()).unwrap() {
+            LoadResult::Loaded(c) => c,
+            _ => panic!("Expected Loaded"),
+        };
+        let recipients = loaded.recipients.unwrap();
+        assert_eq!(recipients.len(), 2);
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.is_empty(), "Expected no output on decline");
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_handle_recipient_delete_unknown_key_returns_error() {
+        // Arrange
+        let config = v2_config_two_recipients();
+        let dir = setup_dir(Some(&config));
+        let prompter = MockPrompter::new(vec![]);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let result = handle_recipient_delete(&prompter, dir.path(), "nope", &mut buf);
+
+        // Assert
+        assert!(matches!(result, Err(AppError::RecipientNotFound { .. })));
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_handle_recipient_delete_last_recipient_refused() {
+        // Arrange
+        let config = v2_complete_config();
+        let dir = setup_dir(Some(&config));
+        let prompter = MockPrompter::new(vec![]);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let result = handle_recipient_delete(&prompter, dir.path(), "acme", &mut buf);
+
+        // Assert
+        assert!(matches!(result, Err(AppError::LastRecipient)));
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_handle_recipient_delete_default_two_recipients_auto_assigns() {
+        // Arrange
+        let config = v2_config_two_recipients();
+        let dir = setup_dir(Some(&config));
+        let prompter = MockPrompter::new(vec![MockResponse::Confirm(true)]);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let result = handle_recipient_delete(&prompter, dir.path(), "acme", &mut buf);
+
+        // Assert
+        assert!(result.is_ok(), "Expected Ok, got {result:?}");
+        let loaded = match load_config(dir.path()).unwrap() {
+            LoadResult::Loaded(c) => c,
+            _ => panic!("Expected Loaded"),
+        };
+        assert_eq!(loaded.default_recipient, Some("globex".into()));
+        assert_eq!(loaded.recipients.unwrap().len(), 1);
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_handle_recipient_delete_default_prompts_new_default() {
+        // Arrange
+        let mut config = v2_config_two_recipients();
+        let mut recipients = config.recipients.take().unwrap();
+        recipients.push(Recipient {
+            key: Some("initech".into()),
+            name: "Initech Corp".into(),
+            address: vec!["300 Initech Way".into()],
+            company_id: None,
+            vat_number: None,
+        });
+        config.recipients = Some(recipients);
+        let dir = setup_dir(Some(&config));
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Confirm(true),
+            MockResponse::U32(2),
+        ]);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let result = handle_recipient_delete(&prompter, dir.path(), "acme", &mut buf);
+
+        // Assert
+        assert!(result.is_ok(), "Expected Ok, got {result:?}");
+        let loaded = match load_config(dir.path()).unwrap() {
+            LoadResult::Loaded(c) => c,
+            _ => panic!("Expected Loaded"),
+        };
+        assert_eq!(loaded.default_recipient, Some("initech".into()));
+        assert_eq!(loaded.recipients.unwrap().len(), 2);
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_handle_recipient_delete_confirmation_includes_key_and_name() {
+        // Arrange
+        let config = v2_config_two_recipients();
+        let dir = setup_dir(Some(&config));
+        let prompter = MockPrompter::new(vec![MockResponse::Confirm(true)]);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        handle_recipient_delete(&prompter, dir.path(), "globex", &mut buf).unwrap();
+
+        // Assert
+        let prompts = prompter.prompts.borrow();
+        assert_eq!(prompts.len(), 1);
+        assert!(prompts[0].contains("globex"), "Expected 'globex' in prompt: {}", prompts[0]);
+        assert!(prompts[0].contains("Globex Inc"), "Expected 'Globex Inc' in prompt: {}", prompts[0]);
+    }
+
+    #[test]
+    fn test_handle_recipient_delete_no_config_returns_error() {
+        // Arrange
+        let dir = setup_dir(None);
+        let prompter = MockPrompter::new(vec![]);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let result = handle_recipient_delete(&prompter, dir.path(), "acme", &mut buf);
 
         // Assert
         assert!(matches!(result, Err(AppError::ConfigNotFound)));
