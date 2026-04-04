@@ -97,16 +97,19 @@ pub struct LineItem {
     pub rate: f64,
     /// Computed amount: days * rate, rounded to 2 decimal places.
     pub amount: f64,
+    /// Currency code (e.g. "EUR", "USD").
+    pub currency: String,
 }
 
 impl LineItem {
     /// Create a `LineItem`, computing amount as `days * rate` rounded to 2dp.
-    pub fn new(description: String, days: f64, rate: f64) -> Self {
+    pub fn new(description: String, days: f64, rate: f64, currency: String) -> Self {
         Self {
             description,
             days,
             rate,
             amount: round_half_up_2dp(days * rate),
+            currency,
         }
     }
 }
@@ -256,7 +259,7 @@ mod tests {
         let rate = 800.0;
 
         // Act
-        let item = LineItem::new("Software development".into(), days, rate);
+        let item = LineItem::new("Software development".into(), days, rate, "EUR".into());
 
         // Assert
         assert!((item.amount - 8000.0).abs() < f64::EPSILON);
@@ -268,7 +271,7 @@ mod tests {
         let description = "Consulting work";
 
         // Act
-        let item = LineItem::new(description.into(), 5.0, 100.0);
+        let item = LineItem::new(description.into(), 5.0, 100.0, "EUR".into());
 
         // Assert
         assert_eq!(item.description, "Consulting work");
@@ -281,7 +284,7 @@ mod tests {
         let rate = 750.0;
 
         // Act
-        let item = LineItem::new("Dev work".into(), days, rate);
+        let item = LineItem::new("Dev work".into(), days, rate, "EUR".into());
 
         // Assert
         assert!((item.days - 12.5).abs() < f64::EPSILON);
@@ -295,7 +298,7 @@ mod tests {
         let rate = 100.03;
 
         // Act
-        let item = LineItem::new("Dev".into(), days, rate);
+        let item = LineItem::new("Dev".into(), days, rate, "EUR".into());
 
         // Assert
         assert!((item.amount - 1050.32).abs() < f64::EPSILON);
@@ -308,7 +311,7 @@ mod tests {
         let rate = 1.111;
 
         // Act
-        let item = LineItem::new("Dev".into(), days, rate);
+        let item = LineItem::new("Dev".into(), days, rate, "EUR".into());
 
         // Assert
         assert!((item.amount - 11.11).abs() < f64::EPSILON);
@@ -321,7 +324,7 @@ mod tests {
         let rate = 1.119;
 
         // Act
-        let item = LineItem::new("Dev".into(), days, rate);
+        let item = LineItem::new("Dev".into(), days, rate, "EUR".into());
 
         // Assert
         assert!((item.amount - 1.12).abs() < f64::EPSILON);
@@ -334,7 +337,7 @@ mod tests {
         let rate = 100.0;
 
         // Act
-        let item = LineItem::new("Dev".into(), days, rate);
+        let item = LineItem::new("Dev".into(), days, rate, "EUR".into());
 
         // Assert
         assert!((item.amount - 500.0).abs() < f64::EPSILON);
@@ -347,7 +350,7 @@ mod tests {
         let rate = 100.0;
 
         // Act
-        let item = LineItem::new("Dev".into(), days, rate);
+        let item = LineItem::new("Dev".into(), days, rate, "EUR".into());
 
         // Assert
         assert!((item.amount - 1234.0).abs() < f64::EPSILON);
@@ -360,10 +363,37 @@ mod tests {
         let rate = 0.01;
 
         // Act
-        let item = LineItem::new("Dev".into(), days, rate);
+        let item = LineItem::new("Dev".into(), days, rate, "EUR".into());
 
         // Assert
         assert!((item.amount - 0.01).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn line_item_new_stores_currency() {
+        // Arrange
+        let days = 10.0;
+        let rate = 800.0;
+
+        // Act
+        let item = LineItem::new("Dev".into(), days, rate, "USD".into());
+
+        // Assert
+        assert_eq!(item.currency, "USD");
+    }
+
+    #[test]
+    fn line_item_new_still_computes_amount_with_currency() {
+        // Arrange
+        let days = 10.5;
+        let rate = 100.03;
+
+        // Act
+        let item = LineItem::new("Dev".into(), days, rate, "CZK".into());
+
+        // Assert
+        assert!((item.amount - 1050.32).abs() < f64::EPSILON);
+        assert_eq!(item.currency, "CZK");
     }
 
     #[test]

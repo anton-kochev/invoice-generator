@@ -736,6 +736,7 @@ mod tests {
             key: "dev".into(),
             description: "Dev".into(),
             default_rate: 100.0,
+            currency: None,
         }]
     }
 

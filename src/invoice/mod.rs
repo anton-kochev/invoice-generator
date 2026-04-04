@@ -1,3 +1,4 @@
+pub mod currency;
 pub mod display;
 pub mod line_item;
 pub mod period;

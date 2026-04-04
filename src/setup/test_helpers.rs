@@ -39,6 +39,7 @@ pub fn synthetic_presets() -> Vec<Preset> {
         key: "dev".into(),
         description: "Development Services".into(),
         default_rate: 100.0,
+        currency: None,
     }]
 }
 
@@ -80,11 +81,13 @@ pub fn config_with_two_presets() -> Config {
             key: "dev".into(),
             description: "Development Services".into(),
             default_rate: 100.0,
+            currency: None,
         },
         Preset {
             key: "design".into(),
             description: "Design Work".into(),
             default_rate: 80.0,
+            currency: None,
         },
     ]);
     cfg

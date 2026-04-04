@@ -54,8 +54,8 @@ mod tests {
             due_date: Date::from_calendar_date(2026, Month::May, 9).unwrap(),
             currency: "EUR".into(),
             line_items: vec![
-                LineItem::new("Software development".into(), 10.0, 800.0),
-                LineItem::new("Technical consulting".into(), 5.0, 1000.0),
+                LineItem::new("Software development".into(), 10.0, 800.0, "EUR".into()),
+                LineItem::new("Technical consulting".into(), 5.0, 1000.0, "EUR".into()),
             ],
             total: 13000.0,
         }
@@ -87,6 +87,7 @@ mod tests {
                 key: "dev".into(),
                 description: "Software development".into(),
                 default_rate: 800.0,
+                currency: None,
             }],
             defaults: Defaults::default(),
         }

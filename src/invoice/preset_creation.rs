@@ -30,6 +30,7 @@ pub fn collect_new_preset(
         key,
         description,
         default_rate,
+        currency: None,
     })
 }
 
@@ -45,6 +46,7 @@ mod tests {
             key: "dev".into(),
             description: "Development".into(),
             default_rate: 800.0,
+            currency: None,
         }];
         let prompter = MockPrompter::new(vec![
             MockResponse::Text("analytics".into()),
@@ -69,6 +71,7 @@ mod tests {
             key: "dev".into(),
             description: "Development".into(),
             default_rate: 800.0,
+            currency: None,
         }];
         let prompter = MockPrompter::new(vec![
             MockResponse::Text("dev".into()),
@@ -100,11 +103,13 @@ mod tests {
                 key: "dev".into(),
                 description: "Development".into(),
                 default_rate: 800.0,
+                currency: None,
             },
             Preset {
                 key: "qa".into(),
                 description: "QA".into(),
                 default_rate: 600.0,
+                currency: None,
             },
         ];
         let prompter = MockPrompter::new(vec![
@@ -139,6 +144,7 @@ mod tests {
             key: "dev".into(),
             description: "Development".into(),
             default_rate: 800.0,
+            currency: None,
         }];
         let prompter = MockPrompter::new(vec![
             MockResponse::Text("Dev".into()),

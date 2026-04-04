@@ -27,6 +27,7 @@ pub fn collect_presets(
             key,
             description,
             default_rate,
+            currency: None,
         });
 
         if !prompter.confirm("Add another preset?", false)? {

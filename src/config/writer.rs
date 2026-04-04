@@ -217,6 +217,7 @@ mod tests {
             key: "dev".to_string(),
             description: "Development Services".to_string(),
             default_rate: 100.0,
+            currency: None,
         }]
     }
 
@@ -384,6 +385,7 @@ mod tests {
             key: "design".to_string(),
             description: "Design work".to_string(),
             default_rate: 80.0,
+            currency: None,
         };
 
         // Act
@@ -413,6 +415,7 @@ mod tests {
                 key: "qa".to_string(),
                 description: "QA work".to_string(),
                 default_rate: 60.0,
+                currency: None,
             },
         )
         .unwrap();
@@ -444,6 +447,7 @@ mod tests {
                 key: "ops".to_string(),
                 description: "Operations".to_string(),
                 default_rate: 90.0,
+                currency: None,
             },
         )
         .unwrap();
@@ -469,6 +473,7 @@ mod tests {
                 key: "x".to_string(),
                 description: "X".to_string(),
                 default_rate: 50.0,
+                currency: None,
             },
         );
 
@@ -489,6 +494,7 @@ mod tests {
             key: "design".to_string(),
             description: "Design work".to_string(),
             default_rate: 80.0,
+            currency: None,
         });
         config.presets = Some(presets);
         save_config(dir.path(), &config).unwrap();
@@ -514,6 +520,7 @@ mod tests {
             key: "design".to_string(),
             description: "Design work".to_string(),
             default_rate: 80.0,
+            currency: None,
         });
         config.presets = Some(presets);
         save_config(dir.path(), &config).unwrap();
@@ -548,6 +555,7 @@ mod tests {
             key: "design".to_string(),
             description: "Design work".to_string(),
             default_rate: 80.0,
+            currency: None,
         });
         config.presets = Some(presets);
         save_config(dir.path(), &config).unwrap();
@@ -585,16 +593,19 @@ mod tests {
                     key: "dev".to_string(),
                     description: "Development".to_string(),
                     default_rate: 100.0,
+                    currency: None,
                 },
                 Preset {
                     key: "design".to_string(),
                     description: "Design".to_string(),
                     default_rate: 80.0,
+                    currency: None,
                 },
                 Preset {
                     key: "qa".to_string(),
                     description: "QA".to_string(),
                     default_rate: 60.0,
+                    currency: None,
                 },
             ]),
             ..complete_config()
@@ -733,11 +744,13 @@ mod tests {
                     key: "dev".to_string(),
                     description: "Development".to_string(),
                     default_rate: 100.0,
+                    currency: None,
                 },
                 Preset {
                     key: "design".to_string(),
                     description: "Design".to_string(),
                     default_rate: 80.0,
+                    currency: None,
                 },
             ]),
             ..complete_config()

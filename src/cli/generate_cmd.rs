@@ -8,6 +8,8 @@ use crate::invoice::summary::build_summary;
 use crate::invoice::types::{InvoicePeriod, LineItem};
 use crate::pdf::generate_pdf;
 
+use crate::invoice::currency::effective_currency;
+
 use super::common::pdf_output_path;
 use super::load_validated_config;
 use super::GenerateArgs;
@@ -57,7 +59,7 @@ fn parse_items(json: &str) -> Result<Vec<ItemSpec>, AppError> {
 }
 
 /// Resolve CLI arguments into concrete `LineItem`s using the config's presets.
-fn resolve_line_items(args: &GenerateArgs, presets: &[Preset]) -> Result<Vec<LineItem>, AppError> {
+fn resolve_line_items(args: &GenerateArgs, presets: &[Preset], default_currency: &str) -> Result<Vec<LineItem>, AppError> {
     if let Some(ref json) = args.items {
         // Multi-item mode: --items JSON
         let specs = parse_items(json)?;
@@ -66,7 +68,8 @@ fn resolve_line_items(args: &GenerateArgs, presets: &[Preset]) -> Result<Vec<Lin
             .map(|spec| {
                 let preset = find_preset(&spec.preset, presets)?;
                 let rate = spec.rate.unwrap_or(preset.default_rate);
-                Ok(LineItem::new(preset.description.clone(), spec.days, rate))
+                let currency = effective_currency(preset, default_currency).to_string();
+                Ok(LineItem::new(preset.description.clone(), spec.days, rate, currency))
             })
             .collect()
     } else {
@@ -75,10 +78,12 @@ fn resolve_line_items(args: &GenerateArgs, presets: &[Preset]) -> Result<Vec<Lin
         let days = args.days.expect("clap enforces days with preset");
         validate_days(days)?;
         let preset = find_preset(key, presets)?;
+        let currency = effective_currency(preset, default_currency).to_string();
         Ok(vec![LineItem::new(
             preset.description.clone(),
             days,
             preset.default_rate,
+            currency,
         )])
     }
 }
@@ -117,7 +122,7 @@ pub fn handle_generate(
     let validated = load_validated_config(cwd)?;
     let recipient = resolve_recipient(args.client.as_deref(), &validated)?;
     let period = validate_period(args.month, args.year)?;
-    let line_items = resolve_line_items(args, &validated.presets)?;
+    let line_items = resolve_line_items(args, &validated.presets, &validated.defaults.currency)?;
     let summary = build_summary(period, line_items, &validated.defaults)?;
     let pdf_bytes = generate_pdf(&summary, &validated, recipient)?;
     let output_path = pdf_output_path(&validated.sender.name, &period, cwd);
@@ -163,6 +168,7 @@ mod tests {
                 key: key.to_string(),
                 description: format!("{key} services"),
                 default_rate: *rate,
+                currency: None,
             })
             .collect();
         Config {
@@ -576,5 +582,73 @@ mod tests {
         assert!(result.is_ok(), "v1 config should work without --client flag: {result:?}");
         let output = String::from_utf8(buf).unwrap();
         assert!(output.contains("PDF saved:"));
+    }
+
+    // ── Phase 9: Currency wiring tests ──
+
+    fn config_with_currency_presets(entries: &[(&str, f64, Option<&str>)]) -> crate::config::types::Config {
+        use crate::config::types::{Config, Preset};
+        let presets: Vec<Preset> = entries
+            .iter()
+            .map(|(key, rate, currency)| Preset {
+                key: key.to_string(),
+                description: format!("{key} services"),
+                default_rate: *rate,
+                currency: currency.map(|c| c.to_string()),
+            })
+            .collect();
+        Config {
+            presets: Some(presets),
+            ..complete_config()
+        }
+    }
+
+    #[test]
+    fn test_handle_generate_single_item_preset_currency_override() {
+        // Arrange
+        let config = config_with_currency_presets(&[("dev", 800.0, Some("CZK"))]);
+        let dir = setup_dir(Some(&config));
+        let args = generate_single_args(3, 2026, "dev", 10.0);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let result = handle_generate(&args, dir.path(), &mut buf);
+
+        // Assert
+        assert!(result.is_ok(), "Expected Ok, got {result:?}");
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("PDF saved:"));
+    }
+
+    #[test]
+    fn test_handle_generate_items_mixed_currency_returns_error() {
+        // Arrange
+        let config = config_with_currency_presets(&[("alpha", 800.0, Some("EUR")), ("beta", 500.0, Some("USD"))]);
+        let dir = setup_dir(Some(&config));
+        let json = r#"[{"preset":"alpha","days":10},{"preset":"beta","days":5}]"#;
+        let args = generate_items_args(3, 2026, json);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let result = handle_generate(&args, dir.path(), &mut buf);
+
+        // Assert
+        assert!(matches!(result, Err(AppError::MixedCurrency(_))));
+    }
+
+    #[test]
+    fn test_handle_generate_items_same_override_currency_succeeds() {
+        // Arrange
+        let config = config_with_currency_presets(&[("alpha", 800.0, Some("USD")), ("beta", 500.0, Some("USD"))]);
+        let dir = setup_dir(Some(&config));
+        let json = r#"[{"preset":"alpha","days":10},{"preset":"beta","days":5}]"#;
+        let args = generate_items_args(3, 2026, json);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let result = handle_generate(&args, dir.path(), &mut buf);
+
+        // Assert
+        assert!(result.is_ok(), "Expected Ok, got {result:?}");
     }
 }

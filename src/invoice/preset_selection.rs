@@ -2,6 +2,7 @@ use crate::config::types::Preset;
 use crate::error::AppError;
 use crate::setup::prompter::Prompter;
 
+use super::currency::effective_currency;
 use super::types::PresetSelection;
 
 /// Interactively select a preset for a line item.
@@ -16,12 +17,13 @@ pub fn select_preset(
     prompter.message("\nSelect a preset for this line item:\n");
 
     for (i, preset) in presets.iter().enumerate() {
+        let effective = effective_currency(preset, currency);
         prompter.message(&format!(
             "  [{}] {} \u{2014} {} ({} {:.2}/day)",
             i + 1,
             preset.key,
             preset.description,
-            currency,
+            effective,
             preset.default_rate,
         ));
     }
@@ -55,11 +57,13 @@ mod tests {
                 key: "dev".into(),
                 description: "Software development".into(),
                 default_rate: 800.0,
+                currency: None,
             },
             Preset {
                 key: "consulting".into(),
                 description: "Technical consulting".into(),
                 default_rate: 1000.0,
+                currency: None,
             },
         ]
     }
@@ -97,6 +101,7 @@ mod tests {
             key: "design".into(),
             description: "Graphic design".into(),
             default_rate: 500.0,
+            currency: None,
         }];
         let prompter = MockPrompter::new(vec![MockResponse::U32(1)]);
 
@@ -163,6 +168,7 @@ mod tests {
             key: "solo".into(),
             description: "Solo work".into(),
             default_rate: 600.0,
+            currency: None,
         }];
         let prompter = MockPrompter::new(vec![MockResponse::U32(2)]);
 
@@ -262,6 +268,7 @@ mod tests {
             key: "special".into(),
             description: "Special project work".into(),
             default_rate: 1234.56,
+            currency: None,
         }];
         let prompter = MockPrompter::new(vec![MockResponse::U32(1)]);
 
@@ -288,6 +295,7 @@ mod tests {
                 key: format!("preset{i}"),
                 description: format!("Preset number {i}"),
                 default_rate: i as f64 * 100.0,
+                currency: None,
             })
             .collect();
         let prompter = MockPrompter::new(vec![MockResponse::U32(6)]);
@@ -304,5 +312,46 @@ mod tests {
             "Expected '[6] + Create new preset' in messages, got: {all}"
         );
         prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn displays_preset_override_currency() {
+        // Arrange
+        let presets = vec![Preset {
+            key: "dev".into(),
+            description: "Development".into(),
+            default_rate: 800.0,
+            currency: Some("USD".into()),
+        }];
+        let prompter = MockPrompter::new(vec![MockResponse::U32(1)]);
+
+        // Act
+        let _ = select_preset(&prompter, &presets, "EUR");
+
+        // Assert
+        let messages = prompter.messages.borrow();
+        let display = messages.iter().find(|m| m.contains("dev")).unwrap();
+        assert!(display.contains("USD"), "Expected 'USD' in: {display}");
+        assert!(!display.contains("EUR"), "Should not contain 'EUR' in: {display}");
+    }
+
+    #[test]
+    fn displays_default_currency_when_preset_has_none() {
+        // Arrange
+        let presets = vec![Preset {
+            key: "dev".into(),
+            description: "Development".into(),
+            default_rate: 800.0,
+            currency: None,
+        }];
+        let prompter = MockPrompter::new(vec![MockResponse::U32(1)]);
+
+        // Act
+        let _ = select_preset(&prompter, &presets, "EUR");
+
+        // Assert
+        let messages = prompter.messages.borrow();
+        let display = messages.iter().find(|m| m.contains("dev")).unwrap();
+        assert!(display.contains("EUR"), "Expected 'EUR' in: {display}");
     }
 }

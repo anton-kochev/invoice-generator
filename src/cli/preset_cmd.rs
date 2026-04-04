@@ -6,13 +6,14 @@ use crate::config::types::Preset;
 use crate::config::validator::ValidatedConfig;
 use crate::config::writer::remove_preset;
 use crate::error::AppError;
+use crate::invoice::currency::effective_currency;
 use crate::setup::prompter::Prompter;
 
 /// Format presets as a table string with columns: Key, Description, Default Rate, Currency.
 ///
 /// Dynamic column widths based on data (minimum widths: Key=3, Description=11, Rate=12).
 /// Rate is formatted with 2 decimal places and right-aligned.
-pub fn format_preset_table(presets: &[Preset], currency: &str) -> String {
+pub fn format_preset_table(presets: &[Preset], default_currency: &str) -> String {
     let min_key = 3;
     let min_desc = 11;
     let min_rate = 12;
@@ -35,7 +36,12 @@ pub fn format_preset_table(presets: &[Preset], currency: &str) -> String {
         .max()
         .unwrap_or(0)
         .max(min_rate);
-    let curr_w = "Currency".len().max(currency.len());
+    let curr_w = presets
+        .iter()
+        .map(|p| effective_currency(p, default_currency).len())
+        .max()
+        .unwrap_or(0)
+        .max(8); // "Currency".len()
 
     let mut out = String::new();
 
@@ -56,9 +62,10 @@ pub fn format_preset_table(presets: &[Preset], currency: &str) -> String {
 
     // Data rows
     for p in presets {
+        let curr = effective_currency(p, default_currency);
         out.push_str(&format!(
             "{:<key_w$}  {:<desc_w$}  {:>rate_w$.2}  {:<curr_w$}\n",
-            p.key, p.description, p.default_rate, currency,
+            p.key, p.description, p.default_rate, curr,
         ));
     }
 
@@ -122,6 +129,7 @@ mod tests {
             key: "dev".to_string(),
             description: "Development Services".to_string(),
             default_rate: 100.0,
+            currency: None,
         }
     }
 
@@ -179,6 +187,7 @@ mod tests {
                 key: "design".to_string(),
                 description: "Design work".to_string(),
                 default_rate: 80.0,
+                currency: None,
             },
         ];
 
@@ -211,6 +220,7 @@ mod tests {
             key: "lng".to_string(),
             description: long_desc.clone(),
             default_rate: 50.0,
+            currency: None,
         }];
 
         // Act
@@ -387,5 +397,76 @@ mod tests {
         // Assert
         assert!(matches!(result, Err(AppError::ConfigNotFound)));
         prompter.assert_exhausted();
+    }
+
+    // ── Phase 10: Per-preset currency in table ──
+
+    #[test]
+    fn test_format_preset_table_shows_per_preset_currency() {
+        // Arrange
+        let presets = vec![Preset {
+            key: "dev".into(),
+            description: "Development".into(),
+            default_rate: 800.0,
+            currency: Some("CZK".into()),
+        }];
+
+        // Act
+        let table = format_preset_table(&presets, "EUR");
+
+        // Assert
+        assert!(table.contains("CZK"), "Expected 'CZK' in table:\n{table}");
+        // Should NOT show the default EUR for this preset
+        let data_lines: Vec<&str> = table.lines().skip(2).collect(); // skip header + separator
+        let dev_line = data_lines.iter().find(|l| l.contains("dev")).unwrap();
+        assert!(dev_line.contains("CZK"), "Dev row should show CZK: {dev_line}");
+    }
+
+    #[test]
+    fn test_format_preset_table_shows_default_when_none() {
+        // Arrange
+        let presets = vec![Preset {
+            key: "dev".into(),
+            description: "Development".into(),
+            default_rate: 800.0,
+            currency: None,
+        }];
+
+        // Act
+        let table = format_preset_table(&presets, "EUR");
+
+        // Assert
+        let data_lines: Vec<&str> = table.lines().skip(2).collect();
+        let dev_line = data_lines.iter().find(|l| l.contains("dev")).unwrap();
+        assert!(dev_line.contains("EUR"), "Dev row should show EUR: {dev_line}");
+    }
+
+    #[test]
+    fn test_format_preset_table_mixed_currencies() {
+        // Arrange
+        let presets = vec![
+            Preset {
+                key: "dev".into(),
+                description: "Development".into(),
+                default_rate: 800.0,
+                currency: Some("USD".into()),
+            },
+            Preset {
+                key: "qa".into(),
+                description: "QA work".into(),
+                default_rate: 600.0,
+                currency: None,
+            },
+        ];
+
+        // Act
+        let table = format_preset_table(&presets, "EUR");
+
+        // Assert
+        let data_lines: Vec<&str> = table.lines().skip(2).collect();
+        let dev_line = data_lines.iter().find(|l| l.contains("dev")).unwrap();
+        let qa_line = data_lines.iter().find(|l| l.contains("qa")).unwrap();
+        assert!(dev_line.contains("USD"), "Dev row should show USD: {dev_line}");
+        assert!(qa_line.contains("EUR"), "QA row should show EUR: {qa_line}");
     }
 }

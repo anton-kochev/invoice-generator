@@ -3,6 +3,7 @@ use time::{Date, Duration, Month};
 use crate::config::types::Defaults;
 use crate::error::AppError;
 
+use super::currency::validate_uniform_currency;
 use super::types::{InvoicePeriod, InvoiceSummary, LineItem, round_half_up_2dp};
 
 /// Format invoice number as "INV-YYYY-MM".
@@ -51,6 +52,7 @@ pub fn build_summary(
     let invoice_number = format_invoice_number(&period);
     let invoice_date = compute_invoice_date(&period, defaults.invoice_date_day)?;
     let due_date = invoice_date + Duration::days(defaults.payment_terms_days as i64);
+    let currency = validate_uniform_currency(&line_items)?;
     let total = round_half_up_2dp(line_items.iter().map(|item| item.amount).sum());
 
     Ok(InvoiceSummary {
@@ -58,7 +60,7 @@ pub fn build_summary(
         period,
         invoice_date,
         due_date,
-        currency: defaults.currency.clone(),
+        currency,
         line_items,
         total,
     })
@@ -78,8 +80,8 @@ mod tests {
 
     fn make_items() -> Vec<LineItem> {
         vec![
-            LineItem::new("Software development".into(), 10.0, 800.0),
-            LineItem::new("Technical consulting".into(), 5.0, 1000.0),
+            LineItem::new("Software development".into(), 10.0, 800.0, "EUR".into()),
+            LineItem::new("Technical consulting".into(), 5.0, 1000.0, "EUR".into()),
         ]
     }
 
@@ -286,7 +288,7 @@ mod tests {
     fn build_summary_total_single_item() {
         // Arrange
         let period = InvoicePeriod::new(3, 2026).unwrap();
-        let items = vec![LineItem::new("Dev".into(), 10.0, 800.0)];
+        let items = vec![LineItem::new("Dev".into(), 10.0, 800.0, "EUR".into())];
 
         // Act
         let summary = build_summary(period, items, &make_defaults()).unwrap();
@@ -313,8 +315,8 @@ mod tests {
         // Arrange
         let period = InvoicePeriod::new(3, 2026).unwrap();
         let items = vec![
-            LineItem::new("A".into(), 1.0, 33.33),
-            LineItem::new("B".into(), 1.0, 66.67),
+            LineItem::new("A".into(), 1.0, 33.33, "EUR".into()),
+            LineItem::new("B".into(), 1.0, 66.67, "EUR".into()),
         ];
 
         // Act
@@ -337,13 +339,13 @@ mod tests {
         // Act
         let summary = build_summary(
             period,
-            vec![LineItem::new("Dev".into(), 1.0, 100.0)],
+            vec![LineItem::new("Dev".into(), 1.0, 100.0, "EUR".into())],
             &defaults,
         )
         .unwrap();
 
-        // Assert
-        assert_eq!(summary.currency, "USD");
+        // Assert — currency comes from line items, not defaults
+        assert_eq!(summary.currency, "EUR");
     }
 
     #[test]
@@ -354,12 +356,46 @@ mod tests {
         // Act
         let summary = build_summary(
             period,
-            vec![LineItem::new("Dev".into(), 1.0, 100.0)],
+            vec![LineItem::new("Dev".into(), 1.0, 100.0, "EUR".into())],
             &make_defaults(),
         )
         .unwrap();
 
         // Assert
         assert_eq!(summary.period, period);
+    }
+
+    #[test]
+    fn build_summary_derives_currency_from_line_items() {
+        // Arrange
+        let period = InvoicePeriod::new(3, 2026).unwrap();
+        let defaults = Defaults {
+            currency: "EUR".into(),
+            invoice_date_day: 9,
+            payment_terms_days: 30,
+        };
+        let items = vec![LineItem::new("Dev".into(), 10.0, 800.0, "CZK".into())];
+
+        // Act
+        let summary = build_summary(period, items, &defaults).unwrap();
+
+        // Assert — currency comes from items, not defaults
+        assert_eq!(summary.currency, "CZK");
+    }
+
+    #[test]
+    fn build_summary_mixed_currency_returns_error() {
+        // Arrange
+        let period = InvoicePeriod::new(3, 2026).unwrap();
+        let items = vec![
+            LineItem::new("Dev".into(), 10.0, 800.0, "EUR".into()),
+            LineItem::new("QA".into(), 5.0, 600.0, "USD".into()),
+        ];
+
+        // Act
+        let result = build_summary(period, items, &make_defaults());
+
+        // Assert
+        assert!(matches!(result, Err(crate::error::AppError::MixedCurrency(_))));
     }
 }

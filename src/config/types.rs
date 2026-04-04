@@ -62,6 +62,8 @@ pub struct Preset {
     pub key: String,
     pub description: String,
     pub default_rate: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub currency: Option<String>,
 }
 
 fn default_currency() -> String {
@@ -249,5 +251,64 @@ mod tests {
         // Assert
         assert_eq!(loaded.recipients.as_ref().unwrap().len(), 1);
         assert_eq!(loaded.default_recipient, Some("acme".into()));
+    }
+
+    #[test]
+    fn test_preset_without_currency_deserializes_as_none() {
+        // Arrange
+        let yaml = "key: dev\ndescription: Development\ndefault_rate: 800.0\n";
+
+        // Act
+        let preset: Preset = serde_yaml::from_str(yaml).unwrap();
+
+        // Assert
+        assert!(preset.currency.is_none());
+    }
+
+    #[test]
+    fn test_preset_with_currency_deserializes() {
+        // Arrange
+        let yaml = "key: dev\ndescription: Development\ndefault_rate: 800.0\ncurrency: USD\n";
+
+        // Act
+        let preset: Preset = serde_yaml::from_str(yaml).unwrap();
+
+        // Assert
+        assert_eq!(preset.currency, Some("USD".into()));
+    }
+
+    #[test]
+    fn test_preset_currency_none_omitted_from_yaml() {
+        // Arrange
+        let preset = Preset {
+            key: "dev".into(),
+            description: "Development".into(),
+            default_rate: 800.0,
+            currency: None,
+        };
+
+        // Act
+        let yaml = serde_yaml::to_string(&preset).unwrap();
+
+        // Assert
+        assert!(!yaml.contains("currency"), "None currency should be omitted from YAML");
+    }
+
+    #[test]
+    fn test_preset_with_currency_round_trips() {
+        // Arrange
+        let preset = Preset {
+            key: "dev".into(),
+            description: "Development".into(),
+            default_rate: 800.0,
+            currency: Some("CZK".into()),
+        };
+
+        // Act
+        let yaml = serde_yaml::to_string(&preset).unwrap();
+        let loaded: Preset = serde_yaml::from_str(&yaml).unwrap();
+
+        // Assert
+        assert_eq!(loaded.currency, Some("CZK".into()));
     }
 }

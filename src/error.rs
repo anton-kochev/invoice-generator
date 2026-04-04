@@ -65,6 +65,10 @@ pub enum AppError {
     /// Cannot delete the last remaining recipient.
     #[error("Cannot delete — at least one recipient must exist.")]
     LastRecipient,
+
+    /// Line items have conflicting currencies.
+    #[error("Mixed currencies in line items: {0}")]
+    MixedCurrency(String),
 }
 
 #[cfg(test)]
@@ -137,6 +141,19 @@ mod tests {
         assert!(msg.contains("xyz"), "Expected 'xyz' in: {msg}");
         assert!(msg.contains("acme"), "Expected 'acme' in: {msg}");
         assert!(msg.contains("globex"), "Expected 'globex' in: {msg}");
+    }
+
+    #[test]
+    fn test_mixed_currency_error_displays_currencies() {
+        // Arrange
+        let err = AppError::MixedCurrency("EUR, USD".into());
+
+        // Act
+        let msg = format!("{err}");
+
+        // Assert
+        assert!(msg.contains("EUR"), "Expected 'EUR' in: {msg}");
+        assert!(msg.contains("USD"), "Expected 'USD' in: {msg}");
     }
 
     #[test]

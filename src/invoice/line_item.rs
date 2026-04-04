@@ -5,6 +5,7 @@ use crate::config::writer::append_preset;
 use crate::error::AppError;
 use crate::setup::prompter::Prompter;
 
+use super::currency::effective_currency;
 use super::preset_creation;
 use super::preset_selection::select_preset;
 use super::types::{LineItem, PresetSelection};
@@ -13,19 +14,20 @@ use super::types::{LineItem, PresetSelection};
 pub fn collect_all_line_items(
     prompter: &dyn Prompter,
     presets: &[Preset],
-    currency: &str,
+    default_currency: &str,
     dir: &Path,
 ) -> Result<Vec<LineItem>, AppError> {
     let mut items = Vec::new();
     let mut presets = presets.to_vec();
 
     loop {
-        let selection = select_preset(prompter, &presets, currency)?;
+        let selection = select_preset(prompter, &presets, default_currency)?;
 
         match selection {
             PresetSelection::Existing(preset) => {
                 let item_number = (items.len() + 1) as u32;
-                let item = collect_line_item_details(prompter, &preset, item_number)?;
+                let currency = effective_currency(&preset, default_currency);
+                let item = collect_line_item_details(prompter, &preset, item_number, currency)?;
                 items.push(item);
             }
             PresetSelection::CreateNew => {
@@ -36,7 +38,8 @@ pub fn collect_all_line_items(
                     new_preset.key
                 ));
                 let item_number = (items.len() + 1) as u32;
-                let item = collect_line_item_details(prompter, &new_preset, item_number)?;
+                let currency = effective_currency(&new_preset, default_currency);
+                let item = collect_line_item_details(prompter, &new_preset, item_number, currency)?;
                 presets.push(new_preset);
                 items.push(item);
             }
@@ -55,6 +58,7 @@ pub fn collect_line_item_details(
     prompter: &dyn Prompter,
     preset: &Preset,
     item_number: u32,
+    currency: &str,
 ) -> Result<LineItem, AppError> {
     prompter.message(&format!(
         "\nLine item #{}: {}",
@@ -68,7 +72,7 @@ pub fn collect_line_item_details(
         preset.default_rate,
     )?;
 
-    let item = LineItem::new(preset.description.clone(), days, rate);
+    let item = LineItem::new(preset.description.clone(), days, rate, currency.to_string());
 
     prompter.message(&format!(
         "  => {:.2} days x {:.2}/day = {:.2}",
@@ -112,6 +116,7 @@ mod tests {
                 key: "dev".into(),
                 description: "Software development".into(),
                 default_rate: 800.0,
+                currency: None,
             }]),
             defaults: Some(Defaults {
                 currency: "EUR".into(),
@@ -129,11 +134,13 @@ mod tests {
                 key: "dev".into(),
                 description: "Software development".into(),
                 default_rate: 800.0,
+                currency: None,
             },
             Preset {
                 key: "consulting".into(),
                 description: "Technical consulting".into(),
                 default_rate: 1000.0,
+                currency: None,
             },
         ]
     }
@@ -143,6 +150,7 @@ mod tests {
             key: "dev".into(),
             description: "Software development".into(),
             default_rate: 800.0,
+            currency: None,
         }
     }
 
@@ -156,7 +164,7 @@ mod tests {
         ]);
 
         // Act
-        let _ = collect_line_item_details(&prompter, &preset, 1).unwrap();
+        let _ = collect_line_item_details(&prompter, &preset, 1, "EUR").unwrap();
 
         // Assert
         let messages = prompter.messages.borrow();
@@ -174,7 +182,7 @@ mod tests {
         ]);
 
         // Act
-        let item = collect_line_item_details(&prompter, &preset, 1).unwrap();
+        let item = collect_line_item_details(&prompter, &preset, 1, "EUR").unwrap();
 
         // Assert
         assert!((item.days - 10.0).abs() < f64::EPSILON);
@@ -193,7 +201,7 @@ mod tests {
         ]);
 
         // Act
-        let item = collect_line_item_details(&prompter, &preset, 1).unwrap();
+        let item = collect_line_item_details(&prompter, &preset, 1, "EUR").unwrap();
 
         // Assert
         assert!((item.days - 5.0).abs() < f64::EPSILON);
@@ -212,7 +220,7 @@ mod tests {
         ]);
 
         // Act
-        let item = collect_line_item_details(&prompter, &preset, 1).unwrap();
+        let item = collect_line_item_details(&prompter, &preset, 1, "EUR").unwrap();
 
         // Assert
         assert!((item.amount - 1234.0).abs() < f64::EPSILON);
@@ -228,7 +236,7 @@ mod tests {
         ]);
 
         // Act
-        let _ = collect_line_item_details(&prompter, &preset, 1).unwrap();
+        let _ = collect_line_item_details(&prompter, &preset, 1, "EUR").unwrap();
 
         // Assert
         let messages = prompter.messages.borrow();
@@ -245,7 +253,7 @@ mod tests {
         ]);
 
         // Act
-        let item = collect_line_item_details(&prompter, &preset, 1).unwrap();
+        let item = collect_line_item_details(&prompter, &preset, 1, "EUR").unwrap();
 
         // Assert
         assert_eq!(item.description, "Software development");
@@ -261,7 +269,7 @@ mod tests {
         ]);
 
         // Act
-        let _ = collect_line_item_details(&prompter, &preset, 3).unwrap();
+        let _ = collect_line_item_details(&prompter, &preset, 3, "EUR").unwrap();
 
         // Assert
         let messages = prompter.messages.borrow();
@@ -543,5 +551,49 @@ mod tests {
         // Assert
         assert!((items[0].amount - 10000.0).abs() < f64::EPSILON);
         assert!((items[1].amount - 4500.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn collect_line_item_uses_preset_effective_currency() {
+        // Arrange
+        let preset = Preset {
+            key: "dev".into(),
+            description: "Software development".into(),
+            default_rate: 800.0,
+            currency: Some("CZK".into()),
+        };
+        let prompter = MockPrompter::new(vec![
+            MockResponse::F64(10.0),
+            MockResponse::F64(800.0),
+        ]);
+
+        // Act
+        let item = collect_line_item_details(&prompter, &preset, 1, "CZK").unwrap();
+
+        // Assert
+        assert_eq!(item.currency, "CZK");
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn collect_line_item_uses_default_when_preset_none() {
+        // Arrange
+        let preset = Preset {
+            key: "dev".into(),
+            description: "Software development".into(),
+            default_rate: 800.0,
+            currency: None,
+        };
+        let prompter = MockPrompter::new(vec![
+            MockResponse::F64(10.0),
+            MockResponse::F64(800.0),
+        ]);
+
+        // Act
+        let item = collect_line_item_details(&prompter, &preset, 1, "EUR").unwrap();
+
+        // Assert
+        assert_eq!(item.currency, "EUR");
+        prompter.assert_exhausted();
     }
 }
