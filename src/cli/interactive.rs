@@ -1,11 +1,13 @@
 use std::path::Path;
 
 use crate::config::loader::{load_config, LoadResult};
-use crate::config::types::Config;
+use crate::config::types::{Config, Recipient};
 use crate::config::validator::{ConfigSection, ValidatedConfig, ValidationOutcome};
 use crate::error::AppError;
 use crate::setup::prompter::Prompter;
 use crate::{invoice, pdf, setup};
+
+use super::recipient_selection::select_recipient;
 
 /// The full v1.0 interactive flow: load config → maybe setup → invoice → PDF.
 pub fn run_interactive(prompter: &dyn Prompter, cwd: &Path) -> Result<(), AppError> {
@@ -45,13 +47,15 @@ pub fn run_interactive(prompter: &dyn Prompter, cwd: &Path) -> Result<(), AppErr
         },
     };
 
-    run_invoice_flow(prompter, &validated, cwd)
+    let recipient = select_recipient(prompter, &validated.recipients, &validated.default_recipient_key)?;
+    run_invoice_flow(prompter, &validated, &recipient, cwd)
 }
 
 /// Run the interactive invoice generation loop.
 pub fn run_invoice_flow(
     prompter: &dyn Prompter,
     validated: &ValidatedConfig,
+    recipient: &Recipient,
     cwd: &Path,
 ) -> Result<(), AppError> {
     let presets = validated.presets.clone();
@@ -80,7 +84,7 @@ pub fn run_invoice_flow(
         prompter.message(&formatted);
 
         if prompter.confirm("Generate PDF?", true)? {
-            let pdf_bytes = pdf::generate_pdf(&summary, validated, &validated.recipient)?;
+            let pdf_bytes = pdf::generate_pdf(&summary, validated, recipient)?;
             let output_path = super::common::pdf_output_path(
                 &validated.sender.name,
                 &summary.period,

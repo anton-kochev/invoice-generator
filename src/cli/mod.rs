@@ -2,6 +2,7 @@ pub mod common;
 pub mod generate_cmd;
 pub mod interactive;
 pub mod preset_cmd;
+pub mod recipient_selection;
 
 use std::path::Path;
 
