@@ -95,13 +95,53 @@ pub fn handle_recipient_list(
 }
 
 /// Handle `invoice recipient add` — interactively add a new recipient.
-/// (Full implementation in Story 7.5)
 pub fn handle_recipient_add(
-    _prompter: &dyn Prompter,
-    _dir: &Path,
-    _writer: &mut dyn Write,
+    prompter: &dyn Prompter,
+    dir: &Path,
+    writer: &mut dyn Write,
 ) -> Result<(), AppError> {
-    todo!("Story 7.5")
+    use crate::config::loader::{load_config, LoadResult, CONFIG_FILENAME};
+    use crate::config::writer::append_recipient;
+
+    // Load config to check for duplicate keys
+    let config = match load_config(dir)? {
+        LoadResult::Loaded(c) => c,
+        LoadResult::NotFound => return Err(AppError::ConfigNotFound),
+    };
+
+    let existing_recipients = config.recipients.as_deref().unwrap_or_default();
+
+    // Prompt for key, rejecting duplicates
+    let key = loop {
+        let candidate = prompter.required_text("Recipient key (short identifier):")?;
+        if existing_recipients
+            .iter()
+            .any(|r| r.key.as_deref() == Some(&candidate))
+        {
+            prompter.message(&format!("Key \"{candidate}\" already exists. Choose another:"));
+            continue;
+        }
+        break candidate;
+    };
+
+    let name = prompter.required_text("Company name:")?;
+    let address = prompter.multi_line("Address")?;
+    let company_id = prompter.optional_text("Company ID (blank to skip):")?;
+    let vat_number = prompter.optional_text("VAT number (blank to skip):")?;
+
+    let set_default = prompter.confirm("Set as default recipient?", false)?;
+
+    let recipient = Recipient {
+        key: Some(key.clone()),
+        name,
+        address,
+        company_id,
+        vat_number,
+    };
+
+    append_recipient(dir, recipient, set_default)?;
+    writeln!(writer, "✓ Recipient \"{key}\" added to {CONFIG_FILENAME}")?;
+    Ok(())
 }
 
 /// Handle `invoice recipient delete <key>` — confirm and remove a recipient.
@@ -118,6 +158,8 @@ pub fn handle_recipient_delete(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::loader::{load_config, LoadResult};
+    use crate::setup::mock_prompter::{MockPrompter, MockResponse};
     use crate::setup::test_helpers::*;
 
     #[test]
@@ -229,5 +271,151 @@ mod tests {
         assert!(output.contains("Acme Corp"), "Missing 'Acme Corp'");
         assert!(output.contains("Globex Inc"), "Missing 'Globex Inc'");
         assert!(output.contains("(default)"), "Missing default marker");
+    }
+
+    // ── handle_recipient_add tests ──
+
+    #[test]
+    fn test_handle_recipient_add_happy_path_all_fields() {
+        // Arrange
+        let config = v2_complete_config();
+        let dir = setup_dir(Some(&config));
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("newcorp".into()),
+            MockResponse::Text("New Corp LLC".into()),
+            MockResponse::Lines(vec!["1 New St".into()]),
+            MockResponse::OptionalText(Some("NC-123".into())),
+            MockResponse::OptionalText(Some("VAT999".into())),
+            MockResponse::Confirm(true),
+        ]);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        handle_recipient_add(&prompter, dir.path(), &mut buf).unwrap();
+
+        // Assert
+        let loaded = match load_config(dir.path()).unwrap() {
+            LoadResult::Loaded(c) => c,
+            _ => panic!("Expected Loaded"),
+        };
+        let recipients = loaded.recipients.unwrap();
+        assert_eq!(recipients.len(), 2);
+        assert_eq!(recipients[1].key, Some("newcorp".into()));
+        assert_eq!(recipients[1].name, "New Corp LLC");
+        assert_eq!(recipients[1].company_id, Some("NC-123".into()));
+        assert_eq!(recipients[1].vat_number, Some("VAT999".into()));
+        assert_eq!(loaded.default_recipient, Some("newcorp".into()));
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("added"), "Expected 'added' in output");
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_handle_recipient_add_optional_fields_skipped() {
+        // Arrange
+        let config = v2_complete_config();
+        let dir = setup_dir(Some(&config));
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("newcorp".into()),
+            MockResponse::Text("New Corp".into()),
+            MockResponse::Lines(vec!["Street".into()]),
+            MockResponse::OptionalText(None),
+            MockResponse::OptionalText(None),
+            MockResponse::Confirm(false),
+        ]);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        handle_recipient_add(&prompter, dir.path(), &mut buf).unwrap();
+
+        // Assert
+        let loaded = match load_config(dir.path()).unwrap() {
+            LoadResult::Loaded(c) => c,
+            _ => panic!("Expected Loaded"),
+        };
+        let recipients = loaded.recipients.unwrap();
+        assert_eq!(recipients[1].company_id, None);
+        assert_eq!(recipients[1].vat_number, None);
+        assert_eq!(loaded.default_recipient, Some("acme".into()));
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_handle_recipient_add_duplicate_key_reprompts() {
+        // Arrange
+        let config = v2_complete_config();
+        let dir = setup_dir(Some(&config));
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("acme".into()),  // duplicate!
+            MockResponse::Text("acme2".into()), // unique
+            MockResponse::Text("Acme Two".into()),
+            MockResponse::Lines(vec!["Street".into()]),
+            MockResponse::OptionalText(None),
+            MockResponse::OptionalText(None),
+            MockResponse::Confirm(false),
+        ]);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        handle_recipient_add(&prompter, dir.path(), &mut buf).unwrap();
+
+        // Assert
+        let loaded = match load_config(dir.path()).unwrap() {
+            LoadResult::Loaded(c) => c,
+            _ => panic!("Expected Loaded"),
+        };
+        let recipients = loaded.recipients.unwrap();
+        assert_eq!(recipients.len(), 2);
+        assert_eq!(recipients[1].key, Some("acme2".into()));
+        let messages = prompter.messages.borrow();
+        let all = messages.join("\n");
+        assert!(
+            all.contains("already exists"),
+            "Expected 'already exists' message, got: {all}"
+        );
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_handle_recipient_add_prints_confirmation() {
+        // Arrange
+        let config = v2_complete_config();
+        let dir = setup_dir(Some(&config));
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("newcorp".into()),
+            MockResponse::Text("New Corp".into()),
+            MockResponse::Lines(vec!["Street".into()]),
+            MockResponse::OptionalText(None),
+            MockResponse::OptionalText(None),
+            MockResponse::Confirm(false),
+        ]);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        handle_recipient_add(&prompter, dir.path(), &mut buf).unwrap();
+
+        // Assert
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("✓"), "Expected checkmark in output");
+        assert!(output.contains("newcorp"), "Expected key in output");
+        assert!(
+            output.contains("invoice_config.yaml"),
+            "Expected filename in output"
+        );
+    }
+
+    #[test]
+    fn test_handle_recipient_add_no_config_returns_error() {
+        // Arrange
+        let dir = setup_dir(None);
+        let prompter = MockPrompter::new(vec![]);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let result = handle_recipient_add(&prompter, dir.path(), &mut buf);
+
+        // Assert
+        assert!(matches!(result, Err(AppError::ConfigNotFound)));
+        prompter.assert_exhausted();
     }
 }
