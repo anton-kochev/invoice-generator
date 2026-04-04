@@ -2,7 +2,7 @@
 
 ## Summary
 - **Epics**: 5
-- **Total User Stories**: 18 (13 completed ✅, 5 remaining)
+- **Total User Stories**: 18 (17 completed ✅, 1 remaining)
 - **User Roles Identified**: Freelance Developer (sole actor — referred to as "user" throughout)
 
 ---
@@ -229,7 +229,7 @@
 
 ---
 
-### Story 3.5: Support Multiple Line Items
+### Story 3.5: Support Multiple Line Items ✅
 **As a** user,
 **I want** to add as many line items as I need on one invoice,
 **So that** I can bill for multiple workstreams in a single month.
@@ -244,7 +244,7 @@
 
 ---
 
-### Story 3.6: Display Invoice Summary and Confirm
+### Story 3.6: Display Invoice Summary and Confirm ✅
 **As a** user,
 **I want** to review a formatted summary of the invoice before generating the PDF,
 **So that** I can catch mistakes without wasting time on a bad PDF.
@@ -264,7 +264,7 @@
 ## Epic 4: PDF Generation
 > Rendering the collected invoice data into a professional, print-ready A4 PDF file.
 
-### Story 4.1: Compute Invoice Number and Dates
+### Story 4.1: Compute Invoice Number and Dates ✅
 **As a** user,
 **I want** invoice number, date, and due date calculated automatically from the billing period,
 **So that** I don't have to compute dates manually.
@@ -279,7 +279,7 @@
 
 ---
 
-### Story 4.2: Render PDF Layout
+### Story 4.2: Render PDF Layout ✅
 **As a** user,
 **I want** the PDF to contain all required sections in a clean, professional layout,
 **So that** I can send it to my client without further editing.
@@ -301,7 +301,7 @@
 
 ---
 
-### Story 4.3: Save PDF with Correct Filename
+### Story 4.3: Save PDF with Correct Filename ✅
 **As a** user,
 **I want** the PDF saved with a standardized filename in the current directory,
 **So that** my invoices are consistently named and easy to find.

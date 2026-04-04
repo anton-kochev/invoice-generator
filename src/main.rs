@@ -59,8 +59,22 @@ fn run_invoice_flow(
 
         if prompter.confirm("Generate PDF?", true)? {
             let pdf_bytes = pdf::generate_pdf(&summary, validated)?;
-            let filename = format!("{}.pdf", summary.invoice_number);
+            let name = validated.sender.name.replace(' ', "_");
+            let filename = format!(
+                "Invoice_{}_{}{}.pdf",
+                name,
+                summary.period.month_abbrev(),
+                summary.period.year()
+            );
             let output_path = cwd.join(&filename);
+
+            if output_path.exists() {
+                if !prompter.confirm("File already exists. Overwrite?", false)? {
+                    prompter.message("PDF generation aborted.");
+                    continue;
+                }
+            }
+
             std::fs::write(&output_path, &pdf_bytes)?;
             prompter.message(&format!("PDF saved: {}", output_path.display()));
             break;

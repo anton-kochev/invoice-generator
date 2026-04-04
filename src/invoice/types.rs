@@ -63,6 +63,16 @@ impl InvoicePeriod {
     pub fn display_long(&self) -> String {
         format!("{} {}", self.month_name(), self.year)
     }
+
+    /// Three-letter month abbreviation (e.g., "Mar").
+    pub fn month_abbrev(&self) -> &'static str {
+        match self.month {
+            1 => "Jan", 2 => "Feb", 3 => "Mar", 4 => "Apr",
+            5 => "May", 6 => "Jun", 7 => "Jul", 8 => "Aug",
+            9 => "Sep", 10 => "Oct", 11 => "Nov", 12 => "Dec",
+            _ => unreachable!("InvoicePeriod month is always 1..=12"),
+        }
+    }
 }
 
 impl fmt::Display for InvoicePeriod {
@@ -354,5 +364,19 @@ mod tests {
 
         // Assert
         assert!((item.amount - 0.01).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn month_abbrev_all_months() {
+        // Arrange & Act & Assert
+        let abbrevs = [
+            (1, "Jan"), (2, "Feb"), (3, "Mar"), (4, "Apr"),
+            (5, "May"), (6, "Jun"), (7, "Jul"), (8, "Aug"),
+            (9, "Sep"), (10, "Oct"), (11, "Nov"), (12, "Dec"),
+        ];
+        for (month, expected) in abbrevs {
+            let period = InvoicePeriod::new(month, 2026).unwrap();
+            assert_eq!(period.month_abbrev(), expected);
+        }
     }
 }
