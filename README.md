@@ -15,11 +15,17 @@ A CLI tool that generates professional PDF invoices through an interactive promp
 ## Features
 
 - **First-run setup wizard** — interactive walkthrough creates `invoice_config.yaml` from scratch; resumes from where you left off if interrupted
-- **YAML-based configuration** — sender, recipient, payment methods, line-item presets, and invoice defaults
+- **YAML-based configuration** — sender, recipients, payment methods, line-item presets, and invoice defaults
 - **Config validation** — clear reporting of missing or malformed sections with guidance on how to fix
-- **Reusable presets** — define common billable items (description + default daily rate) and select them by number during invoicing
+- **Multiple recipients** — define several client profiles and select by key; set a default for quick invoicing
+- **Reusable presets** — define common billable items (description + default daily rate + optional currency and tax rate) and select them by number during invoicing
 - **Inline preset creation** — add new presets on the fly during invoice generation without editing the config file
+- **Per-preset currency and tax** — each preset can carry its own currency and tax rate, overriding the global default
 - **Smart defaults** — billing month defaults to last month, currency to EUR, payment terms to 30 days
+- **5 built-in PDF templates** — choose from callisto (bold), leda (clean), thebe (compact), amalthea (high-contrast), or metis (bare-bones)
+- **Locale-aware formatting** — dates and numbers in the PDF follow locale rules (en-US, en-GB, de-DE, fr-FR, cs-CZ, uk-UA)
+- **Non-interactive CLI mode** — `invoice generate` for scripting and CI; supports single-item (`--preset`/`--days`) or multi-item (`--items` JSON)
+- **Preset and recipient management** — `invoice preset list|delete` and `invoice recipient list|add|delete` subcommands
 - **Professional PDF output** — clean A4 layout rendered via Typst with line-item table, payment details, and formatted totals
 - **Overwrite protection** — prompts before overwriting an existing PDF; standardized filenames (`Invoice_Name_MonYYYY.pdf`)
 
@@ -40,8 +46,29 @@ The binary will be at `target/release/invoice-generator`.
 ## Usage
 
 ```sh
-# Run from the directory where you want invoice_config.yaml and PDFs
+# Interactive mode — setup wizard on first run, then invoice generation
 invoice-generator
+
+# Non-interactive: generate a single-item invoice
+invoice-generator generate --month 3 --year 2026 --preset dev --days 10
+
+# Non-interactive: multiple line items via JSON
+invoice-generator generate --month 3 --year 2026 --items '[{"preset":"dev","days":10},{"preset":"consulting","days":2}]'
+
+# Override template and locale for a single invoice
+invoice-generator generate --month 3 --year 2026 --preset dev --days 10 --template amalthea --locale de-DE
+
+# Target a specific client
+invoice-generator generate --month 3 --year 2026 --preset dev --days 10 --client acme
+
+# Manage presets
+invoice-generator preset list
+invoice-generator preset delete old-key
+
+# Manage recipients
+invoice-generator recipient list
+invoice-generator recipient add
+invoice-generator recipient delete old-key
 ```
 
 On first run, the setup wizard walks you through entering your details, client info, payment methods, and presets. On subsequent runs, you go straight to invoice generation.
@@ -101,13 +128,21 @@ sender:
     - "Springfield, IL 62704"
   email: "jane@example.com"
 
-recipient:
-  name: "Acme Corp"
-  address:
-    - "456 Oak Avenue"
-    - "Shelbyville, IL 62565"
-  company_id: "AC-12345"
-  vat_number: "CZ12345678"
+recipients:
+  - key: "acme"
+    name: "Acme Corp"
+    address:
+      - "456 Oak Avenue"
+      - "Shelbyville, IL 62565"
+    company_id: "AC-12345"
+    vat_number: "CZ12345678"
+  - key: "globex"
+    name: "Globex Inc"
+    address:
+      - "789 Elm Street"
+      - "Capital City, IL 62705"
+
+default_recipient: "acme"
 
 payment:
   - label: "SEPA Transfer"
@@ -118,11 +153,22 @@ presets:
   - key: "dev"
     description: "Software Development"
     default_rate: 100.0
+  - key: "consulting"
+    description: "Technical Consulting"
+    default_rate: 150.0
+    currency: "USD"
+    tax_rate: 21.0
 
 defaults:
   currency: "EUR"
   payment_terms_days: 30
   invoice_date_day: 9
+  template: "leda"
+  locale: "en-US"
+
+branding:
+  accent_color: "#2563eb"
+  footer_text: "Thank you for your business!"
 ```
 
 ### Defaults
@@ -132,8 +178,12 @@ defaults:
 | `currency` | `EUR` | Currency code used in invoice |
 | `payment_terms_days` | `30` | Days until payment is due |
 | `invoice_date_day` | `9` | Day of the month for the invoice date (following month) |
+| `template` | `leda` | PDF template key (callisto, leda, thebe, amalthea, metis) |
+| `locale` | `en-US` | Locale for date/number formatting in PDF (en-US, en-GB, de-DE, fr-FR, cs-CZ, uk-UA) |
 
-All sections except `defaults` are required. The `defaults` section is optional and falls back to the values above. Field aliases are supported for convenience (`bic` for `bic_swift`, `vat` for `vat_number`).
+All sections except `defaults` and `branding` are required. The `defaults` section is optional and falls back to the values above. Field aliases are supported for convenience (`bic` for `bic_swift`, `vat` for `vat_number`).
+
+Older configs with a single `recipient` field (instead of `recipients` list) are still supported and automatically handled.
 
 ## PDF Output
 
@@ -145,6 +195,33 @@ The generated PDF is a single-page A4 document with:
 - **Total** — bold, right-aligned in the configured currency
 - **Payment details** — one block per payment method with IBAN and BIC/SWIFT
 - **Footer** — thank-you message with sender contact info
+
+### Templates
+
+Five built-in templates control the visual style of the PDF:
+
+| Template | Style |
+|----------|-------|
+| `callisto` | Bold & structured |
+| `leda` | Clean & minimal (default) |
+| `thebe` | Compact & dense |
+| `amalthea` | High-contrast & vivid |
+| `metis` | Bare-bones & printable |
+
+Set the default in config (`defaults.template`) or override per-invoice with `--template` in CLI mode. In interactive mode, you're prompted to change the template before generating.
+
+### Locale Formatting
+
+Dates and numbers in the PDF respect the configured locale. The console UI always remains in English.
+
+| Locale | Date example | Number example |
+|--------|-------------|----------------|
+| `en-US` | March 9, 2026 | 4,442.40 |
+| `en-GB` | 9 March 2026 | 4,442.40 |
+| `de-DE` | 9. März 2026 | 4.442,40 |
+| `fr-FR` | 9 mars 2026 | 4 442,40 |
+| `cs-CZ` | 9. března 2026 | 4 442,40 |
+| `uk-UA` | 9 березня 2026 | 4 442,40 |
 
 Filenames follow the pattern `Invoice_{Name}_{MonthAbbrev}{Year}.pdf` (e.g., `Invoice_Jane_Doe_Mar2026.pdf`).
 
