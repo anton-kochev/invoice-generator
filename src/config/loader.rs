@@ -16,10 +16,42 @@ pub enum LoadResult {
     NotFound,
 }
 
+/// Check whether a YAML field key appears as an actual key at the start of a
+/// line (after optional leading whitespace), not inside a comment or string value.
+fn yaml_has_field(content: &str, field: &str) -> bool {
+    content.lines().any(|line| {
+        let trimmed = line.trim_start();
+        trimmed.starts_with(field) && trimmed[field.len()..].starts_with(':')
+    })
+}
+
+/// Returns hints about optional fields missing from the raw YAML content.
+///
+/// Uses a line-based check so that field names inside comments or string
+/// values are not mistaken for actual keys.
+pub fn missing_field_hints(yaml_content: &str) -> Vec<&'static str> {
+    let mut hints = Vec::new();
+    if !yaml_has_field(yaml_content, "template") {
+        hints.push(
+            "  template: leda        \u{2014} invoice template style (leda, callisto, thebe, amalthea, metis)",
+        );
+    }
+    if !yaml_has_field(yaml_content, "locale") {
+        hints.push(
+            "  locale: en-US         \u{2014} date/number formatting (en-US, en-GB, de-DE, fr-FR, cs-CZ, uk-UA)",
+        );
+    }
+    hints
+}
+
 /// Attempt to load and parse the config file from `dir`.
 ///
 /// Returns `Ok(LoadResult::NotFound)` if the file does not exist,
 /// `Ok(LoadResult::Loaded(config))` on success, or an error on IO/parse failure.
+///
+/// This function does **not** print hints about missing optional fields.
+/// Callers that want to display hints (e.g. the interactive flow) should read
+/// the raw YAML and call [`missing_field_hints`] themselves.
 pub fn load_config(dir: &Path) -> Result<LoadResult, AppError> {
     let path = dir.join(CONFIG_FILENAME);
     if !path.exists() {
@@ -292,6 +324,185 @@ sender:
             }
             LoadResult::NotFound => panic!("Expected Loaded"),
         }
+    }
+
+    // ── Story 14.1: backwards compatibility + field hints ──
+
+    #[test]
+    fn test_v2_config_without_template_or_locale_loads_successfully() {
+        // Arrange — complete v2 config with no template/locale
+        let yaml = r#"
+sender:
+  name: "Synthetic Sender"
+  address:
+    - "10 Fake Lane"
+  email: "sender@example.com"
+recipient:
+  name: "Synthetic Corp"
+  address:
+    - "20 Mock Blvd"
+  company_id: "00000"
+  vat_number: "CZ00000"
+payment:
+  - label: "Wire"
+    iban: "DE00000000000000000000"
+    bic_swift: "TESTDEFFXXX"
+presets:
+  - key: "dev"
+    description: "Development"
+    default_rate: 100.0
+defaults:
+  currency: "USD"
+  payment_terms_days: 14
+  invoice_date_day: 5
+"#;
+
+        // Act
+        let result = load_from_yaml(yaml);
+
+        // Assert
+        assert!(result.is_ok());
+        assert!(matches!(result.unwrap(), LoadResult::Loaded(_)));
+    }
+
+    #[test]
+    fn test_v2_config_defaults_to_leda_template() {
+        // Arrange — defaults section without template field
+        let yaml = r#"
+defaults:
+  currency: "USD"
+  payment_terms_days: 14
+  invoice_date_day: 5
+"#;
+
+        // Act
+        let result = load_from_yaml(yaml).unwrap();
+
+        // Assert
+        match result {
+            LoadResult::Loaded(config) => {
+                let defaults = config.defaults.unwrap();
+                assert_eq!(defaults.template, crate::config::types::TemplateKey::Leda);
+            }
+            LoadResult::NotFound => panic!("Expected Loaded"),
+        }
+    }
+
+    #[test]
+    fn test_v2_config_defaults_to_en_us_locale() {
+        // Arrange — defaults section without locale field
+        let yaml = r#"
+defaults:
+  currency: "EUR"
+  payment_terms_days: 30
+  invoice_date_day: 9
+"#;
+
+        // Act
+        let result = load_from_yaml(yaml).unwrap();
+
+        // Assert
+        match result {
+            LoadResult::Loaded(config) => {
+                let defaults = config.defaults.unwrap();
+                assert_eq!(defaults.locale, crate::locale::Locale::EnUs);
+            }
+            LoadResult::NotFound => panic!("Expected Loaded"),
+        }
+    }
+
+    #[test]
+    fn test_config_with_template_and_locale_loads() {
+        // Arrange — config with both new fields present
+        let yaml = r#"
+defaults:
+  currency: "EUR"
+  payment_terms_days: 30
+  invoice_date_day: 9
+  template: callisto
+  locale: de-DE
+"#;
+
+        // Act
+        let result = load_from_yaml(yaml).unwrap();
+
+        // Assert
+        match result {
+            LoadResult::Loaded(config) => {
+                let defaults = config.defaults.unwrap();
+                assert_eq!(defaults.template, crate::config::types::TemplateKey::Callisto);
+                assert_eq!(defaults.locale, crate::locale::Locale::DeDe);
+            }
+            LoadResult::NotFound => panic!("Expected Loaded"),
+        }
+    }
+
+    #[test]
+    fn test_missing_field_hints_missing_both() {
+        // Arrange
+        let yaml = "defaults:\n  currency: EUR\n";
+
+        // Act
+        let hints = missing_field_hints(yaml);
+
+        // Assert
+        assert_eq!(hints.len(), 2);
+        assert!(hints[0].contains("template"));
+        assert!(hints[1].contains("locale"));
+    }
+
+    #[test]
+    fn test_missing_field_hints_missing_locale_only() {
+        // Arrange
+        let yaml = "defaults:\n  currency: EUR\n  template: leda\n";
+
+        // Act
+        let hints = missing_field_hints(yaml);
+
+        // Assert
+        assert_eq!(hints.len(), 1);
+        assert!(hints[0].contains("locale"));
+    }
+
+    #[test]
+    fn test_missing_field_hints_nothing_missing() {
+        // Arrange
+        let yaml = "defaults:\n  currency: EUR\n  template: leda\n  locale: en-US\n";
+
+        // Act
+        let hints = missing_field_hints(yaml);
+
+        // Assert
+        assert!(hints.is_empty());
+    }
+
+    // ── Fix 2: robust field detection ──
+
+    #[test]
+    fn test_missing_field_hints_ignores_comment_with_template() {
+        // Arrange — template appears only in a comment, not as an actual key
+        let yaml = "# template: leda\ndefaults:\n  currency: EUR\n  locale: en-US\n";
+
+        // Act
+        let hints = missing_field_hints(yaml);
+
+        // Assert — template hint should still be returned
+        assert_eq!(hints.len(), 1);
+        assert!(hints[0].contains("template"));
+    }
+
+    #[test]
+    fn test_missing_field_hints_ignores_string_value_containing_template() {
+        // Arrange — "template:" appears inside a string value, not as a key
+        let yaml =
+            "defaults:\n  currency: EUR\n  locale: en-US\n  footer_text: \"Use template: leda\"\n";
+
+        // Act
+        let hints = missing_field_hints(yaml);
+
+        // Assert — template hint should still be returned
+        assert_eq!(hints.len(), 1);
+        assert!(hints[0].contains("template"));
     }
 
     // ── Helper ──

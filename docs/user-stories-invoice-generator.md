@@ -2,7 +2,7 @@
 
 ## Summary
 - **Epics**: 14 (5 v1.0 + 6 v2.0 + 3 v3.0)
-- **Total User Stories**: 52 (51 completed ✅ + 1 remaining)
+- **Total User Stories**: 52 (52 completed ✅)
 - **User Roles Identified**: Freelance Developer (sole actor — referred to as "user" throughout)
 
 ---
@@ -989,7 +989,7 @@ The application compiles to a single static binary with no runtime dependencies.
 ## Epic 13: Locale-Aware Formatting
 > Format dates and numbers in the PDF according to a locale code, so invoices read naturally for non-English-speaking clients.
 
-### Story 13.1: Locale Config Field and Validation
+### Story 13.1: Locale Config Field and Validation ✅
 **As a** user,
 **I want** a `locale` field in my config defaults,
 **So that** dates and numbers in my PDFs are formatted for my region.
@@ -1005,7 +1005,7 @@ The application compiles to a single static binary with no runtime dependencies.
 
 ---
 
-### Story 13.2: Locale-Aware Date and Number Formatting in PDF
+### Story 13.2: Locale-Aware Date and Number Formatting in PDF ✅
 **As a** user,
 **I want** invoice dates and amounts formatted according to my locale,
 **So that** invoices look natural to my clients in their region.
@@ -1026,7 +1026,7 @@ The application compiles to a single static binary with no runtime dependencies.
 
 ---
 
-### Story 13.3: `--locale` CLI Flag
+### Story 13.3: `--locale` CLI Flag ✅
 **As a** user,
 **I want** a `--locale` flag on the `generate` subcommand,
 **So that** I can override the locale for a specific invoice in scripts.
@@ -1041,7 +1041,7 @@ The application compiles to a single static binary with no runtime dependencies.
 
 ---
 
-### Story 13.4: First-Run Setup — Locale Prompt
+### Story 13.4: First-Run Setup — Locale Prompt ✅
 **As a** user running the app for the first time,
 **I want** to choose a locale during setup,
 **So that** my PDFs are formatted correctly from the start.
@@ -1060,7 +1060,7 @@ The application compiles to a single static binary with no runtime dependencies.
 ## Epic 14: v3.0 Migration & Compatibility
 > Ensure seamless upgrade from v2.0 and clear guidance for new config fields.
 
-### Story 14.1: v2.0 Config Backwards Compatibility
+### Story 14.1: v2.0 Config Backwards Compatibility ✅
 **As a** user upgrading from v2.0,
 **I want** my existing config file to work without changes,
 **So that** I can upgrade the binary without a migration step.

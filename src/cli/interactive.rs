@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::config::loader::{load_config, LoadResult};
+use crate::config::loader::{load_config, missing_field_hints, LoadResult, CONFIG_FILENAME};
 use crate::config::types::{Config, Recipient, TemplateKey};
 use crate::config::validator::{ConfigSection, ValidatedConfig, ValidationOutcome};
 use crate::error::AppError;
@@ -28,7 +28,21 @@ pub fn run_interactive(prompter: &dyn Prompter, cwd: &Path) -> Result<(), AppErr
                 }
             }
         }
-        LoadResult::Loaded(config) => match config.validate()? {
+        LoadResult::Loaded(config) => {
+            // Print hints about missing optional fields (interactive only)
+            if let Ok(raw) = std::fs::read_to_string(cwd.join(CONFIG_FILENAME)) {
+                let hints = missing_field_hints(&raw);
+                if !hints.is_empty() {
+                    eprintln!(
+                        "Tip: Your config can use these fields in the \"defaults\" section:"
+                    );
+                    for hint in &hints {
+                        eprintln!("{hint}");
+                    }
+                }
+            }
+
+            match config.validate()? {
             ValidationOutcome::Complete(v) => {
                 println!("Config loaded successfully.");
                 println!("Sender: {}", v.sender.name);
@@ -44,7 +58,7 @@ pub fn run_interactive(prompter: &dyn Prompter, cwd: &Path) -> Result<(), AppErr
                     }
                 }
             }
-        },
+        }},
     };
 
     let recipient = select_recipient(prompter, &validated.recipients, &validated.default_recipient_key)?;
