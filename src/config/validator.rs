@@ -2,6 +2,7 @@ use std::fmt;
 
 use super::types::*;
 use crate::error::AppError;
+use crate::locale::Locale;
 
 const DEFAULT_ACCENT_COLOR: &str = "#2c3e50";
 
@@ -93,6 +94,7 @@ pub struct ValidatedConfig {
     pub defaults: Defaults,
     pub branding: ValidatedBranding,
     pub template: TemplateKey,
+    pub locale: Locale,
 }
 
 impl ValidatedConfig {
@@ -212,6 +214,7 @@ impl Config {
 
             let resolved_defaults = defaults.unwrap_or_default();
             let template = resolved_defaults.template;
+            let locale = resolved_defaults.locale;
             Ok(ValidationOutcome::Complete(ValidatedConfig {
                 sender: sender.unwrap(),
                 recipient,
@@ -238,6 +241,7 @@ impl Config {
                     None => ValidatedBranding::default(),
                 },
                 template,
+                locale,
             }))
         } else {
             Ok(ValidationOutcome::Incomplete {

@@ -2,6 +2,7 @@ mod cli;
 mod config;
 mod error;
 mod invoice;
+mod locale;
 mod pdf;
 mod setup;
 

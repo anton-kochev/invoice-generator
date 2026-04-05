@@ -138,6 +138,7 @@ mod tests {
             MockResponse::U32(9),
             MockResponse::U32(30),
             MockResponse::Text("leda".into()),  // template
+            MockResponse::Text("en-US".into()), // locale
         ]);
 
         // Act

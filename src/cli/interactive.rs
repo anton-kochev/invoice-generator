@@ -117,7 +117,7 @@ pub fn run_invoice_flow(
         };
 
         if prompter.confirm("Generate PDF?", true)? {
-            let pdf_bytes = pdf::generate_pdf(&summary, validated, recipient, cwd, template)?;
+            let pdf_bytes = pdf::generate_pdf(&summary, validated, recipient, cwd, template, validated.locale)?;
             let output_path = super::common::pdf_output_path(
                 &validated.sender.name,
                 &summary.period,
@@ -181,6 +181,7 @@ mod tests {
             defaults: Defaults::default(),
             branding: ValidatedBranding::default(),
             template: TemplateKey::Leda,
+            locale: crate::locale::Locale::EnUs,
         }
     }
 

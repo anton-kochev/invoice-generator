@@ -2,6 +2,7 @@ use serde::Serialize;
 
 use crate::config::validator::ValidatedConfig;
 use crate::invoice::types::InvoiceSummary;
+use crate::locale::Locale;
 
 /// All data needed to render the invoice PDF template.
 #[derive(Debug, Serialize)]
@@ -87,7 +88,12 @@ impl<'a> InvoiceData<'a> {
         config: &'a ValidatedConfig,
         recipient: &'a crate::config::types::Recipient,
         logo_file: Option<String>,
+        locale: Locale,
     ) -> Self {
+        let period_month =
+            time::Month::try_from(summary.period.month() as u8).expect("valid month 1..=12");
+        let period_year = summary.period.year() as i32;
+
         Self {
             sender: SenderData {
                 name: &config.sender.name,
@@ -102,34 +108,34 @@ impl<'a> InvoiceData<'a> {
             },
             invoice: InvoiceInfo {
                 number: summary.invoice_number.clone(),
-                period: summary.period.display_long(),
-                date: summary.invoice_date.to_string(),
-                due_date: summary.due_date.to_string(),
+                period: locale.format_period(period_month, period_year),
+                date: locale.format_date(summary.invoice_date),
+                due_date: locale.format_date(summary.due_date),
                 currency: summary.currency.clone(),
                 line_items: summary
                     .line_items
                     .iter()
                     .map(|item| LineItemData {
                         description: item.description.clone(),
-                        days: format!("{:.2}", item.days),
-                        rate: format!("{:.2}", item.rate),
-                        amount: format!("{:.2}", item.amount),
+                        days: locale.format_number(item.days, 2),
+                        rate: locale.format_number(item.rate, 2),
+                        amount: locale.format_number(item.amount, 2),
                         tax_rate: if item.tax_rate > 0.0 {
-                            format!("{:.1}", item.tax_rate)
+                            locale.format_number(item.tax_rate, 1)
                         } else {
                             "0".to_string()
                         },
                         tax_amount: if item.tax_rate > 0.0 {
-                            format!("{:.2}", item.tax_amount)
+                            locale.format_number(item.tax_amount, 2)
                         } else {
                             "\u{2013}".to_string()
                         },
                     })
                     .collect(),
                 has_tax: summary.line_items.iter().any(|i| i.tax_rate > 0.0),
-                subtotal: format!("{:.2}", summary.subtotal),
-                tax_total: format!("{:.2}", summary.tax_total),
-                total: format!("{:.2}", summary.total),
+                subtotal: locale.format_number(summary.subtotal, 2),
+                tax_total: locale.format_number(summary.tax_total, 2),
+                total: locale.format_number(summary.total, 2),
             },
             payment: config
                 .payment
@@ -213,6 +219,7 @@ mod tests {
             defaults: Defaults::default(),
             branding: ValidatedBranding::default(),
             template: TemplateKey::Leda,
+            locale: crate::locale::Locale::EnUs,
         }
     }
 
@@ -223,14 +230,14 @@ mod tests {
         let config = make_config();
 
         // Act
-        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None, Locale::EnUs);
         let json = serde_json::to_value(&data).unwrap();
 
         // Assert
         assert_eq!(json["invoice"]["number"], "INV-2026-03");
         assert_eq!(json["invoice"]["period"], "March 2026");
         assert_eq!(json["invoice"]["currency"], "EUR");
-        assert_eq!(json["invoice"]["total"], "13000.00");
+        assert_eq!(json["invoice"]["total"], "13,000.00");
         assert_eq!(json["sender"]["name"], "Jane Doe");
         assert_eq!(json["recipient"]["name"], "Acme Corp");
         assert_eq!(json["recipient"]["company_id"], "DE123456");
@@ -243,7 +250,7 @@ mod tests {
         let config = make_config();
 
         // Act
-        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None, Locale::EnUs);
         let json = serde_json::to_value(&data).unwrap();
 
         // Assert
@@ -251,7 +258,7 @@ mod tests {
         assert_eq!(items.len(), 2);
         assert_eq!(items[0]["days"], "10.00");
         assert_eq!(items[0]["rate"], "800.00");
-        assert_eq!(items[0]["amount"], "8000.00");
+        assert_eq!(items[0]["amount"], "8,000.00");
     }
 
     #[test]
@@ -261,7 +268,7 @@ mod tests {
         let config = make_config();
 
         // Act
-        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None, Locale::EnUs);
         let json = serde_json::to_value(&data).unwrap();
 
         // Assert
@@ -300,7 +307,7 @@ mod tests {
         let config = make_config();
 
         // Act
-        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None, Locale::EnUs);
 
         // Assert
         assert_eq!(data.invoice.line_items[0].tax_rate, "21.0");
@@ -313,10 +320,10 @@ mod tests {
         let config = make_config();
 
         // Act
-        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None, Locale::EnUs);
 
         // Assert
-        assert_eq!(data.invoice.line_items[0].tax_amount, "1680.00");
+        assert_eq!(data.invoice.line_items[0].tax_amount, "1,680.00");
     }
 
     #[test]
@@ -326,7 +333,7 @@ mod tests {
         let config = make_config();
 
         // Act
-        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None, Locale::EnUs);
 
         // Assert
         assert_eq!(data.invoice.line_items[0].tax_rate, "0");
@@ -340,7 +347,7 @@ mod tests {
         let config = make_config();
 
         // Act
-        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None, Locale::EnUs);
 
         // Assert
         assert!(data.invoice.has_tax);
@@ -353,7 +360,7 @@ mod tests {
         let config = make_config();
 
         // Act
-        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None, Locale::EnUs);
 
         // Assert
         assert!(!data.invoice.has_tax);
@@ -366,11 +373,11 @@ mod tests {
         let config = make_config();
 
         // Act
-        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None, Locale::EnUs);
 
         // Assert
-        assert_eq!(data.invoice.subtotal, "8000.00");
-        assert_eq!(data.invoice.tax_total, "1680.00");
+        assert_eq!(data.invoice.subtotal, "8,000.00");
+        assert_eq!(data.invoice.tax_total, "1,680.00");
     }
 
     #[test]
@@ -382,7 +389,7 @@ mod tests {
         config.recipient.vat_number = None;
 
         // Act
-        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None, Locale::EnUs);
         let json = serde_json::to_value(&data).unwrap();
 
         // Assert
@@ -398,7 +405,7 @@ mod tests {
         let summary = make_summary();
         let config = make_config();
         // Act
-        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None, Locale::EnUs);
         let json = serde_json::to_value(&data).unwrap();
         // Assert
         assert_eq!(json["branding"]["accent_color"], "#2c3e50");
@@ -414,7 +421,7 @@ mod tests {
         let mut config = make_config();
         config.branding.accent_color = "#ff0000".into();
         // Act
-        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None, Locale::EnUs);
         let json = serde_json::to_value(&data).unwrap();
         // Assert
         assert_eq!(json["branding"]["accent_color"], "#ff0000");
@@ -427,7 +434,7 @@ mod tests {
         let mut config = make_config();
         config.branding.font = Some("Fira Code".into());
         // Act
-        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None, Locale::EnUs);
         let json = serde_json::to_value(&data).unwrap();
         // Assert
         let fonts = json["branding"]["font"].as_array().unwrap();
@@ -442,7 +449,7 @@ mod tests {
         let summary = make_summary();
         let config = make_config(); // font: None
         // Act
-        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None, Locale::EnUs);
         // Assert
         assert_eq!(
             data.branding.font,
@@ -457,7 +464,7 @@ mod tests {
         let mut config = make_config();
         config.branding.footer_text = Some("Thanks!".into());
         // Act
-        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None, Locale::EnUs);
         let json = serde_json::to_value(&data).unwrap();
         // Assert
         assert_eq!(json["branding"]["footer_text"], "Thanks!");
@@ -469,7 +476,7 @@ mod tests {
         let summary = make_summary();
         let config = make_config(); // footer_text: None
         // Act
-        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None, Locale::EnUs);
         let json = serde_json::to_value(&data).unwrap();
         // Assert
         assert!(json["branding"].get("footer_text").is_none());
@@ -481,7 +488,7 @@ mod tests {
         let summary = make_summary();
         let config = make_config();
         // Act
-        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, Some("logo.png".into()));
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, Some("logo.png".into()), Locale::EnUs);
         let json = serde_json::to_value(&data).unwrap();
         // Assert
         assert_eq!(json["branding"]["logo_file"], "logo.png");
@@ -493,9 +500,53 @@ mod tests {
         let summary = make_summary();
         let config = make_config();
         // Act
-        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None);
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None, Locale::EnUs);
         let json = serde_json::to_value(&data).unwrap();
         // Assert
         assert!(json["branding"].get("logo_file").is_none());
+    }
+
+    // ── Story 13.2: locale-aware formatting in from_parts ──
+
+    #[test]
+    fn test_from_parts_de_de_period_is_german() {
+        // Arrange
+        let summary = make_summary();
+        let config = make_config();
+
+        // Act
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None, Locale::DeDe);
+
+        // Assert
+        assert_eq!(data.invoice.period, "März 2026");
+    }
+
+    #[test]
+    fn test_from_parts_de_de_dates_are_german() {
+        // Arrange
+        let summary = make_summary();
+        let config = make_config();
+
+        // Act
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None, Locale::DeDe);
+
+        // Assert
+        assert_eq!(data.invoice.date, "9. April 2026");
+        assert_eq!(data.invoice.due_date, "9. Mai 2026");
+    }
+
+    #[test]
+    fn test_from_parts_de_de_numbers_use_comma() {
+        // Arrange
+        let summary = make_summary();
+        let config = make_config();
+
+        // Act
+        let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None, Locale::DeDe);
+
+        // Assert
+        assert_eq!(data.invoice.total, "13.000,00");
+        assert_eq!(data.invoice.line_items[0].rate, "800,00");
+        assert_eq!(data.invoice.line_items[0].amount, "8.000,00");
     }
 }

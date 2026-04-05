@@ -5,6 +5,7 @@ use std::str::FromStr;
 use crate::config::types::{Preset, Recipient, TemplateKey};
 use crate::config::validator::ValidatedConfig;
 use crate::error::AppError;
+use crate::locale::Locale;
 use crate::invoice::summary::build_summary;
 use crate::invoice::types::{InvoicePeriod, LineItem};
 use crate::pdf::generate_pdf;
@@ -144,8 +145,18 @@ pub fn handle_generate(
     };
     let period = validate_period(args.month, args.year)?;
     let line_items = resolve_line_items(args, &validated.presets, &validated.defaults.currency)?;
+    let locale = match args.locale.as_deref() {
+        Some(code) => match Locale::from_str(code) {
+            Ok(l) => l,
+            Err(_) => {
+                eprintln!("Warning: unsupported locale \"{code}\", using en-US");
+                Locale::EnUs
+            }
+        },
+        None => validated.locale,
+    };
     let summary = build_summary(period, line_items, &validated.defaults)?;
-    let pdf_bytes = generate_pdf(&summary, &validated, recipient, cwd, template)?;
+    let pdf_bytes = generate_pdf(&summary, &validated, recipient, cwd, template, locale)?;
     let output_path = pdf_output_path(&validated.sender.name, &period, cwd);
     std::fs::write(&output_path, &pdf_bytes)?;
     writeln!(writer, "PDF saved: {}", output_path.display())?;
@@ -168,6 +179,7 @@ mod tests {
             items: None,
             client: None,
             template: None,
+            locale: None,
         }
     }
 
@@ -180,6 +192,7 @@ mod tests {
             items: Some(json.to_string()),
             client: None,
             template: None,
+            locale: None,
         }
     }
 
@@ -865,6 +878,82 @@ mod tests {
 
         // Assert
         assert!(matches!(result, Err(AppError::InvalidTemplateKey { .. })));
+    }
+
+    // ── Story 13.3: --locale flag handler tests ──
+
+    #[test]
+    fn test_handle_generate_with_locale_flag_de_de() {
+        // Arrange
+        let config = complete_config();
+        let dir = setup_dir(Some(&config));
+        let mut args = generate_single_args(3, 2026, "dev", 10.0);
+        args.locale = Some("de-DE".into());
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let result = handle_generate(&args, dir.path(), &mut buf);
+
+        // Assert
+        assert!(result.is_ok(), "Expected Ok, got {result:?}");
+        let pdf_path = dir.path().join("Invoice_Alice_Smith_Mar2026.pdf");
+        let bytes = std::fs::read(&pdf_path).unwrap();
+        assert!(!bytes.is_empty(), "PDF should be non-empty");
+        assert!(bytes.starts_with(b"%PDF"), "File should start with %PDF header");
+    }
+
+    #[test]
+    fn test_handle_generate_without_locale_uses_config_default() {
+        // Arrange
+        let config = complete_config();
+        let dir = setup_dir(Some(&config));
+        let args = generate_single_args(3, 2026, "dev", 10.0);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let result = handle_generate(&args, dir.path(), &mut buf);
+
+        // Assert
+        assert!(result.is_ok(), "Expected Ok, got {result:?}");
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("PDF saved:"));
+    }
+
+    #[test]
+    fn test_handle_generate_unsupported_locale_warns_and_falls_back() {
+        // Arrange
+        let config = complete_config();
+        let dir = setup_dir(Some(&config));
+        let mut args = generate_single_args(3, 2026, "dev", 10.0);
+        args.locale = Some("xx-YY".into());
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let result = handle_generate(&args, dir.path(), &mut buf);
+
+        // Assert — should succeed (falls back to en-US), not error
+        assert!(result.is_ok(), "Unsupported locale should fall back, not error: {result:?}");
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("PDF saved:"));
+    }
+
+    #[test]
+    fn test_handle_generate_locale_with_items_mode() {
+        // Arrange
+        let config = config_with_named_presets(&[("alpha", 800.0)]);
+        let dir = setup_dir(Some(&config));
+        let json = r#"[{"preset":"alpha","days":5}]"#;
+        let mut args = generate_items_args(3, 2026, json);
+        args.locale = Some("fr-FR".into());
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let result = handle_generate(&args, dir.path(), &mut buf);
+
+        // Assert
+        assert!(result.is_ok(), "Expected Ok, got {result:?}");
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("PDF saved:"));
     }
 
     #[test]

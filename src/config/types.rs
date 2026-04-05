@@ -4,6 +4,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
+use crate::locale::Locale;
 
 /// Available invoice template styles.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -186,6 +187,8 @@ pub struct Defaults {
     pub payment_terms_days: u32,
     #[serde(default)]
     pub template: TemplateKey,
+    #[serde(default, deserialize_with = "crate::locale::deserialize_locale_lenient")]
+    pub locale: Locale,
 }
 
 impl Default for Defaults {
@@ -195,6 +198,7 @@ impl Default for Defaults {
             invoice_date_day: default_invoice_date_day(),
             payment_terms_days: default_payment_terms_days(),
             template: TemplateKey::default(),
+            locale: Locale::default(),
         }
     }
 }

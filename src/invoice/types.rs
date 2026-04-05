@@ -40,30 +40,6 @@ impl InvoicePeriod {
         self.year
     }
 
-    /// Full month name for display (e.g., "March").
-    pub fn month_name(&self) -> &'static str {
-        match self.month {
-            1 => "January",
-            2 => "February",
-            3 => "March",
-            4 => "April",
-            5 => "May",
-            6 => "June",
-            7 => "July",
-            8 => "August",
-            9 => "September",
-            10 => "October",
-            11 => "November",
-            12 => "December",
-            _ => unreachable!("InvoicePeriod month is always 1..=12"),
-        }
-    }
-
-    /// Format as "March 2026" for invoice display.
-    pub fn display_long(&self) -> String {
-        format!("{} {}", self.month_name(), self.year)
-    }
-
     /// Three-letter month abbreviation (e.g., "Mar").
     pub fn month_abbrev(&self) -> &'static str {
         match self.month {
@@ -242,41 +218,6 @@ mod tests {
 
         // Assert
         assert_eq!(formatted, "2025-03");
-    }
-
-    #[test]
-    fn month_name_all_months() {
-        // Arrange & Act & Assert
-        let names = [
-            (1, "January"),
-            (2, "February"),
-            (3, "March"),
-            (4, "April"),
-            (5, "May"),
-            (6, "June"),
-            (7, "July"),
-            (8, "August"),
-            (9, "September"),
-            (10, "October"),
-            (11, "November"),
-            (12, "December"),
-        ];
-        for (month, expected) in names {
-            let period = InvoicePeriod::new(month, 2026).unwrap();
-            assert_eq!(period.month_name(), expected);
-        }
-    }
-
-    #[test]
-    fn display_long_format() {
-        // Arrange
-        let period = InvoicePeriod::new(3, 2026).unwrap();
-
-        // Act
-        let result = period.display_long();
-
-        // Assert
-        assert_eq!(result, "March 2026");
     }
 
     #[test]

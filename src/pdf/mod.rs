@@ -13,9 +13,11 @@ use crate::invoice::types::InvoiceSummary;
 /// Return the Typst template source for the given template key.
 fn template_source(key: TemplateKey) -> &'static str {
     match key {
-        TemplateKey::Leda => include_str!("template/invoice.typ"),
-        // TODO(sprint-13): each variant gets its own .typ file
-        _ => include_str!("template/invoice.typ"),
+        TemplateKey::Callisto => include_str!("template/callisto.typ"),
+        TemplateKey::Leda => include_str!("template/leda.typ"),
+        TemplateKey::Thebe => include_str!("template/thebe.typ"),
+        TemplateKey::Amalthea => include_str!("template/amalthea.typ"),
+        TemplateKey::Metis => include_str!("template/metis.typ"),
     }
 }
 
@@ -62,6 +64,7 @@ pub fn generate_pdf(
     recipient: &crate::config::types::Recipient,
     config_dir: &Path,
     template: TemplateKey,
+    locale: crate::locale::Locale,
 ) -> Result<Vec<u8>, AppError> {
     let logo = config
         .branding
@@ -69,7 +72,7 @@ pub fn generate_pdf(
         .as_deref()
         .and_then(|p| resolve_logo(p, config_dir));
     let logo_file = logo.as_ref().map(|(name, _)| name.clone());
-    let invoice_data = data::InvoiceData::from_parts(summary, config, recipient, logo_file);
+    let invoice_data = data::InvoiceData::from_parts(summary, config, recipient, logo_file, locale);
 
     let json = serde_json::to_vec(&invoice_data)
         .map_err(|e| AppError::PdfCompile(format!("JSON serialization failed: {e}")))?;
@@ -153,6 +156,7 @@ mod tests {
             defaults: Defaults::default(),
             branding: ValidatedBranding::default(),
             template: TemplateKey::Leda,
+            locale: crate::locale::Locale::EnUs,
         }
     }
 
@@ -180,7 +184,7 @@ mod tests {
         let summary = make_summary();
         let config = make_config();
         // Act
-        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Leda);
+        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Leda, crate::locale::Locale::EnUs);
         // Assert
         let pdf = result.expect("PDF generation should succeed");
         assert!(pdf.starts_with(b"%PDF"), "Output should start with PDF header");
@@ -192,8 +196,8 @@ mod tests {
         let summary = make_summary();
         let config = make_config();
         // Act
-        let pdf1 = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Leda).unwrap();
-        let pdf2 = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Leda).unwrap();
+        let pdf1 = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Leda, crate::locale::Locale::EnUs).unwrap();
+        let pdf2 = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Leda, crate::locale::Locale::EnUs).unwrap();
         // Assert
         assert_eq!(pdf1, pdf2, "Same input should produce identical PDF bytes");
     }
@@ -204,9 +208,9 @@ mod tests {
         let summary = make_summary();
         let config = make_config();
         // Act
-        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Callisto);
+        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Callisto, crate::locale::Locale::EnUs);
         // Assert
-        assert!(result.is_ok(), "Non-leda key should succeed (maps to leda in Sprint 12)");
+        assert!(result.is_ok(), "Callisto template should produce a valid PDF");
     }
 
     // ── Sprint 10 Step 5: resolve_logo + logo integration tests ──
@@ -269,7 +273,7 @@ mod tests {
         let summary = make_summary();
         let config = make_config(); // branding.logo is None
         // Act
-        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Leda);
+        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Leda, crate::locale::Locale::EnUs);
         // Assert
         assert!(result.is_ok());
     }
@@ -283,7 +287,7 @@ mod tests {
         config.branding.font = Some("Arial".into());
         config.branding.footer_text = Some("Custom footer text".into());
         // Act
-        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Leda);
+        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Leda, crate::locale::Locale::EnUs);
         // Assert
         let pdf = result.expect("PDF with custom branding should succeed");
         assert!(pdf.starts_with(b"%PDF"));
@@ -296,8 +300,195 @@ mod tests {
         let mut config = make_config();
         config.branding.footer_text = Some("".into());
         // Act
-        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Leda);
+        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Leda, crate::locale::Locale::EnUs);
         // Assert
         assert!(result.is_ok());
+    }
+
+    // ── Sprint 13: Template distinctness and per-template tests ──
+
+    fn make_summary_with_tax() -> InvoiceSummary {
+        InvoiceSummary {
+            invoice_number: "INV-2026-03".into(),
+            period: InvoicePeriod::new(3, 2026).unwrap(),
+            invoice_date: Date::from_calendar_date(2026, Month::April, 9).unwrap(),
+            due_date: Date::from_calendar_date(2026, Month::May, 9).unwrap(),
+            currency: "EUR".into(),
+            line_items: vec![
+                LineItem::with_tax("Software development".into(), 10.0, 800.0, "EUR".into(), 21.0),
+                LineItem::with_tax("Technical consulting".into(), 5.0, 1000.0, "EUR".into(), 21.0),
+            ],
+            subtotal: 13000.0,
+            tax_total: 2730.0,
+            total: 15730.0,
+        }
+    }
+
+    fn make_config_without_optional_fields() -> ValidatedConfig {
+        let recipient = Recipient {
+            key: Some("acme-corp".into()),
+            name: "Acme Corp".into(),
+            address: vec!["456 Oak Ave".into(), "Berlin, Germany".into()],
+            company_id: None,
+            vat_number: None,
+        };
+        ValidatedConfig {
+            sender: Sender {
+                name: "Jane Doe".into(),
+                address: vec!["123 Main St".into(), "Vienna, Austria".into()],
+                email: "jane@example.com".into(),
+            },
+            recipient: recipient.clone(),
+            recipients: vec![recipient],
+            default_recipient_key: "acme-corp".into(),
+            payment: vec![PaymentMethod {
+                label: "Primary Bank Account".into(),
+                iban: "DE89 3704 0044 0532 0130 00".into(),
+                bic_swift: "COBADEFFXXX".into(),
+            }],
+            presets: vec![Preset {
+                key: "dev".into(),
+                description: "Software development".into(),
+                default_rate: 800.0,
+                currency: None,
+                tax_rate: None,
+            }],
+            defaults: Defaults::default(),
+            branding: ValidatedBranding::default(),
+            template: TemplateKey::Leda,
+            locale: crate::locale::Locale::EnUs,
+        }
+    }
+
+    #[test]
+    fn test_template_source_each_key_returns_distinct_content() {
+        // Arrange
+        let keys = TemplateKey::ALL;
+
+        // Act
+        let sources: Vec<&str> = keys.iter().map(|k| template_source(*k)).collect();
+
+        // Assert
+        for i in 0..sources.len() {
+            for j in (i + 1)..sources.len() {
+                assert_ne!(
+                    sources[i], sources[j],
+                    "template_source({}) and template_source({}) should be distinct",
+                    keys[i], keys[j]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_generate_pdf_callisto_produces_valid_pdf() {
+        // Arrange
+        let summary = make_summary();
+        let config = make_config();
+
+        // Act
+        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Callisto, crate::locale::Locale::EnUs);
+
+        // Assert
+        let pdf = result.expect("Callisto template should produce a valid PDF");
+        assert!(pdf.starts_with(b"%PDF"), "Output should start with PDF header");
+    }
+
+    #[test]
+    fn test_generate_pdf_thebe_produces_valid_pdf() {
+        // Arrange
+        let summary = make_summary();
+        let config = make_config();
+
+        // Act
+        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Thebe, crate::locale::Locale::EnUs);
+
+        // Assert
+        let pdf = result.expect("Thebe template should produce a valid PDF");
+        assert!(pdf.starts_with(b"%PDF"), "Output should start with PDF header");
+    }
+
+    #[test]
+    fn test_generate_pdf_amalthea_produces_valid_pdf() {
+        // Arrange
+        let summary = make_summary();
+        let config = make_config();
+
+        // Act
+        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Amalthea, crate::locale::Locale::EnUs);
+
+        // Assert
+        let pdf = result.expect("Amalthea template should produce a valid PDF");
+        assert!(pdf.starts_with(b"%PDF"), "Output should start with PDF header");
+    }
+
+    #[test]
+    fn test_generate_pdf_metis_produces_valid_pdf() {
+        // Arrange
+        let summary = make_summary();
+        let config = make_config();
+
+        // Act
+        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Metis, crate::locale::Locale::EnUs);
+
+        // Assert
+        let pdf = result.expect("Metis template should produce a valid PDF");
+        assert!(pdf.starts_with(b"%PDF"), "Output should start with PDF header");
+    }
+
+    #[test]
+    fn test_generate_pdf_all_templates_with_tax_succeed() {
+        // Arrange
+        let summary = make_summary_with_tax();
+        let config = make_config();
+
+        // Act & Assert
+        for key in TemplateKey::ALL {
+            let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), key, crate::locale::Locale::EnUs);
+            assert!(result.is_ok(), "Template {key} should succeed with tax line items");
+        }
+    }
+
+    #[test]
+    fn test_generate_pdf_all_templates_without_optional_fields_succeed() {
+        // Arrange
+        let summary = make_summary();
+        let config = make_config_without_optional_fields();
+
+        // Act & Assert
+        for key in TemplateKey::ALL {
+            let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), key, crate::locale::Locale::EnUs);
+            assert!(result.is_ok(), "Template {key} should succeed without optional fields");
+        }
+    }
+
+    #[test]
+    fn test_generate_pdf_all_templates_with_custom_branding_succeed() {
+        // Arrange
+        let summary = make_summary();
+        let mut config = make_config();
+        config.branding.accent_color = "#ff5500".into();
+        config.branding.font = Some("Arial".into());
+        config.branding.footer_text = Some("Custom footer".into());
+
+        // Act & Assert
+        for key in TemplateKey::ALL {
+            let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), key, crate::locale::Locale::EnUs);
+            assert!(result.is_ok(), "Template {key} should succeed with custom branding");
+        }
+    }
+
+    #[test]
+    fn test_generate_pdf_all_templates_with_empty_footer_succeed() {
+        // Arrange
+        let summary = make_summary();
+        let mut config = make_config();
+        config.branding.footer_text = Some("".into());
+
+        // Act & Assert
+        for key in TemplateKey::ALL {
+            let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), key, crate::locale::Locale::EnUs);
+            assert!(result.is_ok(), "Template {key} should succeed with empty footer");
+        }
     }
 }

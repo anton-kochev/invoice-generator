@@ -66,6 +66,9 @@ pub struct GenerateArgs {
     /// Template to use for PDF generation (overrides config default)
     #[arg(long)]
     pub template: Option<String>,
+    /// Locale for PDF formatting (overrides config default)
+    #[arg(long)]
+    pub locale: Option<String>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -373,6 +376,32 @@ mod tests {
         // Assert
         match cli.command.unwrap() {
             Command::Generate(g) => assert!(g.template.is_none()),
+            _ => panic!("Expected Generate"),
+        }
+    }
+
+    #[test]
+    fn test_generate_locale_flag_parses() {
+        // Arrange
+        let args = ["invoice", "generate", "--month", "3", "--year", "2026", "--preset", "dev", "--days", "10", "--locale", "de-DE"];
+        // Act
+        let cli = Cli::try_parse_from(args).unwrap();
+        // Assert
+        match cli.command.unwrap() {
+            Command::Generate(g) => assert_eq!(g.locale, Some("de-DE".into())),
+            _ => panic!("Expected Generate"),
+        }
+    }
+
+    #[test]
+    fn test_generate_without_locale_flag_defaults_to_none() {
+        // Arrange
+        let args = ["invoice", "generate", "--month", "3", "--year", "2026", "--preset", "dev", "--days", "10"];
+        // Act
+        let cli = Cli::try_parse_from(args).unwrap();
+        // Assert
+        match cli.command.unwrap() {
+            Command::Generate(g) => assert!(g.locale.is_none()),
             _ => panic!("Expected Generate"),
         }
     }

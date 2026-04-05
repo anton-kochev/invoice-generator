@@ -84,6 +84,13 @@ pub enum AppError {
         key: String,
         available: Vec<String>,
     },
+
+    /// Unknown locale code.
+    #[error("Unknown locale: \"{key}\". Available: {}", available.join(", "))]
+    InvalidLocale {
+        key: String,
+        available: Vec<String>,
+    },
 }
 
 #[cfg(test)]

@@ -2,7 +2,7 @@
 
 ## Summary
 - **Epics**: 14 (5 v1.0 + 6 v2.0 + 3 v3.0)
-- **Total User Stories**: 52 (47 completed ✅ + 5 remaining)
+- **Total User Stories**: 52 (51 completed ✅ + 1 remaining)
 - **User Roles Identified**: Freelance Developer (sole actor — referred to as "user" throughout)
 
 ---
@@ -872,7 +872,7 @@ The application compiles to a single static binary with no runtime dependencies.
 
 ---
 
-### Story 12.3: Callisto Template (Traditional)
+### Story 12.3: Callisto Template (Traditional) ✅
 **As a** user,
 **I want** a formal, traditional-style template,
 **So that** I can use a corporate-appropriate layout for conservative clients.
@@ -889,7 +889,7 @@ The application compiles to a single static binary with no runtime dependencies.
 
 ---
 
-### Story 12.4: Thebe Template (Dense)
+### Story 12.4: Thebe Template (Dense) ✅
 **As a** user,
 **I want** a compact template optimized for many line items,
 **So that** invoices with numerous rows fit on a single page.
@@ -905,7 +905,7 @@ The application compiles to a single static binary with no runtime dependencies.
 
 ---
 
-### Story 12.5: Amalthea Template (High-Contrast)
+### Story 12.5: Amalthea Template (High-Contrast) ✅
 **As a** user,
 **I want** a bold, eye-catching template,
 **So that** my invoices stand out visually.
@@ -921,7 +921,7 @@ The application compiles to a single static binary with no runtime dependencies.
 
 ---
 
-### Story 12.6: Metis Template (Bare-Bones)
+### Story 12.6: Metis Template (Bare-Bones) ✅
 **As a** user,
 **I want** a plain, no-frills template,
 **So that** my invoices print well in black & white with no decorative elements.
@@ -1121,6 +1121,6 @@ The application compiles to a single static binary with no runtime dependencies.
 **Recommended sprint ordering:**
 
 1. **Sprint 12** ✅: Stories 12.1, 12.2, 12.7, 12.8, 12.9 (template foundation + leda + all integration points)
-2. **Sprint 13**: Stories 12.3, 12.4, 12.5, 12.6 (remaining 4 templates — parallelizable)
+2. **Sprint 13** ✅: Stories 12.3, 12.4, 12.5, 12.6 (remaining 4 templates — parallelizable)
 3. **Sprint 14**: Stories 13.1, 13.2, 13.3, 13.4 (locale formatting)
 4. **Sprint 15**: Story 14.1 (backwards compatibility) + Story 11.3 (setup wizard v2.0 update, if not yet done)

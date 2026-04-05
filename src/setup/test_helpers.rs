@@ -50,6 +50,7 @@ pub fn synthetic_defaults() -> Defaults {
         invoice_date_day: 5,
         payment_terms_days: 14,
         template: TemplateKey::Leda,
+        locale: crate::locale::Locale::EnUs,
     }
 }
 
@@ -215,6 +216,7 @@ pub fn full_setup_responses() -> Vec<MockResponse> {
         MockResponse::U32(9),
         MockResponse::U32(30),
         MockResponse::Text("leda".into()),  // template
+        MockResponse::Text("en-US".into()), // locale
     ]
 }
 
@@ -242,5 +244,6 @@ pub fn resume_from_recipient_responses() -> Vec<MockResponse> {
         MockResponse::U32(9),
         MockResponse::U32(30),
         MockResponse::Text("leda".into()),  // template
+        MockResponse::Text("en-US".into()), // locale
     ]
 }

@@ -4,6 +4,7 @@ use std::str::FromStr;
 use crate::config::types::{Config, Defaults, TemplateKey};
 use crate::config::writer::save_config;
 use crate::error::AppError;
+use crate::locale::Locale;
 use super::prompter::Prompter;
 
 /// Collect default invoice values interactively and persist them to disk.
@@ -31,11 +32,23 @@ pub fn collect_defaults(
         }
     };
 
+    let locale = loop {
+        let input = prompter.text_with_default("Locale for PDF formatting:", "en-US")?;
+        match Locale::from_str(&input) {
+            Ok(l) => break l,
+            Err(_) => {
+                let list: Vec<String> = Locale::ALL.iter().map(|l| l.to_string()).collect();
+                prompter.message(&format!("Unsupported locale. Available: {}", list.join(", ")));
+            }
+        }
+    };
+
     config.defaults = Some(Defaults {
         currency,
         invoice_date_day,
         payment_terms_days,
         template,
+        locale,
     });
 
     save_config(dir, config)?;
@@ -47,6 +60,7 @@ pub fn collect_defaults(
 mod tests {
     use super::*;
     use crate::config::loader::load_config;
+    use crate::locale::Locale;
     use crate::setup::mock_prompter::{MockPrompter, MockResponse};
     use crate::setup::test_helpers::*;
 
@@ -60,6 +74,7 @@ mod tests {
             MockResponse::U32(9),
             MockResponse::U32(30),
             MockResponse::Text("leda".into()),
+            MockResponse::Text("en-US".into()),
         ]);
 
         // Act
@@ -83,6 +98,7 @@ mod tests {
             MockResponse::U32(15),
             MockResponse::U32(14),
             MockResponse::Text("leda".into()),
+            MockResponse::Text("en-US".into()),
         ]);
 
         // Act
@@ -106,6 +122,7 @@ mod tests {
             MockResponse::U32(1),
             MockResponse::U32(60),
             MockResponse::Text("leda".into()),
+            MockResponse::Text("en-US".into()),
         ]);
 
         // Act
@@ -130,6 +147,7 @@ mod tests {
             MockResponse::U32(9),
             MockResponse::U32(30),
             MockResponse::Text("leda".into()),
+            MockResponse::Text("en-US".into()),
         ]);
         // Act
         collect_defaults(&prompter, &mut config, dir.path()).unwrap();
@@ -149,6 +167,7 @@ mod tests {
             MockResponse::U32(9),
             MockResponse::U32(30),
             MockResponse::Text("callisto".into()),
+            MockResponse::Text("en-US".into()),
         ]);
         // Act
         collect_defaults(&prompter, &mut config, dir.path()).unwrap();
@@ -167,6 +186,7 @@ mod tests {
             MockResponse::U32(9),
             MockResponse::U32(30),
             MockResponse::Text("thebe".into()),
+            MockResponse::Text("en-US".into()),
         ]);
         // Act
         collect_defaults(&prompter, &mut config, dir.path()).unwrap();
@@ -187,6 +207,7 @@ mod tests {
             MockResponse::U32(30),
             MockResponse::Text("bogus".into()),
             MockResponse::Text("leda".into()),
+            MockResponse::Text("en-US".into()),
         ]);
         // Act
         collect_defaults(&prompter, &mut config, dir.path()).unwrap();
@@ -206,6 +227,7 @@ mod tests {
             MockResponse::U32(30),
             MockResponse::Text("xyz".into()),
             MockResponse::Text("leda".into()),
+            MockResponse::Text("en-US".into()),
         ]);
         // Act
         collect_defaults(&prompter, &mut config, dir.path()).unwrap();
@@ -215,6 +237,101 @@ mod tests {
             messages.iter().any(|m| m.contains("callisto") && m.contains("leda") && m.contains("thebe")),
             "Expected available templates in messages, got: {messages:?}"
         );
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_collect_defaults_accepts_default_locale() {
+        // Arrange
+        let dir = setup_dir(None);
+        let mut config = empty_config();
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("EUR".into()),
+            MockResponse::U32(9),
+            MockResponse::U32(30),
+            MockResponse::Text("leda".into()),
+            MockResponse::Text("en-US".into()),
+        ]);
+
+        // Act
+        collect_defaults(&prompter, &mut config, dir.path()).unwrap();
+
+        // Assert
+        let defaults = config.defaults.as_ref().unwrap();
+        assert_eq!(defaults.locale, Locale::EnUs);
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_collect_defaults_custom_locale() {
+        // Arrange
+        let dir = setup_dir(None);
+        let mut config = empty_config();
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("EUR".into()),
+            MockResponse::U32(9),
+            MockResponse::U32(30),
+            MockResponse::Text("leda".into()),
+            MockResponse::Text("de-DE".into()),
+        ]);
+
+        // Act
+        collect_defaults(&prompter, &mut config, dir.path()).unwrap();
+
+        // Assert
+        let defaults = config.defaults.as_ref().unwrap();
+        assert_eq!(defaults.locale, Locale::DeDe);
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_collect_defaults_invalid_locale_reprompts() {
+        // Arrange
+        let dir = setup_dir(None);
+        let mut config = empty_config();
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("EUR".into()),
+            MockResponse::U32(9),
+            MockResponse::U32(30),
+            MockResponse::Text("leda".into()),
+            MockResponse::Text("xx-YY".into()),  // invalid — triggers re-prompt
+            MockResponse::Text("en-US".into()),   // valid on retry
+        ]);
+
+        // Act
+        collect_defaults(&prompter, &mut config, dir.path()).unwrap();
+
+        // Assert
+        let defaults = config.defaults.as_ref().unwrap();
+        assert_eq!(defaults.locale, Locale::EnUs);
+        let messages = prompter.messages.borrow();
+        assert!(
+            messages.iter().any(|m| m.contains("Unsupported locale")),
+            "Expected 'Unsupported locale' message, got: {messages:?}"
+        );
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_collect_defaults_locale_persisted_to_disk() {
+        // Arrange
+        let dir = setup_dir(None);
+        let mut config = empty_config();
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("EUR".into()),
+            MockResponse::U32(9),
+            MockResponse::U32(30),
+            MockResponse::Text("leda".into()),
+            MockResponse::Text("fr-FR".into()),
+        ]);
+
+        // Act
+        collect_defaults(&prompter, &mut config, dir.path()).unwrap();
+
+        // Assert
+        let loaded = unwrap_loaded(load_config(dir.path()));
+        let defaults = loaded.defaults.unwrap();
+        assert_eq!(defaults.locale, Locale::FrFr);
         prompter.assert_exhausted();
     }
 }
