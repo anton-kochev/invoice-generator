@@ -1,8 +1,8 @@
 # User Stories — Invoice Generator CLI
 
 ## Summary
-- **Epics**: 11 (5 v1.0 + 6 v2.0)
-- **Total User Stories**: 41 (40 completed ✅ + 1 remaining)
+- **Epics**: 14 (5 v1.0 + 6 v2.0 + 3 v3.0)
+- **Total User Stories**: 52 (47 completed ✅ + 5 remaining)
 - **User Roles Identified**: Freelance Developer (sole actor — referred to as "user" throughout)
 
 ---
@@ -744,7 +744,7 @@ The application compiles to a single static binary with no runtime dependencies.
 
 ---
 
-### Story 11.2: CLI Error Messages for v2.0 Commands (partial — Epic 6 criteria met)
+### Story 11.2: CLI Error Messages for v2.0 Commands ✅
 **As a** user,
 **I want** clear error messages for all v2.0 CLI mistakes,
 **So that** I can fix my command without guessing.
@@ -763,7 +763,7 @@ The application compiles to a single static binary with no runtime dependencies.
 
 ---
 
-### Story 11.3: Setup Wizard Update for Multi-Recipient Format
+### Story 11.3: Setup Wizard Update for Multi-Recipient Format ✅
 **As a** user,
 **I want** the setup wizard to create the v2.0 multi-recipient config format,
 **So that** new installations start with the modern structure.
@@ -826,4 +826,301 @@ The application compiles to a single static binary with no runtime dependencies.
 4. **Sprint 8** ✅: Stories 8.1, 8.2 (multi-currency)
 5. **Sprint 9** ✅: Stories 9.1, 9.2, 9.3, 9.4 (tax/VAT)
 6. **Sprint 10** ✅: Stories 10.1, 10.2, 10.3 (branding)
-7. **Sprint 11**: Stories 11.2, 11.3 (error handling polish + setup wizard update)
+7. **Sprint 11** ✅: Stories 11.2, 11.3 (error handling polish + setup wizard update)
+
+---
+
+# v3.0 User Stories
+
+> All stories below build on top of the completed v1.0 and v2.0 foundation. v1.0/v2.0 behavior remains unchanged unless explicitly noted. See `docs/SRS_Invoice_Generator_v3.md` for the full specification.
+
+---
+
+## Epic 12: Built-In PDF Templates
+> Ship multiple visual layouts for PDFs so users can pick the style that fits their client or brand.
+
+### Story 12.1: Template Registry and Config Validation ✅
+**As a** user,
+**I want** a `template` field in my config defaults,
+**So that** all my invoices use my preferred layout without specifying it each time.
+
+**Acceptance Criteria:**
+- [ ] New optional `template` field in `defaults` section of `invoice_config.yaml`
+- [ ] If absent, defaults to `"leda"`
+- [ ] Valid values: `callisto`, `leda`, `thebe`, `amalthea`, `metis`
+- [ ] Invalid template key in config prints error listing available templates and exits with non-zero code
+- [ ] Existing v2.0 configs without `template` field work unchanged (default `leda`)
+
+**Dependencies:** Story 1.1
+
+---
+
+### Story 12.2: Leda Template (Default) ✅
+**As a** user,
+**I want** the current PDF layout designated as the `leda` template,
+**So that** upgrading to v3.0 produces identical PDFs by default.
+
+**Acceptance Criteria:**
+- [ ] Current PDF template is refactored into the `leda` template key
+- [ ] `leda` renders all required sections: header, parties, line items, total, payment details, footer
+- [ ] Supports all v2.0 features: multi-line items, tax breakdown rows, branding overrides, multi-currency symbols
+- [ ] Branding overrides (logo, accent color, font, footer text) take precedence over template defaults
+- [ ] Fits on a single A4 page for invoices with up to 5 line items
+- [ ] Output is identical to v2.0 for the same input data (no visual regression)
+
+**Dependencies:** Story 12.1
+
+---
+
+### Story 12.3: Callisto Template (Traditional)
+**As a** user,
+**I want** a formal, traditional-style template,
+**So that** I can use a corporate-appropriate layout for conservative clients.
+
+**Acceptance Criteria:**
+- [ ] Template key: `callisto`
+- [ ] Formal layout with serif-like headings, bordered table, conservative spacing
+- [ ] Renders all required sections defined in v1.0 §7.2
+- [ ] Supports all v2.0 features: multi-line items, tax breakdown, branding overrides, multi-currency
+- [ ] Branding overrides take precedence over template defaults
+- [ ] Fits on a single A4 page for invoices with up to 5 line items
+
+**Dependencies:** Story 12.2
+
+---
+
+### Story 12.4: Thebe Template (Dense)
+**As a** user,
+**I want** a compact template optimized for many line items,
+**So that** invoices with numerous rows fit on a single page.
+
+**Acceptance Criteria:**
+- [ ] Template key: `thebe`
+- [ ] Reduced margins and font sizes compared to other templates
+- [ ] Renders all required sections and supports all v2.0 features
+- [ ] Branding overrides take precedence over template defaults
+- [ ] Fits on a single A4 page for invoices with more line items than other templates
+
+**Dependencies:** Story 12.2
+
+---
+
+### Story 12.5: Amalthea Template (High-Contrast)
+**As a** user,
+**I want** a bold, eye-catching template,
+**So that** my invoices stand out visually.
+
+**Acceptance Criteria:**
+- [ ] Template key: `amalthea`
+- [ ] Large header, prominent totals, strong color blocks
+- [ ] Renders all required sections and supports all v2.0 features
+- [ ] Branding overrides take precedence over template defaults
+- [ ] Fits on a single A4 page for invoices with up to 5 line items
+
+**Dependencies:** Story 12.2
+
+---
+
+### Story 12.6: Metis Template (Bare-Bones)
+**As a** user,
+**I want** a plain, no-frills template,
+**So that** my invoices print well in black & white with no decorative elements.
+
+**Acceptance Criteria:**
+- [ ] Template key: `metis`
+- [ ] No decorative elements, no color, no background fills
+- [ ] Plain text with clean alignment
+- [ ] Renders all required sections and supports all v2.0 features
+- [ ] Branding overrides take precedence over template defaults
+- [ ] Fits on a single A4 page for invoices with up to 5 line items
+
+**Dependencies:** Story 12.2
+
+---
+
+### Story 12.7: Template Selection in Interactive Flow ✅
+**As a** user,
+**I want** to review and optionally change the template before generating a PDF,
+**So that** I can pick the right look for each invoice without changing my config.
+
+**Acceptance Criteria:**
+- [ ] After the confirmation summary (Story 3.6) and before `Generate PDF? (Y/n):`, shows: `Template: leda (Clean & minimal)` followed by `Change template? (y/N):`
+- [ ] On "N" or Enter, uses the config default template
+- [ ] On "y", displays numbered list of all 5 templates with descriptions, marking the current default
+- [ ] User selects by number; invalid numbers re-prompt
+- [ ] Selected template applies to the current invoice only — does not modify the config file
+- [ ] Template name and description are shown in the selection list
+
+**Dependencies:** Story 12.1
+
+---
+
+### Story 12.8: `--template` CLI Flag ✅
+**As a** user,
+**I want** a `--template` flag on the `generate` subcommand,
+**So that** I can specify the template in scripted invoice generation.
+
+**Acceptance Criteria:**
+- [ ] `invoice generate --month 3 --year 2026 --preset pwc --days 12 --template amalthea` generates a PDF using the amalthea template
+- [ ] If `--template` is omitted, uses the config default
+- [ ] Invalid template key prints available templates and exits with non-zero code
+- [ ] Works with both `--preset --days` and `--items` generation modes
+
+**Dependencies:** Story 12.1, Story 6.2
+
+---
+
+### Story 12.9: First-Run Setup — Template Prompt ✅
+**As a** user running the app for the first time,
+**I want** to choose a default template during setup,
+**So that** my preferred layout is set from the start.
+
+**Acceptance Criteria:**
+- [ ] After the payment terms prompt (Story 2.6), shows: `Template [leda]:`
+- [ ] Pressing Enter accepts `leda` as default
+- [ ] Typing a valid template key sets that as the default
+- [ ] Invalid keys re-prompt with the list of available templates
+- [ ] Selected template is saved to `defaults.template` in `invoice_config.yaml`
+
+**Dependencies:** Story 12.1, Story 2.6
+
+---
+
+## Epic 13: Locale-Aware Formatting
+> Format dates and numbers in the PDF according to a locale code, so invoices read naturally for non-English-speaking clients.
+
+### Story 13.1: Locale Config Field and Validation
+**As a** user,
+**I want** a `locale` field in my config defaults,
+**So that** dates and numbers in my PDFs are formatted for my region.
+
+**Acceptance Criteria:**
+- [ ] New optional `locale` field in `defaults` section of `invoice_config.yaml`
+- [ ] If absent, defaults to `"en-US"`
+- [ ] Must support at minimum: `en-US`, `en-GB`, `de-DE`, `fr-FR`, `cs-CZ`, `uk-UA`
+- [ ] Unsupported locale code prints a warning and falls back to `en-US` (does not exit)
+- [ ] Existing v2.0 configs without `locale` field work unchanged (default `en-US`)
+
+**Dependencies:** Story 1.1
+
+---
+
+### Story 13.2: Locale-Aware Date and Number Formatting in PDF
+**As a** user,
+**I want** invoice dates and amounts formatted according to my locale,
+**So that** invoices look natural to my clients in their region.
+
+**Acceptance Criteria:**
+- [ ] Invoice date formatted per locale (e.g., `en-US`: "March 9, 2026", `de-DE`: "9. März 2026", `uk-UA`: "9 березня 2026")
+- [ ] Due date formatted per locale (same pattern as invoice date)
+- [ ] Period column formatted per locale (e.g., `en-US`: "February 2026", `de-DE`: "Februar 2026", `uk-UA`: "лютий 2026")
+- [ ] Decimal separator per locale (e.g., `en-US`: `.`, `de-DE`: `,`, `uk-UA`: `,`)
+- [ ] Thousands separator per locale (e.g., `en-US`: `,`, `de-DE`: `.`, `uk-UA`: ` ` (non-breaking space))
+- [ ] Console interface remains in English regardless of locale
+- [ ] Invoice number format `INV-{YYYY}-{MM}` is never localized
+- [ ] Config file YAML values remain in standard decimal notation
+- [ ] Currency codes remain ISO 4217 — not translated
+- [ ] Sender/recipient data rendered as entered — no transliteration
+
+**Dependencies:** Story 13.1, Story 4.2
+
+---
+
+### Story 13.3: `--locale` CLI Flag
+**As a** user,
+**I want** a `--locale` flag on the `generate` subcommand,
+**So that** I can override the locale for a specific invoice in scripts.
+
+**Acceptance Criteria:**
+- [ ] `invoice generate --month 3 --year 2026 --preset pwc --days 12 --locale de-DE` generates a PDF with German date/number formatting
+- [ ] If `--locale` is omitted, uses the config default
+- [ ] Unsupported locale prints a warning, falls back to `en-US`, and **continues** (does not exit)
+- [ ] Works with both `--preset --days` and `--items` generation modes
+
+**Dependencies:** Story 13.1, Story 6.2
+
+---
+
+### Story 13.4: First-Run Setup — Locale Prompt
+**As a** user running the app for the first time,
+**I want** to choose a locale during setup,
+**So that** my PDFs are formatted correctly from the start.
+
+**Acceptance Criteria:**
+- [ ] After the template prompt (Story 12.9), shows: `Locale for PDF formatting [en-US]:`
+- [ ] Pressing Enter accepts `en-US` as default
+- [ ] Typing a supported locale code sets that as the default
+- [ ] Unsupported locale prints warning and re-prompts
+- [ ] Selected locale is saved to `defaults.locale` in `invoice_config.yaml`
+
+**Dependencies:** Story 13.1, Story 12.9
+
+---
+
+## Epic 14: v3.0 Migration & Compatibility
+> Ensure seamless upgrade from v2.0 and clear guidance for new config fields.
+
+### Story 14.1: v2.0 Config Backwards Compatibility
+**As a** user upgrading from v2.0,
+**I want** my existing config file to work without changes,
+**So that** I can upgrade the binary without a migration step.
+
+**Acceptance Criteria:**
+- [ ] v3.0 reads and works with unmodified v2.0 config files
+- [ ] Missing `template` field defaults to `leda` — no error
+- [ ] Missing `locale` field defaults to `en-US` — no error
+- [ ] Running `invoice` on a v2.0 config produces visually identical output to v2.0 (leda = current template, en-US = current formatting)
+- [ ] No deprecation warnings for v2.0 config format
+- [ ] Application detects missing `template`/`locale` fields and prints clear guidance on what can be added (info message, not error)
+
+**Dependencies:** Story 12.1, Story 13.1
+
+---
+
+## v3.0 Identified Gaps & Ambiguities
+
+| # | SRS Section / Requirement | Issue | Impact |
+|---|---------------------------|-------|--------|
+| 1 | §2.5 — Multi-page overflow | "Render multi-page PDF with repeated header on page 2" — no specification of which header elements repeat | Need to clarify: full header (invoice number, dates, parties) or just "INVOICE" title + page number? |
+| 2 | §2.5 — Template + branding interaction | Branding overrides template defaults, but what if a template (e.g., metis) is designed with no color and branding sets an accent color? | Recommend: branding always wins — metis with accent_color gets that color applied. Confirm with stakeholder. |
+| 3 | §3.2 — Locale scope for `en-GB` vs `en-US` | Only date/number format differences shown. Are there other differences (e.g., spelling in labels)? | Likely none — §3.3 says console remains English, and PDF labels are presumably not localized. Confirm. |
+| 4 | §3.1 — Locale extensibility | "Must support at minimum" 6 locales — is there a mechanism for users to add custom locales? | SRS doesn't mention it. Recommend: not in v3.0 scope; add if requested. |
+| 5 | §2.3 — Template selection timing | Template prompt is after confirmation but before "Generate PDF?" — what if user changes template and then says "no" to generate? | Template choice is discarded along with everything else when user declines. Consistent with existing flow. |
+
+---
+
+## v3.0 Dependency Map
+
+**Critical path** (longest chain):
+
+```
+12.1 (Template registry/config)
+  → 12.2 (Leda template)
+    → 12.3–12.6 (Remaining templates — can be parallel)
+  → 12.7 (Interactive template selection)
+  → 12.8 (--template CLI flag)
+  → 12.9 (First-run setup template prompt)
+    → 13.4 (First-run setup locale prompt)
+```
+
+**Secondary chains:**
+
+```
+13.1 (Locale config) → 13.2 (Date/number formatting) → 13.3 (--locale CLI flag)
+13.1 → 13.4 (First-run locale prompt)
+
+12.1 + 13.1 → 14.1 (Backwards compatibility)
+```
+
+**Parallel tracks:**
+
+- Templates 12.3–12.6 are independent of each other — can be built in parallel
+- Epic 13 (locale) is independent of Epic 12 (templates) except for first-run setup ordering (13.4 depends on 12.9)
+- Story 14.1 can be built once both 12.1 and 13.1 are done
+
+**Recommended sprint ordering:**
+
+1. **Sprint 12** ✅: Stories 12.1, 12.2, 12.7, 12.8, 12.9 (template foundation + leda + all integration points)
+2. **Sprint 13**: Stories 12.3, 12.4, 12.5, 12.6 (remaining 4 templates — parallelizable)
+3. **Sprint 14**: Stories 13.1, 13.2, 13.3, 13.4 (locale formatting)
+4. **Sprint 15**: Story 14.1 (backwards compatibility) + Story 11.3 (setup wizard v2.0 update, if not yet done)

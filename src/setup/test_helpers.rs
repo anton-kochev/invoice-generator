@@ -49,6 +49,7 @@ pub fn synthetic_defaults() -> Defaults {
         currency: "USD".into(),
         invoice_date_day: 5,
         payment_terms_days: 14,
+        template: TemplateKey::Leda,
     }
 }
 
@@ -213,6 +214,7 @@ pub fn full_setup_responses() -> Vec<MockResponse> {
         MockResponse::Text("EUR".into()),
         MockResponse::U32(9),
         MockResponse::U32(30),
+        MockResponse::Text("leda".into()),  // template
     ]
 }
 
@@ -239,5 +241,6 @@ pub fn resume_from_recipient_responses() -> Vec<MockResponse> {
         MockResponse::Text("EUR".into()),
         MockResponse::U32(9),
         MockResponse::U32(30),
+        MockResponse::Text("leda".into()),  // template
     ]
 }

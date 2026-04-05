@@ -92,6 +92,7 @@ pub struct ValidatedConfig {
     pub presets: Vec<Preset>,
     pub defaults: Defaults,
     pub branding: ValidatedBranding,
+    pub template: TemplateKey,
 }
 
 impl ValidatedConfig {
@@ -209,6 +210,8 @@ impl Config {
                 .cloned()
                 .unwrap();
 
+            let resolved_defaults = defaults.unwrap_or_default();
+            let template = resolved_defaults.template;
             Ok(ValidationOutcome::Complete(ValidatedConfig {
                 sender: sender.unwrap(),
                 recipient,
@@ -216,7 +219,7 @@ impl Config {
                 default_recipient_key: dk,
                 payment: payment.unwrap(),
                 presets: presets.unwrap(),
-                defaults: defaults.unwrap_or_default(),
+                defaults: resolved_defaults,
                 branding: match branding {
                     Some(b) => ValidatedBranding {
                         logo: b.logo,
@@ -234,6 +237,7 @@ impl Config {
                     },
                     None => ValidatedBranding::default(),
                 },
+                template,
             }))
         } else {
             Ok(ValidationOutcome::Incomplete {
@@ -773,6 +777,64 @@ mod tests {
                 assert!(!v.default_recipient_key.is_empty(), "default key should be auto-derived");
             }
             ValidationOutcome::Incomplete { .. } => panic!("Expected Complete for v1 config"),
+        }
+    }
+
+    // ── Story 12.1 Cycle 6: ValidatedConfig.template ──
+
+    #[test]
+    fn test_validated_config_includes_template_from_defaults() {
+        // Arrange
+        let config = make_complete_config();
+
+        // Act
+        let result = config.validate().unwrap();
+
+        // Assert
+        match result {
+            ValidationOutcome::Complete(v) => {
+                assert_eq!(v.template, TemplateKey::Leda);
+            }
+            ValidationOutcome::Incomplete { .. } => panic!("Expected Complete"),
+        }
+    }
+
+    #[test]
+    fn test_validated_config_template_custom_value() {
+        // Arrange
+        let mut config = make_complete_config();
+        config.defaults = Some(Defaults {
+            template: TemplateKey::Callisto,
+            ..Defaults::default()
+        });
+
+        // Act
+        let result = config.validate().unwrap();
+
+        // Assert
+        match result {
+            ValidationOutcome::Complete(v) => {
+                assert_eq!(v.template, TemplateKey::Callisto);
+            }
+            ValidationOutcome::Incomplete { .. } => panic!("Expected Complete"),
+        }
+    }
+
+    #[test]
+    fn test_validated_config_missing_defaults_gets_leda_template() {
+        // Arrange
+        let mut config = make_complete_config();
+        config.defaults = None;
+
+        // Act
+        let result = config.validate().unwrap();
+
+        // Assert
+        match result {
+            ValidationOutcome::Complete(v) => {
+                assert_eq!(v.template, TemplateKey::Leda);
+            }
+            ValidationOutcome::Incomplete { .. } => panic!("Expected Complete"),
         }
     }
 

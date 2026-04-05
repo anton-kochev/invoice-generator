@@ -63,6 +63,9 @@ pub struct GenerateArgs {
     /// Recipient profile key (defaults to default_recipient)
     #[arg(long)]
     pub client: Option<String>,
+    /// Template to use for PDF generation (overrides config default)
+    #[arg(long)]
+    pub template: Option<String>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -347,6 +350,45 @@ mod tests {
     }
 
     // ── Recipient subcommand tests ──
+
+    #[test]
+    fn test_generate_template_flag_parses() {
+        // Arrange
+        let args = ["invoice", "generate", "--month", "3", "--year", "2026", "--preset", "dev", "--days", "10", "--template", "amalthea"];
+        // Act
+        let cli = Cli::try_parse_from(args).unwrap();
+        // Assert
+        match cli.command.unwrap() {
+            Command::Generate(g) => assert_eq!(g.template, Some("amalthea".into())),
+            _ => panic!("Expected Generate"),
+        }
+    }
+
+    #[test]
+    fn test_generate_without_template_flag_defaults_to_none() {
+        // Arrange
+        let args = ["invoice", "generate", "--month", "3", "--year", "2026", "--preset", "dev", "--days", "10"];
+        // Act
+        let cli = Cli::try_parse_from(args).unwrap();
+        // Assert
+        match cli.command.unwrap() {
+            Command::Generate(g) => assert!(g.template.is_none()),
+            _ => panic!("Expected Generate"),
+        }
+    }
+
+    #[test]
+    fn test_generate_template_with_items_mode_parses() {
+        // Arrange
+        let args = ["invoice", "generate", "--month", "3", "--year", "2026", "--items", r#"[{"preset":"dev","days":5}]"#, "--template", "thebe"];
+        // Act
+        let cli = Cli::try_parse_from(args).unwrap();
+        // Assert
+        match cli.command.unwrap() {
+            Command::Generate(g) => assert_eq!(g.template, Some("thebe".into())),
+            _ => panic!("Expected Generate"),
+        }
+    }
 
     #[test]
     fn test_recipient_list_parses() {

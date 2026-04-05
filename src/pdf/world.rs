@@ -6,8 +6,6 @@ use typst::utils::LazyHash;
 use typst::{Library, LibraryExt};
 use typst_kit::fonts::{FontSearcher, FontSlot};
 
-const TEMPLATE: &str = include_str!("template/invoice.typ");
-
 /// Minimal `typst::World` implementation that compiles an invoice from
 /// an in-memory JSON data blob and the embedded Typst template.
 pub struct InvoiceWorld {
@@ -22,12 +20,12 @@ pub struct InvoiceWorld {
 
 impl InvoiceWorld {
     /// Build a new world from serialized JSON invoice data and an optional logo.
-    pub fn new(json_data: Vec<u8>, logo: Option<(String, Vec<u8>)>) -> Self {
+    pub fn new(template_source: &str, json_data: Vec<u8>, logo: Option<(String, Vec<u8>)>) -> Self {
         let fonts = FontSearcher::new().search();
 
         let source_content = format!(
             "#let data = json(\"data.json\")\n\n{}",
-            TEMPLATE
+            template_source
         );
 
         let main_id = FileId::new(None, VirtualPath::new("main.typ"));

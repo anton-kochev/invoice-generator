@@ -1,7 +1,8 @@
 use std::io::Write;
 use std::path::Path;
+use std::str::FromStr;
 
-use crate::config::types::{Preset, Recipient};
+use crate::config::types::{Preset, Recipient, TemplateKey};
 use crate::config::validator::ValidatedConfig;
 use crate::error::AppError;
 use crate::invoice::summary::build_summary;
@@ -134,10 +135,17 @@ pub fn handle_generate(
 ) -> Result<(), AppError> {
     let validated = load_validated_config(cwd)?;
     let recipient = resolve_recipient(args.client.as_deref(), &validated)?;
+    let template = match args.template.as_deref() {
+        Some(key) => TemplateKey::from_str(key).map_err(|_| AppError::InvalidTemplateKey {
+            key: key.to_string(),
+            available: TemplateKey::ALL.iter().map(|t| t.to_string()).collect(),
+        })?,
+        None => validated.template,
+    };
     let period = validate_period(args.month, args.year)?;
     let line_items = resolve_line_items(args, &validated.presets, &validated.defaults.currency)?;
     let summary = build_summary(period, line_items, &validated.defaults)?;
-    let pdf_bytes = generate_pdf(&summary, &validated, recipient, cwd)?;
+    let pdf_bytes = generate_pdf(&summary, &validated, recipient, cwd, template)?;
     let output_path = pdf_output_path(&validated.sender.name, &period, cwd);
     std::fs::write(&output_path, &pdf_bytes)?;
     writeln!(writer, "PDF saved: {}", output_path.display())?;
@@ -159,6 +167,7 @@ mod tests {
             days: Some(days),
             items: None,
             client: None,
+            template: None,
         }
     }
 
@@ -170,6 +179,7 @@ mod tests {
             days: None,
             items: Some(json.to_string()),
             client: None,
+            template: None,
         }
     }
 
@@ -804,5 +814,78 @@ mod tests {
 
         // Assert
         assert!(result.is_ok(), "Expected Ok, got {result:?}");
+    }
+
+    // ── Story 12.8: --template flag handler tests ──
+
+    #[test]
+    fn test_handle_generate_with_template_flag_produces_pdf() {
+        // Arrange
+        let config = complete_config();
+        let dir = setup_dir(Some(&config));
+        let mut args = generate_single_args(3, 2026, "dev", 10.0);
+        args.template = Some("leda".to_string());
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let result = handle_generate(&args, dir.path(), &mut buf);
+
+        // Assert
+        assert!(result.is_ok(), "Expected Ok, got {result:?}");
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("PDF saved:"));
+    }
+
+    #[test]
+    fn test_handle_generate_without_template_uses_config_default() {
+        // Arrange
+        let config = complete_config();
+        let dir = setup_dir(Some(&config));
+        let args = generate_single_args(3, 2026, "dev", 10.0);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let result = handle_generate(&args, dir.path(), &mut buf);
+
+        // Assert
+        assert!(result.is_ok(), "Expected Ok, got {result:?}");
+    }
+
+    #[test]
+    fn test_handle_generate_invalid_template_returns_error() {
+        // Arrange
+        let config = complete_config();
+        let dir = setup_dir(Some(&config));
+        let mut args = generate_single_args(3, 2026, "dev", 10.0);
+        args.template = Some("nonexistent".to_string());
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let result = handle_generate(&args, dir.path(), &mut buf);
+
+        // Assert
+        assert!(matches!(result, Err(AppError::InvalidTemplateKey { .. })));
+    }
+
+    #[test]
+    fn test_handle_generate_invalid_template_error_lists_available() {
+        // Arrange
+        let config = complete_config();
+        let dir = setup_dir(Some(&config));
+        let mut args = generate_single_args(3, 2026, "dev", 10.0);
+        args.template = Some("xyz".to_string());
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let result = handle_generate(&args, dir.path(), &mut buf);
+
+        // Assert
+        match result {
+            Err(AppError::InvalidTemplateKey { key, available }) => {
+                assert_eq!(key, "xyz");
+                assert!(available.contains(&"leda".to_string()), "Expected 'leda' in available: {available:?}");
+            }
+            other => panic!("Expected InvalidTemplateKey, got {other:?}"),
+        }
     }
 }

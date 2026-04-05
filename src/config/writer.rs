@@ -251,6 +251,7 @@ mod tests {
             currency: "USD".to_string(),
             invoice_date_day: 5,
             payment_terms_days: 14,
+            ..Defaults::default()
         }
     }
 

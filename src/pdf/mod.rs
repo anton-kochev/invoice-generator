@@ -5,9 +5,19 @@ use std::path::Path;
 
 use typst::layout::PagedDocument;
 
+use crate::config::types::TemplateKey;
 use crate::config::validator::ValidatedConfig;
 use crate::error::AppError;
 use crate::invoice::types::InvoiceSummary;
+
+/// Return the Typst template source for the given template key.
+fn template_source(key: TemplateKey) -> &'static str {
+    match key {
+        TemplateKey::Leda => include_str!("template/invoice.typ"),
+        // TODO(sprint-13): each variant gets its own .typ file
+        _ => include_str!("template/invoice.typ"),
+    }
+}
 
 /// Resolve a logo path relative to the config directory.
 /// Returns (virtual_filename, bytes) if the file exists and is a supported format.
@@ -51,6 +61,7 @@ pub fn generate_pdf(
     config: &ValidatedConfig,
     recipient: &crate::config::types::Recipient,
     config_dir: &Path,
+    template: TemplateKey,
 ) -> Result<Vec<u8>, AppError> {
     let logo = config
         .branding
@@ -63,7 +74,8 @@ pub fn generate_pdf(
     let json = serde_json::to_vec(&invoice_data)
         .map_err(|e| AppError::PdfCompile(format!("JSON serialization failed: {e}")))?;
 
-    let world = world::InvoiceWorld::new(json, logo);
+    let source = template_source(template);
+    let world = world::InvoiceWorld::new(source, json, logo);
 
     let warned = typst::compile::<PagedDocument>(&world);
     let document = warned.output.map_err(|diagnostics| {
@@ -140,48 +152,61 @@ mod tests {
             }],
             defaults: Defaults::default(),
             branding: ValidatedBranding::default(),
+            template: TemplateKey::Leda,
         }
     }
 
     #[test]
-    fn generate_pdf_returns_valid_pdf() {
+    fn test_template_source_leda_returns_nonempty_string() {
+        // Arrange & Act
+        let source = template_source(TemplateKey::Leda);
+        // Assert
+        assert!(!source.is_empty());
+        assert!(source.contains("#"), "Should contain Typst syntax");
+    }
+
+    #[test]
+    fn test_template_source_all_keys_return_nonempty() {
+        // Arrange & Act & Assert
+        for key in TemplateKey::ALL {
+            let source = template_source(key);
+            assert!(!source.is_empty(), "template_source({key}) should be non-empty");
+        }
+    }
+
+    #[test]
+    fn test_generate_pdf_with_explicit_leda_template() {
         // Arrange
         let summary = make_summary();
         let config = make_config();
-
         // Act
-        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."));
-
+        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Leda);
         // Assert
         let pdf = result.expect("PDF generation should succeed");
         assert!(pdf.starts_with(b"%PDF"), "Output should start with PDF header");
     }
 
     #[test]
-    fn generate_pdf_returns_nonempty() {
+    fn test_generate_pdf_deterministic_with_template() {
         // Arrange
         let summary = make_summary();
         let config = make_config();
-
         // Act
-        let pdf = generate_pdf(&summary, &config, &config.recipient, Path::new(".")).unwrap();
-
+        let pdf1 = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Leda).unwrap();
+        let pdf2 = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Leda).unwrap();
         // Assert
-        assert!(pdf.len() > 100, "PDF should have substantial content");
+        assert_eq!(pdf1, pdf2, "Same input should produce identical PDF bytes");
     }
 
     #[test]
-    fn generate_pdf_deterministic() {
+    fn test_generate_pdf_with_non_leda_key_succeeds() {
         // Arrange
         let summary = make_summary();
         let config = make_config();
-
         // Act
-        let pdf1 = generate_pdf(&summary, &config, &config.recipient, Path::new(".")).unwrap();
-        let pdf2 = generate_pdf(&summary, &config, &config.recipient, Path::new(".")).unwrap();
-
+        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Callisto);
         // Assert
-        assert_eq!(pdf1, pdf2, "Same input should produce identical PDF bytes");
+        assert!(result.is_ok(), "Non-leda key should succeed (maps to leda in Sprint 12)");
     }
 
     // ── Sprint 10 Step 5: resolve_logo + logo integration tests ──
@@ -244,7 +269,7 @@ mod tests {
         let summary = make_summary();
         let config = make_config(); // branding.logo is None
         // Act
-        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."));
+        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Leda);
         // Assert
         assert!(result.is_ok());
     }
@@ -258,7 +283,7 @@ mod tests {
         config.branding.font = Some("Arial".into());
         config.branding.footer_text = Some("Custom footer text".into());
         // Act
-        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."));
+        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Leda);
         // Assert
         let pdf = result.expect("PDF with custom branding should succeed");
         assert!(pdf.starts_with(b"%PDF"));
@@ -271,7 +296,7 @@ mod tests {
         let mut config = make_config();
         config.branding.footer_text = Some("".into());
         // Act
-        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."));
+        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Leda);
         // Assert
         assert!(result.is_ok());
     }

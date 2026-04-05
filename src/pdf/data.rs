@@ -212,6 +212,7 @@ mod tests {
             }],
             defaults: Defaults::default(),
             branding: ValidatedBranding::default(),
+            template: TemplateKey::Leda,
         }
     }
 

@@ -138,6 +138,7 @@ mod tests {
                 currency: "EUR".into(),
                 invoice_date_day: 9,
                 payment_terms_days: 30,
+                ..Defaults::default()
             }),
             branding: None,
         };

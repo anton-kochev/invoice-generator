@@ -77,6 +77,13 @@ pub enum AppError {
     /// Invalid tax rate (must be >= 0).
     #[error("Invalid tax rate: {0} (must be >= 0)")]
     InvalidTaxRate(String),
+
+    /// Unknown template key.
+    #[error("Unknown template: \"{key}\". Available: {}", available.join(", "))]
+    InvalidTemplateKey {
+        key: String,
+        available: Vec<String>,
+    },
 }
 
 #[cfg(test)]
@@ -175,6 +182,26 @@ mod tests {
         // Assert
         assert!(msg.contains("-5.0"), "Expected '-5.0' in: {msg}");
         assert!(msg.contains(">= 0"), "Expected '>= 0' in: {msg}");
+    }
+
+    // ── Story 12.1 Cycle 5: InvalidTemplateKey ──
+
+    #[test]
+    fn test_invalid_template_key_displays_key_and_available() {
+        // Arrange
+        let err = AppError::InvalidTemplateKey {
+            key: "ganymede".into(),
+            available: vec!["callisto".into(), "leda".into(), "thebe".into()],
+        };
+
+        // Act
+        let msg = format!("{err}");
+
+        // Assert
+        assert!(msg.contains("ganymede"), "Expected 'ganymede' in: {msg}");
+        assert!(msg.contains("callisto"), "Expected 'callisto' in: {msg}");
+        assert!(msg.contains("leda"), "Expected 'leda' in: {msg}");
+        assert!(msg.contains("thebe"), "Expected 'thebe' in: {msg}");
     }
 
     #[test]

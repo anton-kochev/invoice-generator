@@ -79,6 +79,7 @@ mod tests {
             currency: "EUR".into(),
             invoice_date_day: 9,
             payment_terms_days: 30,
+            ..Defaults::default()
         }
     }
 
@@ -274,6 +275,7 @@ mod tests {
             currency: "EUR".into(),
             invoice_date_day: 9,
             payment_terms_days: 14,
+            ..Defaults::default()
         };
 
         // Act
@@ -338,6 +340,7 @@ mod tests {
             currency: "USD".into(),
             invoice_date_day: 9,
             payment_terms_days: 30,
+            ..Defaults::default()
         };
 
         // Act
@@ -377,6 +380,7 @@ mod tests {
             currency: "EUR".into(),
             invoice_date_day: 9,
             payment_terms_days: 30,
+            ..Defaults::default()
         };
         let items = vec![LineItem::new("Dev".into(), 10.0, 800.0, "CZK".into())];
 

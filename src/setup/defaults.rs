@@ -1,6 +1,7 @@
 use std::path::Path;
+use std::str::FromStr;
 
-use crate::config::types::{Config, Defaults};
+use crate::config::types::{Config, Defaults, TemplateKey};
 use crate::config::writer::save_config;
 use crate::error::AppError;
 use super::prompter::Prompter;
@@ -17,10 +18,24 @@ pub fn collect_defaults(
     let invoice_date_day = prompter.u32_with_default("Invoice date (day of month):", 9)?;
     let payment_terms_days = prompter.u32_with_default("Payment terms (days):", 30)?;
 
+    let template = loop {
+        let input = prompter.text_with_default("Template:", "leda")?;
+        match TemplateKey::from_str(&input) {
+            Ok(t) => break t,
+            Err(_) => {
+                let list: Vec<String> = TemplateKey::ALL.iter()
+                    .map(|t| format!("{} ({})", t, t.description()))
+                    .collect();
+                prompter.message(&format!("Invalid template. Available: {}", list.join(", ")));
+            }
+        }
+    };
+
     config.defaults = Some(Defaults {
         currency,
         invoice_date_day,
         payment_terms_days,
+        template,
     });
 
     save_config(dir, config)?;
@@ -44,6 +59,7 @@ mod tests {
             MockResponse::Text("".into()),  // accept default EUR
             MockResponse::U32(9),
             MockResponse::U32(30),
+            MockResponse::Text("leda".into()),
         ]);
 
         // Act
@@ -66,6 +82,7 @@ mod tests {
             MockResponse::Text("USD".into()),
             MockResponse::U32(15),
             MockResponse::U32(14),
+            MockResponse::Text("leda".into()),
         ]);
 
         // Act
@@ -88,6 +105,7 @@ mod tests {
             MockResponse::Text("CHF".into()),
             MockResponse::U32(1),
             MockResponse::U32(60),
+            MockResponse::Text("leda".into()),
         ]);
 
         // Act
@@ -99,6 +117,104 @@ mod tests {
         assert_eq!(defaults.currency, "CHF");
         assert_eq!(defaults.invoice_date_day, 1);
         assert_eq!(defaults.payment_terms_days, 60);
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_collect_defaults_accepts_default_template() {
+        // Arrange
+        let dir = setup_dir(None);
+        let mut config = empty_config();
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("EUR".into()),
+            MockResponse::U32(9),
+            MockResponse::U32(30),
+            MockResponse::Text("leda".into()),
+        ]);
+        // Act
+        collect_defaults(&prompter, &mut config, dir.path()).unwrap();
+        // Assert
+        let defaults = config.defaults.as_ref().unwrap();
+        assert_eq!(defaults.template, TemplateKey::Leda);
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_collect_defaults_custom_template_saved() {
+        // Arrange
+        let dir = setup_dir(None);
+        let mut config = empty_config();
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("EUR".into()),
+            MockResponse::U32(9),
+            MockResponse::U32(30),
+            MockResponse::Text("callisto".into()),
+        ]);
+        // Act
+        collect_defaults(&prompter, &mut config, dir.path()).unwrap();
+        // Assert
+        assert_eq!(config.defaults.as_ref().unwrap().template, TemplateKey::Callisto);
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_collect_defaults_template_persisted_to_disk() {
+        // Arrange
+        let dir = setup_dir(None);
+        let mut config = empty_config();
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("EUR".into()),
+            MockResponse::U32(9),
+            MockResponse::U32(30),
+            MockResponse::Text("thebe".into()),
+        ]);
+        // Act
+        collect_defaults(&prompter, &mut config, dir.path()).unwrap();
+        // Assert
+        let loaded = unwrap_loaded(load_config(dir.path()));
+        assert_eq!(loaded.defaults.unwrap().template, TemplateKey::Thebe);
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_collect_defaults_invalid_template_reprompts() {
+        // Arrange
+        let dir = setup_dir(None);
+        let mut config = empty_config();
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("EUR".into()),
+            MockResponse::U32(9),
+            MockResponse::U32(30),
+            MockResponse::Text("bogus".into()),
+            MockResponse::Text("leda".into()),
+        ]);
+        // Act
+        collect_defaults(&prompter, &mut config, dir.path()).unwrap();
+        // Assert
+        assert_eq!(config.defaults.as_ref().unwrap().template, TemplateKey::Leda);
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_collect_defaults_invalid_template_shows_available_list() {
+        // Arrange
+        let dir = setup_dir(None);
+        let mut config = empty_config();
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("EUR".into()),
+            MockResponse::U32(9),
+            MockResponse::U32(30),
+            MockResponse::Text("xyz".into()),
+            MockResponse::Text("leda".into()),
+        ]);
+        // Act
+        collect_defaults(&prompter, &mut config, dir.path()).unwrap();
+        // Assert
+        let messages = prompter.messages.borrow();
+        assert!(
+            messages.iter().any(|m| m.contains("callisto") && m.contains("leda") && m.contains("thebe")),
+            "Expected available templates in messages, got: {messages:?}"
+        );
         prompter.assert_exhausted();
     }
 }
