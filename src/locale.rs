@@ -151,16 +151,21 @@ impl Locale {
     }
 
     /// Format a date for invoice display according to this locale.
+    ///
+    /// Uses nominative month names for locales without distinct genitive forms
+    /// (en-US, en-GB, de-DE, fr-FR) and genitive forms for cs-CZ and uk-UA.
     pub fn format_date(&self, date: time::Date) -> String {
         let day = date.day();
         let month = date.month();
         let year = date.year();
-        let month_name = self.month_name_genitive(month);
 
         match self {
-            Self::EnUs => format!("{month_name} {day}, {year}"),
-            Self::EnGb | Self::FrFr | Self::UkUa => format!("{day} {month_name} {year}"),
-            Self::DeDe | Self::CsCz => format!("{day}. {month_name} {year}"),
+            Self::EnUs => format!("{} {day}, {year}", self.month_name(month)),
+            Self::EnGb => format!("{day} {} {year}", self.month_name(month)),
+            Self::DeDe => format!("{day}. {} {year}", self.month_name(month)),
+            Self::FrFr => format!("{day} {} {year}", self.month_name(month)),
+            Self::CsCz => format!("{day}. {} {year}", self.month_name_genitive(month)),
+            Self::UkUa => format!("{day} {} {year}", self.month_name_genitive(month)),
         }
     }
 
@@ -171,6 +176,18 @@ impl Locale {
 
     /// Format a number with locale-appropriate decimal and thousands separators.
     pub fn format_number(&self, value: f64, decimals: u32) -> String {
+        debug_assert!(!value.is_nan(), "format_number called with NaN");
+        debug_assert!(value.is_finite(), "format_number called with Infinity");
+
+        // Extract sign and work with the absolute value to avoid the minus
+        // sign being treated as a digit position during thousands-separator
+        // insertion.
+        let (negative, value) = if value.is_sign_negative() {
+            (true, -value)
+        } else {
+            (false, value)
+        };
+
         let (decimal_sep, thousands_sep) = match self {
             Self::EnUs | Self::EnGb => ('.', ','),
             Self::DeDe => (',', '.'),
@@ -178,10 +195,10 @@ impl Locale {
         };
 
         let factor = 10f64.powi(decimals as i32);
-        let scaled = (value * factor).round() as i64;
+        let scaled = (value * factor).round() as u64;
 
-        let int_part = scaled / factor as i64;
-        let frac_part = (scaled % factor as i64).unsigned_abs();
+        let int_part = scaled / factor as u64;
+        let frac_part = scaled % factor as u64;
 
         // Format integer part with thousands separators
         let int_str = int_part.to_string();
@@ -193,11 +210,20 @@ impl Locale {
             with_sep.push(ch);
         }
 
+        // Suppress minus sign for negative zero
+        let prefix = if negative && int_part == 0 && frac_part == 0 {
+            ""
+        } else if negative {
+            "-"
+        } else {
+            ""
+        };
+
         if decimals == 0 {
-            with_sep
+            format!("{prefix}{with_sep}")
         } else {
             format!(
-                "{with_sep}{decimal_sep}{:0>width$}",
+                "{prefix}{with_sep}{decimal_sep}{:0>width$}",
                 frac_part,
                 width = decimals as usize
             )
@@ -740,5 +766,53 @@ mod tests {
         // Arrange & Act & Assert
         assert_eq!(Locale::EnUs.format_number(21.0, 1), "21.0");
         assert_eq!(Locale::DeDe.format_number(21.0, 1), "21,0");
+    }
+
+    // ── Fix 1: negative value handling ──
+
+    #[test]
+    fn test_format_number_negative_value() {
+        // Arrange
+        let value = -1234.56;
+
+        // Act
+        let en_us = Locale::EnUs.format_number(value, 2);
+        let de_de = Locale::DeDe.format_number(value, 2);
+
+        // Assert
+        assert_eq!(en_us, "-1,234.56");
+        assert_eq!(de_de, "-1.234,56");
+    }
+
+    #[test]
+    fn test_format_number_zero_negative() {
+        // Arrange
+        let value = -0.0;
+
+        // Act
+        let result = Locale::EnUs.format_number(value, 2);
+
+        // Assert — no minus sign for negative zero
+        assert_eq!(result, "0.00");
+    }
+
+    // ── Fix 5: edge case tests ──
+
+    #[test]
+    fn test_format_number_large_value() {
+        // Arrange & Act
+        let result = Locale::EnUs.format_number(999_999_999.99, 2);
+
+        // Assert
+        assert_eq!(result, "999,999,999.99");
+    }
+
+    #[test]
+    fn test_format_number_very_small_fractional() {
+        // Arrange & Act
+        let result = Locale::DeDe.format_number(0.01, 2);
+
+        // Assert
+        assert_eq!(result, "0,01");
     }
 }
