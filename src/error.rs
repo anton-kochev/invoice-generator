@@ -91,6 +91,10 @@ pub enum AppError {
         key: String,
         available: Vec<String>,
     },
+
+    /// Failure resolving or preparing the config file path.
+    #[error("config path error: {0}")]
+    ConfigPath(String),
 }
 
 #[cfg(test)]

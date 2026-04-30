@@ -4,8 +4,12 @@ use crate::error::AppError;
 
 use super::types::Config;
 
-/// The config file name looked up in a directory.
-pub const CONFIG_FILENAME: &str = "invoice_config.yaml";
+/// The default config file name used when constructing the default XDG path.
+///
+/// Loader/writer functions take a full file path, so this constant is no
+/// longer joined inside them — it's only used by `config::path` to build the
+/// default location (`~/.config/invoice-generator/config.yaml`).
+pub const CONFIG_FILENAME: &str = "config.yaml";
 
 /// Result of attempting to load a config file.
 #[derive(Debug)]
@@ -44,7 +48,7 @@ pub fn missing_field_hints(yaml_content: &str) -> Vec<&'static str> {
     hints
 }
 
-/// Attempt to load and parse the config file from `dir`.
+/// Attempt to load and parse the config file at `path`.
 ///
 /// Returns `Ok(LoadResult::NotFound)` if the file does not exist,
 /// `Ok(LoadResult::Loaded(config))` on success, or an error on IO/parse failure.
@@ -52,12 +56,11 @@ pub fn missing_field_hints(yaml_content: &str) -> Vec<&'static str> {
 /// This function does **not** print hints about missing optional fields.
 /// Callers that want to display hints (e.g. the interactive flow) should read
 /// the raw YAML and call [`missing_field_hints`] themselves.
-pub fn load_config(dir: &Path) -> Result<LoadResult, AppError> {
-    let path = dir.join(CONFIG_FILENAME);
+pub fn load_config(path: &Path) -> Result<LoadResult, AppError> {
     if !path.exists() {
         return Ok(LoadResult::NotFound);
     }
-    let contents = std::fs::read_to_string(&path)?;
+    let contents = std::fs::read_to_string(path)?;
     if contents.trim().is_empty() {
         return Ok(LoadResult::Loaded(Config::default()));
     }
@@ -78,7 +81,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
 
         // Act
-        let result = load_config(dir.path());
+        let result = load_config(&dir.path().join("config.yaml"));
 
         // Assert
         assert!(result.is_ok());
@@ -116,10 +119,11 @@ defaults:
   payment_terms_days: 14
   invoice_date_day: 5
 "#;
-        std::fs::write(dir.path().join("invoice_config.yaml"), yaml).unwrap();
+        let path = dir.path().join("config.yaml");
+        std::fs::write(&path, yaml).unwrap();
 
         // Act
-        let result = load_config(dir.path()).unwrap();
+        let result = load_config(&path).unwrap();
 
         // Assert
         match result {
@@ -217,12 +221,12 @@ sender:
         // Arrange
         use std::os::unix::fs::PermissionsExt;
         let dir = TempDir::new().unwrap();
-        let path = dir.path().join("invoice_config.yaml");
+        let path = dir.path().join("config.yaml");
         std::fs::write(&path, "sender:\n  name: test").unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o000)).unwrap();
 
         // Act
-        let result = load_config(dir.path());
+        let result = load_config(&path);
 
         // Assert
         assert!(matches!(result, Err(AppError::ConfigIo(_))));
@@ -509,7 +513,8 @@ defaults:
 
     fn load_from_yaml(yaml: &str) -> Result<LoadResult, AppError> {
         let dir = TempDir::new().unwrap();
-        std::fs::write(dir.path().join("invoice_config.yaml"), yaml).unwrap();
-        load_config(dir.path())
+        let path = dir.path().join("config.yaml");
+        std::fs::write(&path, yaml).unwrap();
+        load_config(&path)
     }
 }
