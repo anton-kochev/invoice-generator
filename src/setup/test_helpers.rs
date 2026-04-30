@@ -101,16 +101,6 @@ pub fn config_with_two_presets() -> Config {
 
 // ── v2 Config Factories ──
 
-pub fn synthetic_recipient_with_key(key: &str, name: &str) -> Recipient {
-    Recipient {
-        key: Some(key.into()),
-        name: name.into(),
-        address: vec!["123 Synthetic St".into()],
-        company_id: Some(format!("{}-ID", key.to_uppercase())),
-        vat_number: None,
-    }
-}
-
 pub fn synthetic_recipient_acme() -> Recipient {
     Recipient {
         key: Some("acme".into()),
