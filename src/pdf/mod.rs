@@ -283,7 +283,7 @@ mod tests {
         // Arrange
         let summary = make_summary();
         let mut config = make_config();
-        config.branding.accent_color = "#ff5500".into();
+        config.branding.accent_color = crate::domain::HexColor::try_new("#ff5500").unwrap();
         config.branding.font = Some("Arial".into());
         config.branding.footer_text = Some("Custom footer text".into());
         // Act
@@ -467,7 +467,7 @@ mod tests {
         // Arrange
         let summary = make_summary();
         let mut config = make_config();
-        config.branding.accent_color = "#ff5500".into();
+        config.branding.accent_color = crate::domain::HexColor::try_new("#ff5500").unwrap();
         config.branding.font = Some("Arial".into());
         config.branding.footer_text = Some("Custom footer".into());
 

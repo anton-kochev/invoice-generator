@@ -3,6 +3,7 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
+use crate::domain::HexColor;
 use crate::error::AppError;
 use crate::locale::Locale;
 
@@ -77,9 +78,9 @@ pub struct Branding {
     /// Path to the logo image file.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub logo: Option<String>,
-    /// Accent color (e.g. hex code like "#ff0000").
+    /// Accent color (e.g. hex code like "#ff0000"). Validated at deserialize-time.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub accent_color: Option<String>,
+    pub accent_color: Option<HexColor>,
     /// Font family name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub font: Option<String>,
@@ -521,7 +522,7 @@ mod tests {
         // Arrange
         let branding = Branding {
             logo: Some("logo.png".into()),
-            accent_color: Some("#ff0000".into()),
+            accent_color: Some(HexColor::try_new("#ff0000").unwrap()),
             font: Some("Fira Code".into()),
             footer_text: Some("Custom footer".into()),
         };
@@ -534,15 +535,19 @@ mod tests {
         // Assert
         let b = loaded.branding.unwrap();
         assert_eq!(b.logo, Some("logo.png".into()));
-        assert_eq!(b.accent_color, Some("#ff0000".into()));
+        assert_eq!(b.accent_color.as_ref().map(|c| c.as_str()), Some("#ff0000"));
         assert_eq!(b.font, Some("Fira Code".into()));
         assert_eq!(b.footer_text, Some("Custom footer".into()));
     }
 
     #[test]
     fn test_branding_partial_fields_round_trips() {
-        // Arrange — only accent_color set
-        let branding = Branding { accent_color: Some("#abc".into()), ..Branding::default() };
+        // Arrange — only accent_color set (full 6-digit form; #RGB short form
+        // is rejected by HexColor)
+        let branding = Branding {
+            accent_color: Some(HexColor::try_new("#aabbcc").unwrap()),
+            ..Branding::default()
+        };
         let config = Config { branding: Some(branding), ..Config::default() };
 
         // Act
@@ -551,10 +556,34 @@ mod tests {
 
         // Assert
         let b = loaded.branding.unwrap();
-        assert_eq!(b.accent_color, Some("#abc".into()));
+        assert_eq!(b.accent_color.as_ref().map(|c| c.as_str()), Some("#aabbcc"));
         assert!(b.logo.is_none());
         assert!(b.font.is_none());
         assert!(b.footer_text.is_none());
+    }
+
+    #[test]
+    fn test_branding_short_form_hex_rejected_at_deserialize() {
+        // Arrange — `#abc` short form is no longer accepted; loading must fail.
+        let yaml = "branding:\n  accent_color: \"#abc\"\n";
+
+        // Act
+        let result: Result<Config, _> = serde_yaml::from_str(yaml);
+
+        // Assert
+        assert!(result.is_err(), "Expected deserialize failure for #abc short form");
+    }
+
+    #[test]
+    fn test_branding_invalid_hex_rejected_at_deserialize() {
+        // Arrange — non-hex chars
+        let yaml = "branding:\n  accent_color: \"red\"\n";
+
+        // Act
+        let result: Result<Config, _> = serde_yaml::from_str(yaml);
+
+        // Assert
+        assert!(result.is_err(), "Expected deserialize failure for non-hex value");
     }
 
     #[test]

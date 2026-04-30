@@ -1,46 +1,29 @@
 use std::fmt;
 
 use super::types::*;
+use crate::domain::HexColor;
 use crate::error::AppError;
 use crate::locale::Locale;
 
 const DEFAULT_ACCENT_COLOR: &str = "#2c3e50";
 
-/// Validate a hex color string. Returns normalized #RRGGBB or None for invalid input.
-/// Accepts #RGB (expands to #RRGGBB) and #RRGGBB formats.
-fn validate_accent_color(input: &str) -> Option<String> {
-    let s = input.trim();
-    if !s.starts_with('#') {
-        return None;
-    }
-    let hex = &s[1..];
-    match hex.len() {
-        3 => {
-            if hex.chars().all(|c| c.is_ascii_hexdigit()) {
-                let expanded: String = hex.chars().flat_map(|c| [c, c]).collect();
-                Some(format!("#{}", expanded.to_lowercase()))
-            } else {
-                None
-            }
-        }
-        6 => {
-            if hex.chars().all(|c| c.is_ascii_hexdigit()) {
-                Some(format!("#{}", hex.to_lowercase()))
-            } else {
-                None
-            }
-        }
-        _ => None,
-    }
+fn default_accent_color() -> HexColor {
+    HexColor::try_new(DEFAULT_ACCENT_COLOR)
+        .expect("DEFAULT_ACCENT_COLOR is a valid hex color literal")
 }
 
 /// Branding with validated values, ready for PDF generation.
+///
+/// As of the `HexColor` migration, `accent_color` is a parsed [`HexColor`]
+/// (not a raw string). Invalid colors are now rejected at config-deserialize
+/// time, so this struct is effectively a passthrough that fills in defaults
+/// for missing fields.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ValidatedBranding {
     /// Raw logo path from config (resolved to absolute path later in pdf module).
     pub logo: Option<String>,
-    /// Validated hex color string (always 7-char #rrggbb).
-    pub accent_color: String,
+    /// Validated hex color (`#rrggbb`, lowercase).
+    pub accent_color: HexColor,
     /// Font family name override, or None for default.
     pub font: Option<String>,
     /// Custom footer text, or None for default.
@@ -51,7 +34,7 @@ impl Default for ValidatedBranding {
     fn default() -> Self {
         Self {
             logo: None,
-            accent_color: DEFAULT_ACCENT_COLOR.to_string(),
+            accent_color: default_accent_color(),
             font: None,
             footer_text: None,
         }
@@ -226,15 +209,7 @@ impl Config {
                 branding: match branding {
                     Some(b) => ValidatedBranding {
                         logo: b.logo,
-                        accent_color: match &b.accent_color {
-                            Some(c) => validate_accent_color(c).unwrap_or_else(|| {
-                                eprintln!(
-                                    "Warning: invalid accent_color \"{c}\", using default {DEFAULT_ACCENT_COLOR}"
-                                );
-                                DEFAULT_ACCENT_COLOR.to_string()
-                            }),
-                            None => DEFAULT_ACCENT_COLOR.to_string(),
-                        },
+                        accent_color: b.accent_color.unwrap_or_else(default_accent_color),
                         font: b.font,
                         footer_text: b.footer_text,
                     },
@@ -903,56 +878,6 @@ mod tests {
         }
     }
 
-    // ── Sprint 10: validate_accent_color pure function tests ──
-
-    #[test]
-    fn test_validate_accent_color_valid_six_digit() {
-        // Arrange & Act & Assert
-        assert_eq!(validate_accent_color("#2c3e50"), Some("#2c3e50".into()));
-    }
-
-    #[test]
-    fn test_validate_accent_color_uppercase_normalized() {
-        // Arrange & Act & Assert
-        assert_eq!(validate_accent_color("#AABBCC"), Some("#aabbcc".into()));
-    }
-
-    #[test]
-    fn test_validate_accent_color_mixed_case_normalized() {
-        // Arrange & Act & Assert
-        assert_eq!(validate_accent_color("#aAbBcC"), Some("#aabbcc".into()));
-    }
-
-    #[test]
-    fn test_validate_accent_color_three_digit_expanded() {
-        // Arrange & Act & Assert
-        assert_eq!(validate_accent_color("#abc"), Some("#aabbcc".into()));
-    }
-
-    #[test]
-    fn test_validate_accent_color_missing_hash_returns_none() {
-        // Arrange & Act & Assert
-        assert_eq!(validate_accent_color("2c3e50"), None);
-    }
-
-    #[test]
-    fn test_validate_accent_color_invalid_chars_returns_none() {
-        // Arrange & Act & Assert
-        assert_eq!(validate_accent_color("#zzzzzz"), None);
-    }
-
-    #[test]
-    fn test_validate_accent_color_wrong_length_returns_none() {
-        // Arrange & Act & Assert
-        assert_eq!(validate_accent_color("#12345"), None);
-    }
-
-    #[test]
-    fn test_validate_accent_color_empty_returns_none() {
-        // Arrange & Act & Assert
-        assert_eq!(validate_accent_color(""), None);
-    }
-
     // ── Sprint 10: ValidatedBranding integration tests ──
 
     #[test]
@@ -966,7 +891,7 @@ mod tests {
         // Assert
         match result {
             ValidationOutcome::Complete(v) => {
-                assert_eq!(v.branding.accent_color, "#2c3e50");
+                assert_eq!(v.branding.accent_color.as_str(), "#2c3e50");
                 assert!(v.branding.font.is_none());
                 assert!(v.branding.footer_text.is_none());
                 assert!(v.branding.logo.is_none());
@@ -980,7 +905,7 @@ mod tests {
         // Arrange
         let mut config = make_complete_config();
         config.branding = Some(crate::config::types::Branding {
-            accent_color: Some("#ff0000".into()),
+            accent_color: Some(HexColor::try_new("#ff0000").unwrap()),
             ..Default::default()
         });
 
@@ -990,18 +915,18 @@ mod tests {
         // Assert
         match result {
             ValidationOutcome::Complete(v) => {
-                assert_eq!(v.branding.accent_color, "#ff0000");
+                assert_eq!(v.branding.accent_color.as_str(), "#ff0000");
             }
             _ => panic!("Expected Complete"),
         }
     }
 
     #[test]
-    fn test_validate_branding_invalid_accent_falls_back_to_default() {
-        // Arrange
+    fn test_validate_branding_missing_accent_uses_default() {
+        // Arrange — Branding present but accent_color None still falls back.
         let mut config = make_complete_config();
         config.branding = Some(crate::config::types::Branding {
-            accent_color: Some("red".into()),
+            accent_color: None,
             ..Default::default()
         });
 
@@ -1011,7 +936,7 @@ mod tests {
         // Assert
         match result {
             ValidationOutcome::Complete(v) => {
-                assert_eq!(v.branding.accent_color, "#2c3e50");
+                assert_eq!(v.branding.accent_color.as_str(), "#2c3e50");
             }
             _ => panic!("Expected Complete"),
         }

@@ -1,5 +1,6 @@
 mod cli;
 mod config;
+mod domain;
 mod error;
 mod invoice;
 mod locale;

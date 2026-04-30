@@ -148,7 +148,7 @@ impl<'a> InvoiceData<'a> {
                 .collect(),
             branding: BrandingData {
                 logo_file,
-                accent_color: config.branding.accent_color.clone(),
+                accent_color: config.branding.accent_color.as_str().to_string(),
                 font: config
                     .branding
                     .font
@@ -419,7 +419,7 @@ mod tests {
         // Arrange
         let summary = make_summary();
         let mut config = make_config();
-        config.branding.accent_color = "#ff0000".into();
+        config.branding.accent_color = crate::domain::HexColor::try_new("#ff0000").unwrap();
         // Act
         let data = InvoiceData::from_parts(&summary, &config, &config.recipient, None, Locale::EnUs);
         let json = serde_json::to_value(&data).unwrap();
