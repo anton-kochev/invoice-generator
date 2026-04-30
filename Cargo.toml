@@ -11,11 +11,9 @@ inquire = "0.7"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = { package = "yaml_serde", version = "0.10" }
+tempfile = "3"
 thiserror = "2"
 time = "0.3"
 typst = "0.14"
 typst-kit = { version = "0.14", features = ["embed-fonts"] }
 typst-pdf = "0.14"
-
-[dev-dependencies]
-tempfile = "3"

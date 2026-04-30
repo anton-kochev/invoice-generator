@@ -1,13 +1,38 @@
+use std::io::Write;
 use std::path::Path;
 
 use crate::error::AppError;
 
 use super::types::{Config, Preset, Recipient};
 
-/// Serialize `config` to YAML and write it to `path`.
+/// Serialize `config` to YAML and atomically write it to `path`.
+///
+/// Uses the standard write-temp-then-rename pattern: a [`tempfile::NamedTempFile`]
+/// is created in the same directory as the target so [`tempfile::NamedTempFile::persist`]
+/// can complete via a single `rename(2)` syscall, which is atomic on POSIX
+/// filesystems. If the process is killed (Ctrl-C, OOM, panic, power loss) at
+/// any point before the rename, the existing file at `path` is left untouched —
+/// callers never observe a truncated or partially written config.
+///
+/// If `path` has no parent component (e.g. a bare `config.yaml`), the temp
+/// file is created in the current working directory. This matches the
+/// behaviour of the original `std::fs::write` for relative paths.
 pub fn save_config(path: &Path, config: &Config) -> Result<(), AppError> {
     let yaml = serde_yaml::to_string(config)?;
-    std::fs::write(path, yaml)?;
+
+    // Use the same directory as the target so the final rename stays on the
+    // same filesystem (cross-fs renames are not atomic on most platforms).
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+
+    let mut tmp = tempfile::NamedTempFile::new_in(parent)?;
+    tmp.write_all(yaml.as_bytes())?;
+    // Flush the kernel buffers before the rename so a crash post-rename
+    // doesn't leave us with a renamed-but-empty file on some filesystems.
+    tmp.as_file().sync_all()?;
+    tmp.persist(path).map_err(|e| AppError::from(e.error))?;
     Ok(())
 }
 
@@ -1155,5 +1180,114 @@ mod tests {
 
         // Assert
         assert!(matches!(result, Err(AppError::RecipientNotFound { .. })));
+    }
+
+    // ── Atomic-write tests (Option A) ──
+
+    /// On a successful save, no leftover temp files should remain in the parent
+    /// directory. This proves we used the persist path (rename) rather than the
+    /// old truncate-and-write approach, where any temp files would never have
+    /// been created in the first place. With NamedTempFile, a leftover only
+    /// happens if persist() fails to rename — so absence == clean rename.
+    #[test]
+    fn test_save_config_leaves_no_temp_files_in_parent() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+
+        // Act
+        save_config(&cfg_path(&dir), &complete_config()).unwrap();
+
+        // Assert — only the target file should exist in the directory
+        let entries: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .collect();
+        assert_eq!(
+            entries,
+            vec!["config.yaml".to_string()],
+            "Expected only config.yaml, found: {entries:?}"
+        );
+    }
+
+    /// Atomicity invariant: if a save fails (here, because the parent
+    /// directory is read-only and a NamedTempFile cannot be created in it),
+    /// the existing config file must remain byte-identical to before the
+    /// attempt. The legacy `std::fs::write` truncate-then-write pattern fails
+    /// this — it will happily overwrite the existing file even when the
+    /// parent dir is read-only because mutating an existing file's contents
+    /// does not require write permission on the parent.
+    #[test]
+    #[cfg(unix)]
+    fn test_save_config_failure_leaves_original_byte_identical() {
+        // Arrange — write a known-good config, capture its bytes, then make
+        // the parent read-only so the next save cannot create a temp file.
+        use std::os::unix::fs::PermissionsExt;
+        let dir = TempDir::new().unwrap();
+        let path = cfg_path(&dir);
+        save_config(&path, &complete_config()).unwrap();
+        let original_bytes = std::fs::read(&path).unwrap();
+        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o555)).unwrap();
+
+        // Act — try to save a different config; with atomic writes this errors
+        // because NamedTempFile can't be created in the read-only directory.
+        let mut different = complete_config();
+        different.sender.as_mut().unwrap().name = "Charlie Mutated".into();
+        let result = save_config(&path, &different);
+
+        // Assert — original file untouched (atomicity guarantee)
+        let after_bytes = std::fs::read(&path).unwrap();
+        // Restore permissions before any potential panic so TempDir cleans up.
+        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(result.is_err(), "Expected save to fail with read-only parent");
+        assert_eq!(
+            after_bytes, original_bytes,
+            "Original config must be byte-identical after failed save"
+        );
+    }
+
+    /// Concurrent saves from multiple threads must not corrupt the file: the
+    /// final content must equal one of the inputs verbatim (whichever rename
+    /// won the race), never a mix.
+    #[test]
+    fn test_save_config_concurrent_writes_yield_one_valid_config() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        let path = cfg_path(&dir);
+        // Seed with a non-conflicting config so the file exists before contention.
+        save_config(&path, &Config::default()).unwrap();
+
+        let path_a = path.clone();
+        let path_b = path.clone();
+
+        let mut config_a = complete_config();
+        config_a.sender.as_mut().unwrap().name = "Thread A".into();
+        let mut config_b = complete_config();
+        config_b.sender.as_mut().unwrap().name = "Thread B".into();
+
+        let yaml_a = serde_yaml::to_string(&config_a).unwrap();
+        let yaml_b = serde_yaml::to_string(&config_b).unwrap();
+
+        // Act — race many writes from two threads to maximize the chance of
+        // catching corruption if the implementation isn't atomic.
+        let t_a = std::thread::spawn(move || {
+            for _ in 0..50 {
+                save_config(&path_a, &config_a).unwrap();
+            }
+        });
+        let t_b = std::thread::spawn(move || {
+            for _ in 0..50 {
+                save_config(&path_b, &config_b).unwrap();
+            }
+        });
+        t_a.join().unwrap();
+        t_b.join().unwrap();
+
+        // Assert — final bytes match exactly one of the two inputs
+        let final_bytes = std::fs::read_to_string(&path).unwrap();
+        assert!(
+            final_bytes == yaml_a || final_bytes == yaml_b,
+            "Concurrent saves produced corrupted output:\n{final_bytes}"
+        );
     }
 }
