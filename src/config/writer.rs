@@ -1246,9 +1246,18 @@ mod tests {
         );
     }
 
-    /// Concurrent saves from multiple threads must not corrupt the file: the
-    /// final content must equal one of the inputs verbatim (whichever rename
-    /// won the race), never a mix.
+    /// Probabilistic safety net: race two threads on `save_config` and assert
+    /// the final file equals one of the inputs verbatim (never a mix).
+    ///
+    /// Honest caveat: this test passes on the legacy `std::fs::write`
+    /// implementation too, because small YAML payloads rarely interleave
+    /// inside an `O_TRUNC`+`write` on modern kernels. It is *not* a
+    /// deterministic guard against the original truncate-and-write race —
+    /// the byte-identical-on-failure test above is what actually pins the
+    /// atomicity guarantee. This test is kept as a regression net for any
+    /// future change to the persistence path that might introduce a
+    /// different race (e.g. a multi-syscall write splitting under heavier
+    /// contention).
     #[test]
     fn test_save_config_concurrent_writes_yield_one_valid_config() {
         // Arrange
@@ -1268,8 +1277,8 @@ mod tests {
         let yaml_a = serde_yaml::to_string(&config_a).unwrap();
         let yaml_b = serde_yaml::to_string(&config_b).unwrap();
 
-        // Act — race many writes from two threads to maximize the chance of
-        // catching corruption if the implementation isn't atomic.
+        // Act — race many writes from two threads. See the doc comment above
+        // for why this is probabilistic rather than deterministic.
         let t_a = std::thread::spawn(move || {
             for _ in 0..50 {
                 save_config(&path_a, &config_a).unwrap();
