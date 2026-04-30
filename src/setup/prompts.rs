@@ -54,6 +54,28 @@ pub fn prompt_until_valid<T>(
     }
 }
 
+/// Prompt via `prompt_fn`, then run `parser` on the raw input. Re-prompt until
+/// `parser` returns `Ok(parsed_value)`. The parser's error message is shown to
+/// the user verbatim before re-prompting.
+///
+/// Differs from [`prompt_until_valid`] in that the parser *transforms* the raw
+/// input (e.g. `String` → `TemplateKey`) instead of merely validating it. This
+/// removes the double-parse + `.expect("validated above")` smell at call sites
+/// that need a typed value out of a string prompt.
+pub fn prompt_parsed<T, U>(
+    prompter: &dyn Prompter,
+    mut prompt_fn: impl FnMut(&dyn Prompter) -> Result<T, AppError>,
+    parser: impl Fn(T) -> Result<U, String>,
+) -> Result<U, AppError> {
+    loop {
+        let raw = prompt_fn(prompter)?;
+        match parser(raw) {
+            Ok(parsed) => return Ok(parsed),
+            Err(msg) => prompter.message(&msg),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -276,5 +298,107 @@ mod tests {
 
         // Assert
         assert!(matches!(result, Err(AppError::SetupCancelled)));
+    }
+
+    // ── prompt_parsed ──
+
+    #[test]
+    fn test_prompt_parsed_returns_parsed_value_on_first_try() {
+        // Arrange
+        let prompter = MockPrompter::new(vec![MockResponse::Text("42".into())]);
+
+        // Act
+        let result: u32 = prompt_parsed(
+            &prompter,
+            |p| p.required_text("Pick a number:"),
+            |s: String| s.parse::<u32>().map_err(|_| "not a number".to_string()),
+        )
+        .unwrap();
+
+        // Assert
+        assert_eq!(result, 42);
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_prompt_parsed_reprompts_on_parser_error_with_verbatim_message() {
+        // Arrange
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("nope".into()),
+            MockResponse::Text("7".into()),
+        ]);
+
+        // Act
+        let result: u32 = prompt_parsed(
+            &prompter,
+            |p| p.required_text("Pick a number:"),
+            |s: String| {
+                s.parse::<u32>()
+                    .map_err(|_| format!("'{s}' is not a valid number"))
+            },
+        )
+        .unwrap();
+
+        // Assert
+        assert_eq!(result, 7);
+        let messages = prompter.messages.borrow();
+        assert!(
+            messages.iter().any(|m| m == "'nope' is not a valid number"),
+            "Expected verbatim parser error, got: {messages:?}"
+        );
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_prompt_parsed_propagates_prompt_error() {
+        // Arrange — prompt_fn returns an AppError; the helper must surface it
+        // rather than loop forever.
+        let prompter = MockPrompter::new(vec![]);
+
+        // Act
+        let result: Result<u32, AppError> = prompt_parsed(
+            &prompter,
+            |_p| Err(AppError::SetupCancelled),
+            |s: String| s.parse::<u32>().map_err(|_| "bad".to_string()),
+        );
+
+        // Assert
+        assert!(matches!(result, Err(AppError::SetupCancelled)));
+    }
+
+    #[test]
+    fn test_prompt_parsed_transforms_input_type_to_output_type() {
+        // Arrange — prompt_fn returns String; parser yields a custom enum.
+        #[derive(Debug, PartialEq)]
+        enum Color {
+            Red,
+            Blue,
+        }
+
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("green".into()), // unknown
+            MockResponse::Text("blue".into()),  // valid
+        ]);
+
+        // Act
+        let result: Color = prompt_parsed(
+            &prompter,
+            |p| p.required_text("Color:"),
+            |s: String| match s.as_str() {
+                "red" => Ok(Color::Red),
+                "blue" => Ok(Color::Blue),
+                _ => Err(format!("unknown color: {s}")),
+            },
+        )
+        .unwrap();
+
+        // Assert
+        assert_eq!(result, Color::Blue);
+        let messages = prompter.messages.borrow();
+        assert!(
+            messages.iter().any(|m| m == "unknown color: green"),
+            "Expected verbatim parser error, got: {messages:?}"
+        );
+        prompter.assert_exhausted();
     }
 }

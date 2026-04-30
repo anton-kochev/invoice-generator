@@ -4,6 +4,7 @@ use crate::config::types::{Config, PaymentMethod};
 use crate::config::writer::save_config;
 use crate::error::AppError;
 use super::prompter::Prompter;
+use super::prompts::prompt_until_valid;
 
 /// Collect payment methods interactively and persist them to disk.
 pub fn collect_payment(
@@ -13,13 +14,17 @@ pub fn collect_payment(
 ) -> Result<(), AppError> {
     prompter.message("\n--- Payment Methods ---\n");
 
-    let count = loop {
-        let n = prompter.u32_with_default("How many payment methods?", 2)?;
-        if n >= 1 {
-            break n;
-        }
-        prompter.message("At least one payment method is required.");
-    };
+    let count = prompt_until_valid(
+        prompter,
+        |p| p.u32_with_default("How many payment methods?", 2),
+        |n: &u32| {
+            if *n >= 1 {
+                Ok(())
+            } else {
+                Err("At least one payment method is required.".into())
+            }
+        },
+    )?;
 
     let mut methods = Vec::with_capacity(count as usize);
     for i in 1..=count {

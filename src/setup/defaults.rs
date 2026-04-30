@@ -6,7 +6,7 @@ use crate::config::writer::save_config;
 use crate::error::AppError;
 use crate::locale::Locale;
 use super::prompter::Prompter;
-use super::prompts::prompt_until_valid;
+use super::prompts::prompt_parsed;
 
 /// Collect default invoice values interactively and persist them to disk.
 pub fn collect_defaults(
@@ -20,11 +20,11 @@ pub fn collect_defaults(
     let invoice_date_day = prompter.u32_with_default("Invoice date (day of month):", 9)?;
     let payment_terms_days = prompter.u32_with_default("Payment terms (days):", 30)?;
 
-    let template_input = prompt_until_valid(
+    let template = prompt_parsed(
         prompter,
         |p| p.text_with_default("Template:", "leda"),
-        |input: &String| {
-            TemplateKey::from_str(input).map(|_| ()).map_err(|_| {
+        |input: String| {
+            TemplateKey::from_str(&input).map_err(|_| {
                 let list: Vec<String> = TemplateKey::ALL
                     .iter()
                     .map(|t| format!("{} ({})", t, t.description()))
@@ -33,19 +33,17 @@ pub fn collect_defaults(
             })
         },
     )?;
-    let template = TemplateKey::from_str(&template_input).expect("validated above");
 
-    let locale_input = prompt_until_valid(
+    let locale = prompt_parsed(
         prompter,
         |p| p.text_with_default("Locale for PDF formatting:", "en-US"),
-        |input: &String| {
-            Locale::from_str(input).map(|_| ()).map_err(|_| {
+        |input: String| {
+            Locale::from_str(&input).map_err(|_| {
                 let list: Vec<String> = Locale::ALL.iter().map(|l| l.to_string()).collect();
                 format!("Unsupported locale. Available: {}", list.join(", "))
             })
         },
     )?;
-    let locale = Locale::from_str(&locale_input).expect("validated above");
 
     config.defaults = Some(Defaults {
         currency,
