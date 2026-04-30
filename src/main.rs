@@ -32,25 +32,28 @@ fn main() {
 }
 
 fn run(cli: Cli) -> Result<(), error::AppError> {
-    let cwd = std::env::current_dir().map_err(error::AppError::ConfigIo)?;
+    let config_path = config::path::resolve_config_path(
+        cli.config.as_deref(),
+        &config::path::RealEnv,
+    )?;
+    config::path::ensure_parent_dir(&config_path)?;
+    let output_dir = std::env::current_dir().map_err(error::AppError::ConfigIo)?;
     let prompter = InquirePrompter::new();
 
     match cli.command {
-        None => cli::interactive::run_interactive(&prompter, &cwd),
+        None => cli::interactive::run_interactive(&prompter, &config_path, &output_dir),
         Some(Command::Generate(args)) => {
-            // NOTE: main.rs wiring is updated by a separate slice (resolve_config_path).
-            // For now pass cwd for both config_path and output_dir to keep the build green.
-            cli::generate_cmd::handle_generate(&args, &cwd, &cwd, &mut std::io::stdout())
+            cli::generate_cmd::handle_generate(&args, &config_path, &output_dir, &mut std::io::stdout())
         }
         Some(Command::Preset { action }) => match action {
             PresetAction::List => {
-                let validated = cli::load_validated_config(&cwd)?;
+                let validated = cli::load_validated_config(&config_path)?;
                 cli::preset_cmd::handle_preset_list(&validated, &mut std::io::stdout())
             }
             PresetAction::Delete { key } => {
                 cli::preset_cmd::handle_preset_delete(
                     &prompter,
-                    &cwd,
+                    &config_path,
                     &key,
                     &mut std::io::stdout(),
                 )
@@ -58,20 +61,20 @@ fn run(cli: Cli) -> Result<(), error::AppError> {
         },
         Some(Command::Recipient { action }) => match action {
             RecipientAction::List => {
-                let validated = cli::load_validated_config(&cwd)?;
+                let validated = cli::load_validated_config(&config_path)?;
                 cli::recipient_cmd::handle_recipient_list(&validated, &mut std::io::stdout())
             }
             RecipientAction::Add => {
                 cli::recipient_cmd::handle_recipient_add(
                     &prompter,
-                    &cwd,
+                    &config_path,
                     &mut std::io::stdout(),
                 )
             }
             RecipientAction::Delete { key } => {
                 cli::recipient_cmd::handle_recipient_delete(
                     &prompter,
-                    &cwd,
+                    &config_path,
                     &key,
                     &mut std::io::stdout(),
                 )

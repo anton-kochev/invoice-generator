@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::config::loader::{load_config, missing_field_hints, LoadResult, CONFIG_FILENAME};
+use crate::config::loader::{load_config, missing_field_hints, LoadResult};
 use crate::config::types::{Config, Recipient, TemplateKey};
 use crate::config::validator::{ConfigSection, ValidatedConfig, ValidationOutcome};
 use crate::error::AppError;
@@ -10,8 +10,12 @@ use crate::{invoice, pdf, setup};
 use super::recipient_selection::select_recipient;
 
 /// The full v1.0 interactive flow: load config → maybe setup → invoice → PDF.
-pub fn run_interactive(prompter: &dyn Prompter, cwd: &Path) -> Result<(), AppError> {
-    let validated = match load_config(cwd)? {
+pub fn run_interactive(
+    prompter: &dyn Prompter,
+    config_path: &Path,
+    output_dir: &Path,
+) -> Result<(), AppError> {
+    let validated = match load_config(config_path)? {
         LoadResult::NotFound => {
             let mut config = Config::default();
             let all_missing = vec![
@@ -20,7 +24,7 @@ pub fn run_interactive(prompter: &dyn Prompter, cwd: &Path) -> Result<(), AppErr
                 ConfigSection::Payment,
                 ConfigSection::Presets,
             ];
-            setup::run_setup(prompter, &mut config, &all_missing, cwd)?;
+            setup::run_setup(prompter, &mut config, &all_missing, config_path)?;
             match config.validate()? {
                 ValidationOutcome::Complete(v) => v,
                 ValidationOutcome::Incomplete { .. } => {
@@ -30,7 +34,7 @@ pub fn run_interactive(prompter: &dyn Prompter, cwd: &Path) -> Result<(), AppErr
         }
         LoadResult::Loaded(config) => {
             // Print hints about missing optional fields (interactive only)
-            if let Ok(raw) = std::fs::read_to_string(cwd.join(CONFIG_FILENAME)) {
+            if let Ok(raw) = std::fs::read_to_string(config_path) {
                 let hints = missing_field_hints(&raw);
                 if !hints.is_empty() {
                     eprintln!(
@@ -50,7 +54,7 @@ pub fn run_interactive(prompter: &dyn Prompter, cwd: &Path) -> Result<(), AppErr
                 v
             }
             ValidationOutcome::Incomplete { mut config, missing } => {
-                setup::run_setup(prompter, &mut config, &missing, cwd)?;
+                setup::run_setup(prompter, &mut config, &missing, config_path)?;
                 match config.validate()? {
                     ValidationOutcome::Complete(v) => v,
                     ValidationOutcome::Incomplete { .. } => {
@@ -62,7 +66,7 @@ pub fn run_interactive(prompter: &dyn Prompter, cwd: &Path) -> Result<(), AppErr
     };
 
     let recipient = select_recipient(prompter, &validated.recipients, &validated.default_recipient_key)?;
-    run_invoice_flow(prompter, &validated, &recipient, cwd)
+    run_invoice_flow(prompter, &validated, &recipient, config_path, output_dir)
 }
 
 /// Run the interactive invoice generation loop.
@@ -70,8 +74,10 @@ pub fn run_invoice_flow(
     prompter: &dyn Prompter,
     validated: &ValidatedConfig,
     recipient: &Recipient,
-    cwd: &Path,
+    config_path: &Path,
+    output_dir: &Path,
 ) -> Result<(), AppError> {
+    let config_dir = config_path.parent().unwrap_or_else(|| Path::new("."));
     let presets = validated.presets.clone();
     loop {
         let now = time::OffsetDateTime::now_utc();
@@ -85,7 +91,7 @@ pub fn run_invoice_flow(
             prompter,
             &presets,
             &validated.defaults.currency,
-            cwd,
+            config_path,
         )?;
 
         let summary = invoice::summary::build_summary(
@@ -131,11 +137,11 @@ pub fn run_invoice_flow(
         };
 
         if prompter.confirm("Generate PDF?", true)? {
-            let pdf_bytes = pdf::generate_pdf(&summary, validated, recipient, cwd, template, validated.locale)?;
+            let pdf_bytes = pdf::generate_pdf(&summary, validated, recipient, config_dir, template, validated.locale)?;
             let output_path = super::common::pdf_output_path(
                 &validated.sender.name,
                 &summary.period,
-                cwd,
+                output_dir,
             );
 
             if output_path.exists() {
@@ -232,9 +238,10 @@ mod tests {
         let config = make_validated_config();
         let recipient = config.recipient.clone();
         let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("config.yaml");
         let prompter = MockPrompter::new(flow_responses_no_change());
         // Act
-        run_invoice_flow(&prompter, &config, &recipient, dir.path()).unwrap();
+        run_invoice_flow(&prompter, &config, &recipient, &config_path, dir.path()).unwrap();
         // Assert
         let messages = prompter.messages.borrow();
         assert!(
@@ -250,9 +257,10 @@ mod tests {
         let config = make_validated_config();
         let recipient = config.recipient.clone();
         let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("config.yaml");
         let prompter = MockPrompter::new(flow_responses_no_change());
         // Act
-        let result = run_invoice_flow(&prompter, &config, &recipient, dir.path());
+        let result = run_invoice_flow(&prompter, &config, &recipient, &config_path, dir.path());
         // Assert
         assert!(result.is_ok(), "Should succeed with default template");
         prompter.assert_exhausted();
@@ -264,9 +272,10 @@ mod tests {
         let config = make_validated_config();
         let recipient = config.recipient.clone();
         let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("config.yaml");
         let prompter = MockPrompter::new(flow_responses_with_change());
         // Act
-        run_invoice_flow(&prompter, &config, &recipient, dir.path()).unwrap();
+        run_invoice_flow(&prompter, &config, &recipient, &config_path, dir.path()).unwrap();
         // Assert
         let messages = prompter.messages.borrow();
         assert!(
@@ -282,9 +291,10 @@ mod tests {
         let config = make_validated_config();
         let recipient = config.recipient.clone();
         let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("config.yaml");
         let prompter = MockPrompter::new(flow_responses_with_change());
         // Act
-        run_invoice_flow(&prompter, &config, &recipient, dir.path()).unwrap();
+        run_invoice_flow(&prompter, &config, &recipient, &config_path, dir.path()).unwrap();
         // Assert
         assert_eq!(config.template, TemplateKey::Leda, "Config should not be modified");
         prompter.assert_exhausted();
