@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-use crate::domain::{HexColor, Iban};
+use crate::domain::{HexColor, Iban, PresetKey, RecipientKey};
 use crate::error::AppError;
 use crate::locale::Locale;
 
@@ -106,7 +106,7 @@ pub struct Config {
     pub recipients: Option<Vec<Recipient>>,
     /// Key of the default recipient profile.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub default_recipient: Option<String>,
+    pub default_recipient: Option<RecipientKey>,
     /// Invoice presets (e.g. hourly-rate templates).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub presets: Option<Vec<Preset>>,
@@ -129,8 +129,10 @@ pub struct Sender {
 /// Information about the invoice recipient.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Recipient {
+    /// Validated slug. Optional in raw config (v1 configs may lack it),
+    /// auto-derived during validation when missing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub key: Option<String>,
+    pub key: Option<RecipientKey>,
     pub name: String,
     pub address: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -152,7 +154,8 @@ pub struct PaymentMethod {
 /// An invoice preset / template.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Preset {
-    pub key: String,
+    /// Validated slug.
+    pub key: PresetKey,
     pub description: String,
     pub default_rate: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -200,91 +203,9 @@ impl Default for Defaults {
     }
 }
 
-/// Derive a slug key from a recipient name.
-/// Lowercases, replaces non-alphanumeric characters with hyphens, collapses runs.
-pub fn derive_recipient_key(name: &str) -> String {
-    name.to_lowercase()
-        .split(|c: char| !c.is_alphanumeric() && c != '-')
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>()
-        .join("-")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn derive_key_simple_two_words() {
-        // Arrange
-        let name = "Acme Corp";
-
-        // Act
-        let key = derive_recipient_key(name);
-
-        // Assert
-        assert_eq!(key, "acme-corp");
-    }
-
-    #[test]
-    fn derive_key_single_word() {
-        // Arrange
-        let name = "Bob";
-
-        // Act
-        let key = derive_recipient_key(name);
-
-        // Assert
-        assert_eq!(key, "bob");
-    }
-
-    #[test]
-    fn derive_key_punctuation_stripped() {
-        // Arrange
-        let name = "Foo & Bar, Inc.";
-
-        // Act
-        let key = derive_recipient_key(name);
-
-        // Assert
-        assert_eq!(key, "foo-bar-inc");
-    }
-
-    #[test]
-    fn derive_key_whitespace_only_returns_empty() {
-        // Arrange
-        let name = "   ";
-
-        // Act
-        let key = derive_recipient_key(name);
-
-        // Assert
-        assert_eq!(key, "");
-    }
-
-    #[test]
-    fn derive_key_empty_string_returns_empty() {
-        // Arrange
-        let name = "";
-
-        // Act
-        let key = derive_recipient_key(name);
-
-        // Assert
-        assert_eq!(key, "");
-    }
-
-    #[test]
-    fn derive_key_preserves_existing_hyphens() {
-        // Arrange
-        let name = "Müller-Schmidt GmbH";
-
-        // Act
-        let key = derive_recipient_key(name);
-
-        // Assert
-        assert_eq!(key, "müller-schmidt-gmbh");
-    }
 
     #[test]
     fn v1_yaml_deserializes_with_key_none() {
@@ -308,7 +229,7 @@ mod tests {
         let r: Recipient = serde_yaml::from_str(yaml).unwrap();
 
         // Assert
-        assert_eq!(r.key, Some("acme".into()));
+        assert_eq!(r.key, Some(RecipientKey::try_new("acme").unwrap()));
     }
 
     #[test]
@@ -334,14 +255,14 @@ mod tests {
         let config = Config {
             recipients: Some(vec![
                 Recipient {
-                    key: Some("acme".into()),
+                    key: Some(RecipientKey::try_new("acme").unwrap()),
                     name: "Acme Corp".into(),
                     address: vec!["123 Main St".into()],
                     company_id: None,
                     vat_number: None,
                 },
             ]),
-            default_recipient: Some("acme".into()),
+            default_recipient: Some(RecipientKey::try_new("acme").unwrap()),
             ..Config::default()
         };
 
@@ -351,7 +272,10 @@ mod tests {
 
         // Assert
         assert_eq!(loaded.recipients.as_ref().unwrap().len(), 1);
-        assert_eq!(loaded.default_recipient, Some("acme".into()));
+        assert_eq!(
+            loaded.default_recipient,
+            Some(RecipientKey::try_new("acme").unwrap())
+        );
     }
 
     #[test]
@@ -364,6 +288,7 @@ mod tests {
 
         // Assert
         assert!(preset.currency.is_none());
+        assert_eq!(preset.key.as_str(), "dev");
     }
 
     #[test]
@@ -382,7 +307,7 @@ mod tests {
     fn test_preset_currency_none_omitted_from_yaml() {
         // Arrange
         let preset = Preset {
-            key: "dev".into(),
+            key: PresetKey::try_new("dev").unwrap(),
             description: "Development".into(),
             default_rate: 800.0,
             currency: None,
@@ -400,7 +325,7 @@ mod tests {
     fn test_preset_with_currency_round_trips() {
         // Arrange
         let preset = Preset {
-            key: "dev".into(),
+            key: PresetKey::try_new("dev").unwrap(),
             description: "Development".into(),
             default_rate: 800.0,
             currency: Some("CZK".into()),
@@ -443,7 +368,7 @@ mod tests {
     fn test_preset_tax_rate_none_omitted_from_yaml() {
         // Arrange
         let preset = Preset {
-            key: "dev".into(),
+            key: PresetKey::try_new("dev").unwrap(),
             description: "Development".into(),
             default_rate: 800.0,
             currency: None,
@@ -461,7 +386,7 @@ mod tests {
     fn test_preset_with_tax_rate_round_trips() {
         // Arrange
         let preset = Preset {
-            key: "dev".into(),
+            key: PresetKey::try_new("dev").unwrap(),
             description: "Development".into(),
             default_rate: 800.0,
             currency: None,
@@ -480,7 +405,7 @@ mod tests {
     fn test_preset_with_zero_tax_rate_serializes() {
         // Arrange
         let preset = Preset {
-            key: "dev".into(),
+            key: PresetKey::try_new("dev").unwrap(),
             description: "Development".into(),
             default_rate: 800.0,
             currency: None,

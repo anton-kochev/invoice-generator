@@ -62,7 +62,7 @@ pub fn remove_preset(path: &Path, key: &str) -> Result<Preset, AppError> {
 
     let pos = presets
         .iter()
-        .position(|p| p.key == key)
+        .position(|p| p.key.as_str() == key)
         .ok_or_else(|| AppError::PresetNotFound(key.to_string()))?;
 
     let removed = presets.remove(pos);
@@ -99,23 +99,25 @@ pub fn append_preset(path: &Path, preset: Preset) -> Result<(), AppError> {
 
 /// Migrate a v1 Config (single `recipient:`) to v2 (`recipients:` list).
 /// No-op if already v2. Consumes the `recipient` field via `.take()`.
-fn ensure_recipients_v2(config: &mut Config) {
-    use super::types::derive_recipient_key;
+fn ensure_recipients_v2(config: &mut Config) -> Result<(), AppError> {
+    use crate::domain::RecipientKey;
 
     if config.recipients.is_some() {
-        return;
+        return Ok(());
     }
     if let Some(mut legacy) = config.recipient.take() {
-        let key = legacy
-            .key
-            .clone()
-            .unwrap_or_else(|| derive_recipient_key(&legacy.name));
+        let key = match legacy.key.clone() {
+            Some(k) => k,
+            None => RecipientKey::from_name(&legacy.name)
+                .map_err(|e| AppError::InvalidDefaultRecipient(e.to_string()))?,
+        };
         legacy.key = Some(key.clone());
         config.recipients = Some(vec![legacy]);
         if config.default_recipient.is_none() {
             config.default_recipient = Some(key);
         }
     }
+    Ok(())
 }
 
 /// Append a recipient to the config file at `path`.
@@ -135,7 +137,7 @@ pub fn append_recipient(path: &Path, recipient: Recipient, set_default: bool) ->
     };
 
     let mut config = config;
-    ensure_recipients_v2(&mut config);
+    ensure_recipients_v2(&mut config)?;
     let mut recipients = config.recipients.take().unwrap_or_default();
 
     if set_default {
@@ -166,7 +168,7 @@ pub fn remove_recipient(path: &Path, key: &str) -> Result<Recipient, AppError> {
     };
 
     let mut config = config;
-    ensure_recipients_v2(&mut config);
+    ensure_recipients_v2(&mut config)?;
     let mut recipients = config.recipients.take().unwrap_or_default();
 
     if recipients.len() <= 1 {
@@ -175,17 +177,24 @@ pub fn remove_recipient(path: &Path, key: &str) -> Result<Recipient, AppError> {
 
     let pos = recipients
         .iter()
-        .position(|r| r.key.as_deref() == Some(key))
+        .position(|r| r.key.as_ref().is_some_and(|k| k.as_str() == key))
         .ok_or_else(|| AppError::RecipientNotFound {
             key: key.to_string(),
-            available: recipients.iter().filter_map(|r| r.key.clone()).collect(),
+            available: recipients
+                .iter()
+                .filter_map(|r| r.key.as_ref().map(|k| k.as_str().to_string()))
+                .collect(),
         })?;
 
     let removed = recipients.remove(pos);
     config.recipients = Some(recipients);
 
     // Clear default if it was the removed recipient
-    if config.default_recipient.as_deref() == Some(key) {
+    if config
+        .default_recipient
+        .as_ref()
+        .is_some_and(|k| k.as_str() == key)
+    {
         config.default_recipient = None;
     }
 
@@ -210,17 +219,26 @@ pub fn set_default_recipient(path: &Path, key: &str) -> Result<(), AppError> {
     };
 
     let mut config = config;
-    ensure_recipients_v2(&mut config);
+    ensure_recipients_v2(&mut config)?;
     let recipients = config.recipients.as_deref().unwrap_or_default();
 
-    if !recipients.iter().any(|r| r.key.as_deref() == Some(key)) {
+    if !recipients
+        .iter()
+        .any(|r| r.key.as_ref().is_some_and(|k| k.as_str() == key))
+    {
         return Err(AppError::RecipientNotFound {
             key: key.to_string(),
-            available: recipients.iter().filter_map(|r| r.key.clone()).collect(),
+            available: recipients
+                .iter()
+                .filter_map(|r| r.key.as_ref().map(|k| k.as_str().to_string()))
+                .collect(),
         });
     }
 
-    config.default_recipient = Some(key.to_string());
+    config.default_recipient = Some(
+        crate::domain::RecipientKey::try_new(key)
+            .map_err(|e| AppError::InvalidDefaultRecipient(e.to_string()))?,
+    );
     save_config(path, &config)
 }
 
@@ -250,7 +268,7 @@ mod tests {
 
     fn synthetic_recipient() -> Recipient {
         Recipient {
-            key: Some("bob-corp".to_string()),
+            key: Some(crate::domain::RecipientKey::try_new("bob-corp").unwrap()),
             name: "Bob Corp".to_string(),
             address: vec!["99 Oak Lane".to_string(), "Shelbyville, IL 62565".to_string()],
             company_id: Some("BC-98765".to_string()),
@@ -268,7 +286,7 @@ mod tests {
 
     fn synthetic_presets() -> Vec<Preset> {
         vec![Preset {
-            key: "dev".to_string(),
+            key: crate::domain::PresetKey::try_new("dev").unwrap(),
             description: "Development Services".to_string(),
             default_rate: 100.0,
             currency: None,
@@ -290,7 +308,7 @@ mod tests {
             sender: Some(synthetic_sender()),
             recipient: None,
             recipients: Some(vec![synthetic_recipient()]),
-            default_recipient: Some("bob-corp".to_string()),
+            default_recipient: Some(crate::domain::RecipientKey::try_new("bob-corp").unwrap()),
             payment: Some(synthetic_payment()),
             presets: Some(synthetic_presets()),
             defaults: Some(synthetic_defaults()),
@@ -439,7 +457,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         save_config(&cfg_path(&dir), &complete_config()).unwrap();
         let new_preset = Preset {
-            key: "design".to_string(),
+            key: crate::domain::PresetKey::try_new("design").unwrap(),
             description: "Design work".to_string(),
             default_rate: 80.0,
             currency: None,
@@ -453,8 +471,8 @@ mod tests {
         let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let presets = loaded.presets.unwrap();
         assert_eq!(presets.len(), 2);
-        assert_eq!(presets[0].key, "dev");
-        assert_eq!(presets[1].key, "design");
+        assert_eq!(presets[0].key.as_str(), "dev");
+        assert_eq!(presets[1].key.as_str(), "design");
     }
 
     // ── Cycle 8: test_append_preset_preserves_other_sections ──
@@ -470,7 +488,7 @@ mod tests {
         append_preset(
             &cfg_path(&dir),
             Preset {
-                key: "qa".to_string(),
+                key: crate::domain::PresetKey::try_new("qa").unwrap(),
                 description: "QA work".to_string(),
                 default_rate: 60.0,
                 currency: None,
@@ -503,7 +521,7 @@ mod tests {
         append_preset(
             &cfg_path(&dir),
             Preset {
-                key: "ops".to_string(),
+                key: crate::domain::PresetKey::try_new("ops").unwrap(),
                 description: "Operations".to_string(),
                 default_rate: 90.0,
                 currency: None,
@@ -516,7 +534,7 @@ mod tests {
         let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let presets = loaded.presets.unwrap();
         assert_eq!(presets.len(), 1);
-        assert_eq!(presets[0].key, "ops");
+        assert_eq!(presets[0].key.as_str(), "ops");
     }
 
     // ── Cycle 10: test_append_preset_no_config_file ──
@@ -530,7 +548,7 @@ mod tests {
         let result = append_preset(
             &cfg_path(&dir),
             Preset {
-                key: "x".to_string(),
+                key: crate::domain::PresetKey::try_new("x").unwrap(),
                 description: "X".to_string(),
                 default_rate: 50.0,
                 currency: None,
@@ -552,7 +570,7 @@ mod tests {
         let mut config = complete_config();
         let mut presets = config.presets.take().unwrap();
         presets.push(Preset {
-            key: "design".to_string(),
+            key: crate::domain::PresetKey::try_new("design").unwrap(),
             description: "Design work".to_string(),
             default_rate: 80.0,
             currency: None,
@@ -565,11 +583,11 @@ mod tests {
         let removed = remove_preset(&cfg_path(&dir), "design").unwrap();
 
         // Assert
-        assert_eq!(removed.key, "design");
+        assert_eq!(removed.key.as_str(), "design");
         let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let remaining = loaded.presets.unwrap();
         assert_eq!(remaining.len(), 1);
-        assert_eq!(remaining[0].key, "dev");
+        assert_eq!(remaining[0].key.as_str(), "dev");
     }
 
     #[test]
@@ -579,7 +597,7 @@ mod tests {
         let mut config = complete_config();
         let mut presets = config.presets.take().unwrap();
         presets.push(Preset {
-            key: "design".to_string(),
+            key: crate::domain::PresetKey::try_new("design").unwrap(),
             description: "Design work".to_string(),
             default_rate: 80.0,
             currency: None,
@@ -615,7 +633,7 @@ mod tests {
         let mut config = complete_config();
         let mut presets = config.presets.take().unwrap();
         presets.push(Preset {
-            key: "design".to_string(),
+            key: crate::domain::PresetKey::try_new("design").unwrap(),
             description: "Design work".to_string(),
             default_rate: 80.0,
             currency: None,
@@ -654,21 +672,21 @@ mod tests {
         let config = Config {
             presets: Some(vec![
                 Preset {
-                    key: "dev".to_string(),
+                    key: crate::domain::PresetKey::try_new("dev").unwrap(),
                     description: "Development".to_string(),
                     default_rate: 100.0,
                     currency: None,
                 tax_rate: None,
                 },
                 Preset {
-                    key: "design".to_string(),
+                    key: crate::domain::PresetKey::try_new("design").unwrap(),
                     description: "Design".to_string(),
                     default_rate: 80.0,
                     currency: None,
                 tax_rate: None,
                 },
                 Preset {
-                    key: "qa".to_string(),
+                    key: crate::domain::PresetKey::try_new("qa").unwrap(),
                     description: "QA".to_string(),
                     default_rate: 60.0,
                     currency: None,
@@ -683,12 +701,12 @@ mod tests {
         let removed = remove_preset(&cfg_path(&dir), "design").unwrap();
 
         // Assert
-        assert_eq!(removed.key, "design");
+        assert_eq!(removed.key.as_str(), "design");
         let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let remaining = loaded.presets.unwrap();
         assert_eq!(remaining.len(), 2);
-        assert_eq!(remaining[0].key, "dev");
-        assert_eq!(remaining[1].key, "qa");
+        assert_eq!(remaining[0].key.as_str(), "dev");
+        assert_eq!(remaining[1].key.as_str(), "qa");
     }
 
     // ── Story 7.1 Phase 6: v2 round-trip tests ──
@@ -701,13 +719,13 @@ mod tests {
             sender: Some(synthetic_sender()),
             recipient: None,
             recipients: Some(vec![Recipient {
-                key: Some("acme".into()),
+                key: Some(crate::domain::RecipientKey::try_new("acme").unwrap()),
                 name: "Acme Corp".into(),
                 address: vec!["123 St".into()],
                 company_id: Some("AC-123".into()),
                 vat_number: None,
             }]),
-            default_recipient: Some("acme".into()),
+            default_recipient: Some(crate::domain::RecipientKey::try_new("acme").unwrap()),
             payment: Some(synthetic_payment()),
             presets: Some(synthetic_presets()),
             defaults: Some(synthetic_defaults()),
@@ -722,9 +740,12 @@ mod tests {
         assert_eq!(loaded.recipients.as_ref().unwrap().len(), 1);
         assert_eq!(
             loaded.recipients.as_ref().unwrap()[0].key,
-            Some("acme".into())
+            Some(crate::domain::RecipientKey::try_new("acme").unwrap())
         );
-        assert_eq!(loaded.default_recipient, Some("acme".into()));
+        assert_eq!(
+            loaded.default_recipient.as_ref().map(|k| k.as_str()),
+            Some("acme")
+        );
     }
 
     #[test]
@@ -735,13 +756,13 @@ mod tests {
             sender: Some(synthetic_sender()),
             recipient: None,
             recipients: Some(vec![Recipient {
-                key: Some("bob".into()),
+                key: Some(crate::domain::RecipientKey::try_new("bob").unwrap()),
                 name: "Bob Corp".into(),
                 address: vec!["St".into()],
                 company_id: None,
                 vat_number: None,
             }]),
-            default_recipient: Some("bob".into()),
+            default_recipient: Some(crate::domain::RecipientKey::try_new("bob").unwrap()),
             payment: Some(synthetic_payment()),
             presets: Some(synthetic_presets()),
             defaults: Some(synthetic_defaults()),
@@ -763,13 +784,13 @@ mod tests {
             sender: Some(synthetic_sender()),
             recipient: None,
             recipients: Some(vec![Recipient {
-                key: Some("acme".into()),
+                key: Some(crate::domain::RecipientKey::try_new("acme").unwrap()),
                 name: "Acme Corp".into(),
                 address: vec!["100 Acme Blvd".into()],
                 company_id: Some("AC-12345".into()),
                 vat_number: None,
             }]),
-            default_recipient: Some("acme".into()),
+            default_recipient: Some(crate::domain::RecipientKey::try_new("acme").unwrap()),
             payment: Some(synthetic_payment()),
             presets: Some(synthetic_presets()),
             defaults: Some(synthetic_defaults()),
@@ -783,21 +804,21 @@ mod tests {
             recipient: None,
             recipients: Some(vec![
                 Recipient {
-                    key: Some("acme".into()),
+                    key: Some(crate::domain::RecipientKey::try_new("acme").unwrap()),
                     name: "Acme Corp".into(),
                     address: vec!["100 Acme Blvd".into()],
                     company_id: Some("AC-12345".into()),
                     vat_number: None,
                 },
                 Recipient {
-                    key: Some("globex".into()),
+                    key: Some(crate::domain::RecipientKey::try_new("globex").unwrap()),
                     name: "Globex Inc".into(),
                     address: vec!["200 Globex Ave".into()],
                     company_id: None,
                     vat_number: Some("CZ87654321".into()),
                 },
             ]),
-            default_recipient: Some("acme".into()),
+            default_recipient: Some(crate::domain::RecipientKey::try_new("acme").unwrap()),
             payment: Some(synthetic_payment()),
             presets: Some(synthetic_presets()),
             defaults: Some(synthetic_defaults()),
@@ -812,14 +833,14 @@ mod tests {
         let config = Config {
             presets: Some(vec![
                 Preset {
-                    key: "dev".to_string(),
+                    key: crate::domain::PresetKey::try_new("dev").unwrap(),
                     description: "Development".to_string(),
                     default_rate: 100.0,
                     currency: None,
                 tax_rate: None,
                 },
                 Preset {
-                    key: "design".to_string(),
+                    key: crate::domain::PresetKey::try_new("design").unwrap(),
                     description: "Design".to_string(),
                     default_rate: 80.0,
                     currency: None,
@@ -850,7 +871,7 @@ mod tests {
         save_config(&cfg_path(&dir), &config).unwrap();
 
         let recipient = Recipient {
-            key: Some("acme".into()),
+            key: Some(crate::domain::RecipientKey::try_new("acme").unwrap()),
             name: "Acme Corp".into(),
             address: vec!["100 Acme Blvd".into()],
             company_id: None,
@@ -864,8 +885,14 @@ mod tests {
         let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let recipients = loaded.recipients.unwrap();
         assert_eq!(recipients.len(), 1);
-        assert_eq!(recipients[0].key, Some("acme".into()));
-        assert_eq!(loaded.default_recipient, Some("acme".into()));
+        assert_eq!(
+            recipients[0].key.as_ref().map(|k| k.as_str()),
+            Some("acme")
+        );
+        assert_eq!(
+            loaded.default_recipient.as_ref().map(|k| k.as_str()),
+            Some("acme")
+        );
     }
 
     #[test]
@@ -875,7 +902,7 @@ mod tests {
         save_config(&cfg_path(&dir), &complete_config_v2()).unwrap();
 
         let new_recipient = Recipient {
-            key: Some("globex".into()),
+            key: Some(crate::domain::RecipientKey::try_new("globex").unwrap()),
             name: "Globex Inc".into(),
             address: vec!["200 Globex Ave".into()],
             company_id: None,
@@ -889,8 +916,14 @@ mod tests {
         let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let recipients = loaded.recipients.unwrap();
         assert_eq!(recipients.len(), 2);
-        assert_eq!(recipients[1].key, Some("globex".into()));
-        assert_eq!(loaded.default_recipient, Some("acme".into()));
+        assert_eq!(
+            recipients[1].key.as_ref().map(|k| k.as_str()),
+            Some("globex")
+        );
+        assert_eq!(
+            loaded.default_recipient.as_ref().map(|k| k.as_str()),
+            Some("acme")
+        );
     }
 
     #[test]
@@ -900,7 +933,7 @@ mod tests {
         save_config(&cfg_path(&dir), &complete_config_v2()).unwrap();
 
         let new_recipient = Recipient {
-            key: Some("globex".into()),
+            key: Some(crate::domain::RecipientKey::try_new("globex").unwrap()),
             name: "Globex Inc".into(),
             address: vec!["200 Globex Ave".into()],
             company_id: None,
@@ -912,7 +945,10 @@ mod tests {
 
         // Assert
         let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
-        assert_eq!(loaded.default_recipient, Some("globex".into()));
+        assert_eq!(
+            loaded.default_recipient.as_ref().map(|k| k.as_str()),
+            Some("globex")
+        );
     }
 
     #[test]
@@ -923,7 +959,7 @@ mod tests {
         save_config(&cfg_path(&dir), &original).unwrap();
 
         let new_recipient = Recipient {
-            key: Some("globex".into()),
+            key: Some(crate::domain::RecipientKey::try_new("globex").unwrap()),
             name: "Globex Inc".into(),
             address: vec!["200 Globex Ave".into()],
             company_id: None,
@@ -946,7 +982,7 @@ mod tests {
         // Arrange
         let dir = TempDir::new().unwrap();
         let recipient = Recipient {
-            key: Some("acme".into()),
+            key: Some(crate::domain::RecipientKey::try_new("acme").unwrap()),
             name: "Acme Corp".into(),
             address: vec!["St".into()],
             company_id: None,
@@ -976,8 +1012,14 @@ mod tests {
         let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let recipients = loaded.recipients.unwrap();
         assert_eq!(recipients.len(), 1);
-        assert_eq!(recipients[0].key, Some("acme".into()));
-        assert_eq!(loaded.default_recipient, Some("acme".into()));
+        assert_eq!(
+            recipients[0].key.as_ref().map(|k| k.as_str()),
+            Some("acme")
+        );
+        assert_eq!(
+            loaded.default_recipient.as_ref().map(|k| k.as_str()),
+            Some("acme")
+        );
     }
 
     #[test]
@@ -1049,7 +1091,10 @@ mod tests {
 
         // Assert
         let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
-        assert_eq!(loaded.default_recipient, Some("globex".into()));
+        assert_eq!(
+            loaded.default_recipient.as_ref().map(|k| k.as_str()),
+            Some("globex")
+        );
     }
 
     // ── v1 migration helpers ──
@@ -1075,7 +1120,7 @@ mod tests {
 
     fn new_recipient() -> Recipient {
         Recipient {
-            key: Some("macrosoft".into()),
+            key: Some(crate::domain::RecipientKey::try_new("macrosoft").unwrap()),
             name: "Macrosoft".into(),
             address: vec!["654 Street".into(), "United States".into()],
             company_id: Some("MS-54321".into()),
@@ -1098,9 +1143,9 @@ mod tests {
         let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let recipients = loaded.recipients.unwrap();
         assert_eq!(recipients.len(), 2);
-        assert_eq!(recipients[0].key, Some("client-corp".into()));
-        assert_eq!(recipients[1].key, Some("macrosoft".into()));
-        assert_eq!(loaded.default_recipient, Some("client-corp".into()));
+        assert_eq!(recipients[0].key, Some(crate::domain::RecipientKey::try_new("client-corp").unwrap()));
+        assert_eq!(recipients[1].key, Some(crate::domain::RecipientKey::try_new("macrosoft").unwrap()));
+        assert_eq!(loaded.default_recipient, Some(crate::domain::RecipientKey::try_new("client-corp").unwrap()));
     }
 
     #[test]
@@ -1108,7 +1153,7 @@ mod tests {
         // Arrange
         let dir = TempDir::new().unwrap();
         let mut config = v1_config_with_recipient();
-        config.recipient.as_mut().unwrap().key = Some("cc".into());
+        config.recipient.as_mut().unwrap().key = Some(crate::domain::RecipientKey::try_new("cc").unwrap());
         save_config(&cfg_path(&dir), &config).unwrap();
 
         // Act
@@ -1117,8 +1162,8 @@ mod tests {
         // Assert
         let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let recipients = loaded.recipients.unwrap();
-        assert_eq!(recipients[0].key, Some("cc".into()));
-        assert_eq!(loaded.default_recipient, Some("cc".into()));
+        assert_eq!(recipients[0].key, Some(crate::domain::RecipientKey::try_new("cc").unwrap()));
+        assert_eq!(loaded.default_recipient, Some(crate::domain::RecipientKey::try_new("cc").unwrap()));
     }
 
     #[test]
@@ -1134,7 +1179,7 @@ mod tests {
         let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let recipients = loaded.recipients.unwrap();
         assert_eq!(recipients.len(), 2);
-        assert_eq!(loaded.default_recipient, Some("macrosoft".into()));
+        assert_eq!(loaded.default_recipient, Some(crate::domain::RecipientKey::try_new("macrosoft").unwrap()));
     }
 
     #[test]

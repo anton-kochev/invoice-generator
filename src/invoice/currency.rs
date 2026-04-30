@@ -36,7 +36,7 @@ mod tests {
 
     fn make_preset(currency: Option<String>) -> Preset {
         Preset {
-            key: "dev".into(),
+            key: crate::domain::PresetKey::try_new("dev").unwrap(),
             description: "Development".into(),
             default_rate: 800.0,
             currency,

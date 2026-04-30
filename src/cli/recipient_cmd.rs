@@ -3,9 +3,10 @@ use std::path::Path;
 
 use crate::config::types::Recipient;
 use crate::config::validator::ValidatedConfig;
+use crate::domain::RecipientKey;
 use crate::error::AppError;
 use crate::setup::prompter::Prompter;
-use crate::setup::prompts::{prompt_u32_in_range, prompt_until_valid};
+use crate::setup::prompts::{prompt_parsed, prompt_u32_in_range};
 
 /// Format recipients as a table string with columns: Key, Name, Address, Company ID.
 ///
@@ -21,7 +22,7 @@ pub fn format_recipient_table(recipients: &[Recipient], default_key: &str) -> St
     let display_keys: Vec<String> = recipients
         .iter()
         .map(|r| {
-            let base = r.key.as_deref().unwrap_or("");
+            let base = r.key.as_ref().map(|k| k.as_str()).unwrap_or("");
             if base == default_key {
                 format!("{base} (default)")
             } else {
@@ -90,7 +91,10 @@ pub fn handle_recipient_list(
     validated: &ValidatedConfig,
     writer: &mut dyn Write,
 ) -> Result<(), AppError> {
-    let table = format_recipient_table(&validated.recipients, &validated.default_recipient_key);
+    let table = format_recipient_table(
+        &validated.recipients,
+        validated.default_recipient_key.as_str(),
+    );
     writer.write_all(table.as_bytes())?;
     Ok(())
 }
@@ -112,18 +116,22 @@ pub fn handle_recipient_add(
 
     let existing_recipients = config.recipients.as_deref().unwrap_or_default();
 
-    // Prompt for key, rejecting duplicates
-    let key = prompt_until_valid(
+    // Prompt for key, validating shape and rejecting duplicates
+    let key = prompt_parsed(
         prompter,
         |p| p.required_text("Recipient key (short identifier):"),
-        |candidate: &String| {
+        |raw: String| {
+            let candidate = RecipientKey::try_new(raw).map_err(|e| e.to_string())?;
             if existing_recipients
                 .iter()
-                .any(|r| r.key.as_deref() == Some(candidate.as_str()))
+                .any(|r| r.key.as_ref() == Some(&candidate))
             {
-                Err(format!("Key \"{candidate}\" already exists. Choose another:"))
+                Err(format!(
+                    "Key \"{}\" already exists. Choose another:",
+                    candidate.as_str()
+                ))
             } else {
-                Ok(())
+                Ok(candidate)
             }
         },
     )?;
@@ -135,8 +143,9 @@ pub fn handle_recipient_add(
 
     let set_default = prompter.confirm("Set as default recipient?", false)?;
 
+    let key_for_msg = key.clone();
     let recipient = Recipient {
-        key: Some(key.clone()),
+        key: Some(key),
         name,
         address,
         company_id,
@@ -146,7 +155,8 @@ pub fn handle_recipient_add(
     append_recipient(config_path, recipient, set_default)?;
     writeln!(
         writer,
-        "✓ Recipient \"{key}\" added to {}",
+        "✓ Recipient \"{}\" added to {}",
+        key_for_msg.as_str(),
         config_path.display()
     )?;
     Ok(())
@@ -173,10 +183,13 @@ pub fn handle_recipient_delete(
     // Find the recipient first to get its name for the confirmation prompt
     let recipient = recipients
         .iter()
-        .find(|r| r.key.as_deref() == Some(key))
+        .find(|r| r.key.as_ref().is_some_and(|k| k.as_str() == key))
         .ok_or_else(|| AppError::RecipientNotFound {
             key: key.to_string(),
-            available: recipients.iter().filter_map(|r| r.key.clone()).collect(),
+            available: recipients
+                .iter()
+                .filter_map(|r| r.key.as_ref().map(|k| k.as_str().to_string()))
+                .collect(),
         })?;
 
     // Guard: cannot delete the last recipient
@@ -190,7 +203,10 @@ pub fn handle_recipient_delete(
         return Ok(());
     }
 
-    let is_default = config.default_recipient.as_deref() == Some(key);
+    let is_default = config
+        .default_recipient
+        .as_ref()
+        .is_some_and(|k| k.as_str() == key);
 
     remove_recipient(config_path, key)?;
 
@@ -205,7 +221,7 @@ pub fn handle_recipient_delete(
 
         if remaining.len() == 1 {
             // Auto-assign the only remaining recipient
-            let new_key = remaining[0].key.as_deref().unwrap_or("");
+            let new_key = remaining[0].key.as_ref().map(|k| k.as_str()).unwrap_or("");
             set_default_recipient(config_path, new_key)?;
         } else if remaining.len() > 1 {
             // Prompt for new default
@@ -214,14 +230,18 @@ pub fn handle_recipient_delete(
                 prompter.message(&format!(
                     "  [{}] {} \u{2014} {}",
                     i + 1,
-                    r.key.as_deref().unwrap_or(""),
+                    r.key.as_ref().map(|k| k.as_str()).unwrap_or(""),
                     r.name,
                 ));
             }
             let max = remaining.len() as u32;
             let choice =
                 prompt_u32_in_range(prompter, "Select recipient number:", 1..=max, 1)?;
-            let new_key = remaining[choice as usize - 1].key.as_deref().unwrap_or("");
+            let new_key = remaining[choice as usize - 1]
+                .key
+                .as_ref()
+                .map(|k| k.as_str())
+                .unwrap_or("");
             set_default_recipient(config_path, new_key)?;
         }
     }
@@ -379,11 +399,11 @@ mod tests {
         };
         let recipients = loaded.recipients.unwrap();
         assert_eq!(recipients.len(), 2);
-        assert_eq!(recipients[1].key, Some("newcorp".into()));
+        assert_eq!(recipients[1].key, Some(RecipientKey::try_new("newcorp").unwrap()));
         assert_eq!(recipients[1].name, "New Corp LLC");
         assert_eq!(recipients[1].company_id, Some("NC-123".into()));
         assert_eq!(recipients[1].vat_number, Some("VAT999".into()));
-        assert_eq!(loaded.default_recipient, Some("newcorp".into()));
+        assert_eq!(loaded.default_recipient, Some(RecipientKey::try_new("newcorp").unwrap()));
         let output = String::from_utf8(buf).unwrap();
         assert!(output.contains("added"), "Expected 'added' in output");
         prompter.assert_exhausted();
@@ -415,7 +435,7 @@ mod tests {
         let recipients = loaded.recipients.unwrap();
         assert_eq!(recipients[1].company_id, None);
         assert_eq!(recipients[1].vat_number, None);
-        assert_eq!(loaded.default_recipient, Some("acme".into()));
+        assert_eq!(loaded.default_recipient, Some(RecipientKey::try_new("acme").unwrap()));
         prompter.assert_exhausted();
     }
 
@@ -445,7 +465,7 @@ mod tests {
         };
         let recipients = loaded.recipients.unwrap();
         assert_eq!(recipients.len(), 2);
-        assert_eq!(recipients[1].key, Some("acme2".into()));
+        assert_eq!(recipients[1].key, Some(RecipientKey::try_new("acme2").unwrap()));
         let messages = prompter.messages.borrow();
         let all = messages.join("\n");
         assert!(
@@ -519,7 +539,7 @@ mod tests {
         };
         let recipients = loaded.recipients.unwrap();
         assert_eq!(recipients.len(), 1);
-        assert_eq!(recipients[0].key, Some("acme".into()));
+        assert_eq!(recipients[0].key, Some(RecipientKey::try_new("acme").unwrap()));
         let output = String::from_utf8(buf).unwrap();
         assert!(output.contains("deleted"), "Expected 'deleted' in output");
         prompter.assert_exhausted();
@@ -598,7 +618,7 @@ mod tests {
             LoadResult::Loaded(c) => *c,
             _ => panic!("Expected Loaded"),
         };
-        assert_eq!(loaded.default_recipient, Some("globex".into()));
+        assert_eq!(loaded.default_recipient, Some(RecipientKey::try_new("globex").unwrap()));
         assert_eq!(loaded.recipients.unwrap().len(), 1);
         prompter.assert_exhausted();
     }
@@ -609,7 +629,7 @@ mod tests {
         let mut config = v2_config_two_recipients();
         let mut recipients = config.recipients.take().unwrap();
         recipients.push(Recipient {
-            key: Some("initech".into()),
+            key: Some(RecipientKey::try_new("initech").unwrap()),
             name: "Initech Corp".into(),
             address: vec!["300 Initech Way".into()],
             company_id: None,
@@ -632,7 +652,7 @@ mod tests {
             LoadResult::Loaded(c) => *c,
             _ => panic!("Expected Loaded"),
         };
-        assert_eq!(loaded.default_recipient, Some("initech".into()));
+        assert_eq!(loaded.default_recipient, Some(RecipientKey::try_new("initech").unwrap()));
         assert_eq!(loaded.recipients.unwrap().len(), 2);
         prompter.assert_exhausted();
     }

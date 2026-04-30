@@ -44,7 +44,7 @@ fn validate_days(days: f64) -> Result<(), AppError> {
 fn find_preset<'a>(key: &str, presets: &'a [Preset]) -> Result<&'a Preset, AppError> {
     presets
         .iter()
-        .find(|p| p.key == key)
+        .find(|p| p.key.as_str() == key)
         .ok_or_else(|| AppError::PresetNotFound(key.to_string()))
 }
 
@@ -116,13 +116,13 @@ fn resolve_recipient<'a>(
         Some(key) => validated
             .recipients
             .iter()
-            .find(|r| r.key.as_deref() == Some(key))
+            .find(|r| r.key.as_ref().is_some_and(|k| k.as_str() == key))
             .ok_or_else(|| AppError::RecipientNotFound {
                 key: key.to_string(),
                 available: validated
                     .recipients
                     .iter()
-                    .filter_map(|r| r.key.clone())
+                    .filter_map(|r| r.key.as_ref().map(|k| k.as_str().to_string()))
                     .collect(),
             }),
     }
@@ -204,10 +204,11 @@ mod tests {
 
     fn config_with_named_presets(entries: &[(&str, f64)]) -> crate::config::types::Config {
         use crate::config::types::{Config, Preset};
+        use crate::domain::PresetKey;
         let presets: Vec<Preset> = entries
             .iter()
             .map(|(key, rate)| Preset {
-                key: key.to_string(),
+                key: PresetKey::try_new(*key).unwrap(),
                 description: format!("{key} services"),
                 default_rate: *rate,
                 currency: None,
@@ -356,7 +357,7 @@ mod tests {
 
         // Assert
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().key, "dev");
+        assert_eq!(result.unwrap().key.as_str(), "dev");
     }
 
     // ── Phase 4: Handler tests — single-item (tempdir) ──
@@ -631,10 +632,11 @@ mod tests {
 
     fn config_with_currency_presets(entries: &[(&str, f64, Option<&str>)]) -> crate::config::types::Config {
         use crate::config::types::{Config, Preset};
+        use crate::domain::PresetKey;
         let presets: Vec<Preset> = entries
             .iter()
             .map(|(key, rate, currency)| Preset {
-                key: key.to_string(),
+                key: PresetKey::try_new(*key).unwrap(),
                 description: format!("{key} services"),
                 default_rate: *rate,
                 currency: currency.map(|c| c.to_string()),
@@ -682,10 +684,11 @@ mod tests {
 
     fn config_with_tax_presets(entries: &[(&str, f64, Option<f64>)]) -> crate::config::types::Config {
         use crate::config::types::{Config, Preset};
+        use crate::domain::PresetKey;
         let presets: Vec<Preset> = entries
             .iter()
             .map(|(key, rate, tax)| Preset {
-                key: key.to_string(),
+                key: PresetKey::try_new(*key).unwrap(),
                 description: format!("{key} services"),
                 default_rate: *rate,
                 currency: None,

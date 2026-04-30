@@ -2,8 +2,10 @@ use std::path::Path;
 
 use crate::config::types::{Config, Recipient};
 use crate::config::writer::save_config;
+use crate::domain::RecipientKey;
 use crate::error::AppError;
 use super::prompter::Prompter;
+use super::prompts::prompt_parsed;
 
 /// Collect recipient information interactively and persist it to disk.
 ///
@@ -16,7 +18,11 @@ pub fn collect_recipient(
 ) -> Result<(), AppError> {
     prompter.message("\n--- Recipient Information ---\n");
 
-    let key = prompter.required_text("Recipient key (short identifier):")?;
+    let key = prompt_parsed(
+        prompter,
+        |p| p.required_text("Recipient key (short identifier):"),
+        |raw: String| RecipientKey::try_new(raw).map_err(|e| e.to_string()),
+    )?;
     let name = prompter.required_text("Company name:")?;
     let address = prompter.multi_line("Address")?;
     let company_id = prompter.optional_text("Company ID (blank to skip):")?;
@@ -67,10 +73,13 @@ mod tests {
         // Assert
         let r = &config.recipients.as_ref().unwrap()[0];
         assert_eq!(r.name, "Acme Corp");
-        assert_eq!(r.key, Some("acme".into()));
+        assert_eq!(r.key.as_ref().map(|k| k.as_str()), Some("acme"));
         assert_eq!(r.company_id, Some("AC-12345".into()));
         assert_eq!(r.vat_number, Some("CZ9999".into()));
-        assert_eq!(config.default_recipient, Some("acme".into()));
+        assert_eq!(
+            config.default_recipient.as_ref().map(|k| k.as_str()),
+            Some("acme")
+        );
         assert!(config.recipient.is_none());
         prompter.assert_exhausted();
     }
@@ -140,7 +149,10 @@ mod tests {
         // Assert
         let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         assert_eq!(loaded.recipients.as_ref().unwrap()[0].name, "Acme Corp");
-        assert_eq!(loaded.default_recipient, Some("acme".into()));
+        assert_eq!(
+            loaded.default_recipient.as_ref().map(|k| k.as_str()),
+            Some("acme")
+        );
         prompter.assert_exhausted();
     }
 
@@ -191,9 +203,12 @@ mod tests {
         assert!(config.recipient.is_none(), "v1 recipient should be None");
         let recipients = config.recipients.as_ref().unwrap();
         assert_eq!(recipients.len(), 1);
-        assert_eq!(recipients[0].key, Some("acme".into()));
+        assert_eq!(recipients[0].key.as_ref().map(|k| k.as_str()), Some("acme"));
         assert_eq!(recipients[0].name, "Acme Corp");
-        assert_eq!(config.default_recipient, Some("acme".into()));
+        assert_eq!(
+            config.default_recipient.as_ref().map(|k| k.as_str()),
+            Some("acme")
+        );
         prompter.assert_exhausted();
     }
 }

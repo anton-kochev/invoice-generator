@@ -126,7 +126,7 @@ mod tests {
 
     fn make_config() -> ValidatedConfig {
         let recipient = Recipient {
-            key: Some("acme-corp".into()),
+            key: Some(crate::domain::RecipientKey::try_new("acme-corp").unwrap()),
             name: "Acme Corp".into(),
             address: vec!["456 Oak Ave".into(), "Berlin, Germany".into()],
             company_id: Some("DE123456".into()),
@@ -140,14 +140,14 @@ mod tests {
             },
             recipient: recipient.clone(),
             recipients: vec![recipient],
-            default_recipient_key: "acme-corp".into(),
+            default_recipient_key: crate::domain::RecipientKey::try_new("acme-corp").unwrap(),
             payment: vec![PaymentMethod {
                 label: "Primary Bank Account".into(),
                 iban: crate::domain::Iban::try_new("DE89 3704 0044 0532 0130 00").unwrap(),
                 bic_swift: "COBADEFFXXX".into(),
             }],
             presets: vec![Preset {
-                key: "dev".into(),
+                key: crate::domain::PresetKey::try_new("dev").unwrap(),
                 description: "Software development".into(),
                 default_rate: 800.0,
                 currency: None,
@@ -326,7 +326,7 @@ mod tests {
 
     fn make_config_without_optional_fields() -> ValidatedConfig {
         let recipient = Recipient {
-            key: Some("acme-corp".into()),
+            key: Some(crate::domain::RecipientKey::try_new("acme-corp").unwrap()),
             name: "Acme Corp".into(),
             address: vec!["456 Oak Ave".into(), "Berlin, Germany".into()],
             company_id: None,
@@ -340,14 +340,14 @@ mod tests {
             },
             recipient: recipient.clone(),
             recipients: vec![recipient],
-            default_recipient_key: "acme-corp".into(),
+            default_recipient_key: crate::domain::RecipientKey::try_new("acme-corp").unwrap(),
             payment: vec![PaymentMethod {
                 label: "Primary Bank Account".into(),
                 iban: crate::domain::Iban::try_new("DE89 3704 0044 0532 0130 00").unwrap(),
                 bic_swift: "COBADEFFXXX".into(),
             }],
             presets: vec![Preset {
-                key: "dev".into(),
+                key: crate::domain::PresetKey::try_new("dev").unwrap(),
                 description: "Software development".into(),
                 default_rate: 800.0,
                 currency: None,

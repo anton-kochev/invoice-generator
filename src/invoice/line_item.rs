@@ -103,6 +103,7 @@ mod tests {
     use super::*;
     use crate::config::types::{Config, Defaults, PaymentMethod, Recipient, Sender};
     use crate::config::writer::save_config;
+    use crate::domain::PresetKey;
     use crate::setup::mock_prompter::{MockPrompter, MockResponse};
     use std::path::PathBuf;
     use tempfile::TempDir;
@@ -134,7 +135,7 @@ mod tests {
                 bic_swift: "COBADEFFXXX".into(),
             }]),
             presets: Some(vec![Preset {
-                key: "dev".into(),
+                key: PresetKey::try_new("dev").unwrap(),
                 description: "Software development".into(),
                 default_rate: 800.0,
                 currency: None,
@@ -155,14 +156,14 @@ mod tests {
     fn make_presets() -> Vec<Preset> {
         vec![
             Preset {
-                key: "dev".into(),
+                key: PresetKey::try_new("dev").unwrap(),
                 description: "Software development".into(),
                 default_rate: 800.0,
                 currency: None,
                 tax_rate: None,
             },
             Preset {
-                key: "consulting".into(),
+                key: PresetKey::try_new("consulting").unwrap(),
                 description: "Technical consulting".into(),
                 default_rate: 1000.0,
                 currency: None,
@@ -173,7 +174,7 @@ mod tests {
 
     fn make_preset() -> Preset {
         Preset {
-            key: "dev".into(),
+            key: PresetKey::try_new("dev").unwrap(),
             description: "Software development".into(),
             default_rate: 800.0,
             currency: None,
@@ -532,7 +533,7 @@ mod tests {
             LoadResult::NotFound => panic!("Config file should exist"),
         };
         let presets_on_disk = config.presets.unwrap();
-        assert!(presets_on_disk.iter().any(|p| p.key == "design"));
+        assert!(presets_on_disk.iter().any(|p| p.key.as_str() == "design"));
         prompter.assert_exhausted();
     }
 
@@ -561,7 +562,7 @@ mod tests {
             LoadResult::NotFound => panic!("Config file should exist"),
         };
         let presets_on_disk = config.presets.unwrap();
-        assert!(presets_on_disk.iter().any(|p| p.key == "dev"), "Original preset should still exist");
+        assert!(presets_on_disk.iter().any(|p| p.key.as_str() == "dev"), "Original preset should still exist");
         prompter.assert_exhausted();
     }
 
@@ -587,7 +588,7 @@ mod tests {
     fn collect_line_item_uses_preset_effective_currency() {
         // Arrange
         let preset = Preset {
-            key: "dev".into(),
+            key: PresetKey::try_new("dev").unwrap(),
             description: "Software development".into(),
             default_rate: 800.0,
             currency: Some("CZK".into()),
@@ -612,7 +613,7 @@ mod tests {
     fn collect_line_item_without_tax_preset_skips_tax_prompt() {
         // Arrange
         let preset = Preset {
-            key: "dev".into(),
+            key: PresetKey::try_new("dev").unwrap(),
             description: "Software development".into(),
             default_rate: 800.0,
             currency: None,
@@ -636,7 +637,7 @@ mod tests {
     fn collect_line_item_with_zero_tax_preset_skips_tax_prompt() {
         // Arrange
         let preset = Preset {
-            key: "dev".into(),
+            key: PresetKey::try_new("dev").unwrap(),
             description: "Software development".into(),
             default_rate: 800.0,
             currency: None,
@@ -659,7 +660,7 @@ mod tests {
     fn collect_line_item_with_tax_preset_prompts_for_tax_rate() {
         // Arrange
         let preset = Preset {
-            key: "dev".into(),
+            key: PresetKey::try_new("dev").unwrap(),
             description: "Software development".into(),
             default_rate: 800.0,
             currency: None,
@@ -684,7 +685,7 @@ mod tests {
     fn collect_line_item_with_tax_preset_override_to_zero() {
         // Arrange
         let preset = Preset {
-            key: "dev".into(),
+            key: PresetKey::try_new("dev").unwrap(),
             description: "Software development".into(),
             default_rate: 800.0,
             currency: None,
@@ -708,7 +709,7 @@ mod tests {
     fn collect_line_item_with_tax_preset_override_to_different_rate() {
         // Arrange
         let preset = Preset {
-            key: "dev".into(),
+            key: PresetKey::try_new("dev").unwrap(),
             description: "Software development".into(),
             default_rate: 800.0,
             currency: None,
@@ -732,7 +733,7 @@ mod tests {
     fn collect_line_item_with_tax_displays_tax_message() {
         // Arrange
         let preset = Preset {
-            key: "dev".into(),
+            key: PresetKey::try_new("dev").unwrap(),
             description: "Software development".into(),
             default_rate: 800.0,
             currency: None,
@@ -760,7 +761,7 @@ mod tests {
         // Arrange
         let dir = setup_test_dir();
         let presets = vec![Preset {
-            key: "dev".into(),
+            key: PresetKey::try_new("dev").unwrap(),
             description: "Software development".into(),
             default_rate: 800.0,
             currency: None,
@@ -789,14 +790,14 @@ mod tests {
         let dir = setup_test_dir();
         let presets = vec![
             Preset {
-                key: "dev".into(),
+                key: PresetKey::try_new("dev").unwrap(),
                 description: "Software development".into(),
                 default_rate: 800.0,
                 currency: None,
                 tax_rate: Some(21.0),
             },
             Preset {
-                key: "consulting".into(),
+                key: PresetKey::try_new("consulting").unwrap(),
                 description: "Technical consulting".into(),
                 default_rate: 1000.0,
                 currency: None,
@@ -829,7 +830,7 @@ mod tests {
     fn collect_line_item_uses_default_when_preset_none() {
         // Arrange
         let preset = Preset {
-            key: "dev".into(),
+            key: PresetKey::try_new("dev").unwrap(),
             description: "Software development".into(),
             default_rate: 800.0,
             currency: None,

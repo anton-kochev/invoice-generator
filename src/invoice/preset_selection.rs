@@ -44,19 +44,20 @@ pub fn select_preset(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::PresetKey;
     use crate::setup::mock_prompter::{MockPrompter, MockResponse};
 
     fn make_presets() -> Vec<Preset> {
         vec![
             Preset {
-                key: "dev".into(),
+                key: PresetKey::try_new("dev").unwrap(),
                 description: "Software development".into(),
                 default_rate: 800.0,
                 currency: None,
                 tax_rate: None,
             },
             Preset {
-                key: "consulting".into(),
+                key: PresetKey::try_new("consulting").unwrap(),
                 description: "Technical consulting".into(),
                 default_rate: 1000.0,
                 currency: None,
@@ -95,7 +96,7 @@ mod tests {
     fn displays_currency_and_rate() {
         // Arrange
         let presets = vec![Preset {
-            key: "design".into(),
+            key: PresetKey::try_new("design").unwrap(),
             description: "Graphic design".into(),
             default_rate: 500.0,
             currency: None,
@@ -163,7 +164,7 @@ mod tests {
     fn single_preset_shows_create_new_as_option_two() {
         // Arrange
         let presets = vec![Preset {
-            key: "solo".into(),
+            key: PresetKey::try_new("solo").unwrap(),
             description: "Solo work".into(),
             default_rate: 600.0,
             currency: None,
@@ -264,7 +265,7 @@ mod tests {
     fn preserves_preset_data_in_return() {
         // Arrange
         let presets = vec![Preset {
-            key: "special".into(),
+            key: PresetKey::try_new("special").unwrap(),
             description: "Special project work".into(),
             default_rate: 1234.56,
             currency: None,
@@ -278,7 +279,7 @@ mod tests {
         // Assert
         match result {
             PresetSelection::Existing(p) => {
-                assert_eq!(p.key, "special");
+                assert_eq!(p.key.as_str(), "special");
                 assert_eq!(p.description, "Special project work");
                 assert!((p.default_rate - 1234.56).abs() < f64::EPSILON);
             }
@@ -292,7 +293,7 @@ mod tests {
         // Arrange
         let presets: Vec<Preset> = (1..=5)
             .map(|i| Preset {
-                key: format!("preset{i}"),
+                key: PresetKey::try_new(format!("preset{i}")).unwrap(),
                 description: format!("Preset number {i}"),
                 default_rate: i as f64 * 100.0,
                 currency: None,
@@ -319,7 +320,7 @@ mod tests {
     fn displays_preset_override_currency() {
         // Arrange
         let presets = vec![Preset {
-            key: "dev".into(),
+            key: PresetKey::try_new("dev").unwrap(),
             description: "Development".into(),
             default_rate: 800.0,
             currency: Some("USD".into()),
@@ -341,7 +342,7 @@ mod tests {
     fn displays_default_currency_when_preset_has_none() {
         // Arrange
         let presets = vec![Preset {
-            key: "dev".into(),
+            key: PresetKey::try_new("dev").unwrap(),
             description: "Development".into(),
             default_rate: 800.0,
             currency: None,

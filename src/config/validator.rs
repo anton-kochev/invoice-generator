@@ -1,7 +1,7 @@
 use std::fmt;
 
 use super::types::*;
-use crate::domain::HexColor;
+use crate::domain::{HexColor, RecipientKey};
 use crate::error::AppError;
 use crate::locale::Locale;
 
@@ -69,7 +69,7 @@ pub struct ValidatedConfig {
     /// All available recipients (guaranteed non-empty).
     pub recipients: Vec<Recipient>,
     /// Key of the default recipient profile.
-    pub default_recipient_key: String,
+    pub default_recipient_key: RecipientKey,
     /// Guaranteed non-empty.
     pub payment: Vec<PaymentMethod>,
     /// Guaranteed non-empty.
@@ -133,10 +133,15 @@ impl Config {
                     (None, None)
                 }
                 (Some(mut r), None, _) => {
-                    let key = r
-                        .key
-                        .clone()
-                        .unwrap_or_else(|| derive_recipient_key(&r.name));
+                    let key = match r.key.clone() {
+                        Some(k) => k,
+                        None => match RecipientKey::from_name(&r.name) {
+                            Ok(k) => k,
+                            Err(e) => {
+                                return Err(AppError::InvalidDefaultRecipient(e.to_string()));
+                            }
+                        },
+                    };
                     r.key = Some(key.clone());
                     (Some(vec![r]), Some(key))
                 }
@@ -148,11 +153,11 @@ impl Config {
 
         // Validate recipient keys if recipients present.
         if let Some(ref list) = recipients {
-            // Check for empty keys
+            // Every recipient must have a key.
             for r in list {
-                if r.key.as_ref().is_none_or(|k| k.is_empty()) {
+                if r.key.is_none() {
                     return Err(AppError::InvalidDefaultRecipient(
-                        "recipient has empty or missing key".into(),
+                        "recipient has missing key".into(),
                     ));
                 }
             }
@@ -161,14 +166,14 @@ impl Config {
             for r in list {
                 let k = r.key.as_ref().unwrap();
                 if !seen.insert(k.clone()) {
-                    return Err(AppError::DuplicateRecipientKey(k.clone()));
+                    return Err(AppError::DuplicateRecipientKey(k.as_str().to_string()));
                 }
             }
             // Validate default_recipient references a valid key
             match &default_key {
                 Some(dk) => {
-                    if !list.iter().any(|r| r.key.as_deref() == Some(dk.as_str())) {
-                        return Err(AppError::InvalidDefaultRecipient(dk.clone()));
+                    if !list.iter().any(|r| r.key.as_ref() == Some(dk)) {
+                        return Err(AppError::InvalidDefaultRecipient(dk.as_str().to_string()));
                     }
                 }
                 None => {
@@ -191,7 +196,7 @@ impl Config {
             let dk = default_key.unwrap();
             let recipient = recipients_vec
                 .iter()
-                .find(|r| r.key.as_deref() == Some(&dk))
+                .find(|r| r.key.as_ref() == Some(&dk))
                 .cloned()
                 .unwrap();
 
@@ -285,8 +290,8 @@ mod tests {
                 assert_eq!(v.sender.name, "Alice");
                 assert_eq!(v.recipient.name, "Bob Corp");
                 assert_eq!(v.recipients.len(), 1);
-                assert_eq!(v.default_recipient_key, "bob-corp");
-                assert_eq!(v.recipient.key, Some("bob-corp".into()));
+                assert_eq!(v.default_recipient_key.as_str(), "bob-corp");
+                assert_eq!(v.recipient.key, Some(RecipientKey::try_new("bob-corp").unwrap()));
                 assert_eq!(v.payment.len(), 1);
                 assert_eq!(v.presets.len(), 1);
                 assert_eq!(v.defaults.currency, "EUR");
@@ -432,9 +437,9 @@ mod tests {
         match result {
             ValidationOutcome::Complete(v) => {
                 assert_eq!(v.recipients.len(), 1);
-                assert_eq!(v.default_recipient_key, "bob-corp");
+                assert_eq!(v.default_recipient_key.as_str(), "bob-corp");
                 assert_eq!(v.recipient.name, "Bob Corp");
-                assert_eq!(v.recipient.key, Some("bob-corp".into()));
+                assert_eq!(v.recipient.key, Some(RecipientKey::try_new("bob-corp").unwrap()));
             }
             ValidationOutcome::Incomplete { .. } => panic!("Expected Complete"),
         }
@@ -448,21 +453,21 @@ mod tests {
             recipient: None,
             recipients: Some(vec![
                 Recipient {
-                    key: Some("acme".into()),
+                    key: Some(RecipientKey::try_new("acme").unwrap()),
                     name: "Acme Corp".into(),
                     address: vec!["123 St".into()],
                     company_id: None,
                     vat_number: None,
                 },
                 Recipient {
-                    key: Some("globex".into()),
+                    key: Some(RecipientKey::try_new("globex").unwrap()),
                     name: "Globex Inc".into(),
                     address: vec!["456 Ave".into()],
                     company_id: None,
                     vat_number: None,
                 },
             ]),
-            default_recipient: Some("globex".into()),
+            default_recipient: Some(RecipientKey::try_new("globex").unwrap()),
             payment: Some(make_payment()),
             presets: Some(make_presets()),
             defaults: Some(Defaults::default()),
@@ -476,7 +481,7 @@ mod tests {
         match result {
             ValidationOutcome::Complete(v) => {
                 assert_eq!(v.recipients.len(), 2);
-                assert_eq!(v.default_recipient_key, "globex");
+                assert_eq!(v.default_recipient_key.as_str(), "globex");
                 assert_eq!(v.recipient.name, "Globex Inc");
             }
             ValidationOutcome::Incomplete { .. } => panic!("Expected Complete"),
@@ -542,7 +547,7 @@ mod tests {
             sender: Some(make_sender()),
             recipient: None,
             recipients: Some(vec![make_recipient_with_key()]),
-            default_recipient: Some("nonexistent".into()),
+            default_recipient: Some(RecipientKey::try_new("nonexistent").unwrap()),
             payment: Some(make_payment()),
             presets: Some(make_presets()),
             defaults: Some(Defaults::default()),
@@ -585,21 +590,21 @@ mod tests {
             recipient: None,
             recipients: Some(vec![
                 Recipient {
-                    key: Some("acme".into()),
+                    key: Some(RecipientKey::try_new("acme").unwrap()),
                     name: "Acme Corp".into(),
                     address: vec!["123 St".into()],
                     company_id: None,
                     vat_number: None,
                 },
                 Recipient {
-                    key: Some("acme".into()),
+                    key: Some(RecipientKey::try_new("acme").unwrap()),
                     name: "Acme LLC".into(),
                     address: vec!["456 Ave".into()],
                     company_id: None,
                     vat_number: None,
                 },
             ]),
-            default_recipient: Some("acme".into()),
+            default_recipient: Some(RecipientKey::try_new("acme").unwrap()),
             payment: Some(make_payment()),
             presets: Some(make_presets()),
             defaults: Some(Defaults::default()),
@@ -614,30 +619,16 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_empty_recipient_key_returns_error() {
-        // Arrange
-        let config = Config {
-            sender: Some(make_sender()),
-            recipient: None,
-            recipients: Some(vec![Recipient {
-                key: Some("".into()),
-                name: "Acme Corp".into(),
-                address: vec!["123 St".into()],
-                company_id: None,
-                vat_number: None,
-            }]),
-            default_recipient: Some("".into()),
-            payment: Some(make_payment()),
-            presets: Some(make_presets()),
-            defaults: Some(Defaults::default()),
-            branding: None,
-        };
+    fn test_empty_recipient_key_rejected_at_deserialize() {
+        // Arrange — empty keys are no longer constructible via RecipientKey,
+        // so the failure path is at YAML parse time, not validate().
+        let yaml = "key: \"\"\nname: Acme Corp\naddress:\n  - 123 St\n";
 
         // Act
-        let result = config.validate();
+        let result: Result<Recipient, _> = serde_yaml::from_str(yaml);
 
         // Assert
-        assert!(matches!(result, Err(AppError::InvalidDefaultRecipient(_))));
+        assert!(result.is_err());
     }
 
     #[test]
@@ -653,7 +644,7 @@ mod tests {
                 vat_number: None,
             }),
             recipients: Some(vec![make_recipient_with_key()]),
-            default_recipient: Some("bob-corp".into()),
+            default_recipient: Some(RecipientKey::try_new("bob-corp").unwrap()),
             payment: Some(make_payment()),
             presets: Some(make_presets()),
             defaults: Some(Defaults::default()),
@@ -683,21 +674,21 @@ mod tests {
             recipient: None,
             recipients: Some(vec![
                 Recipient {
-                    key: Some("acme".into()),
+                    key: Some(RecipientKey::try_new("acme").unwrap()),
                     name: "Acme Corp".into(),
                     address: vec!["123 St".into()],
                     company_id: None,
                     vat_number: None,
                 },
                 Recipient {
-                    key: Some("globex".into()),
+                    key: Some(RecipientKey::try_new("globex").unwrap()),
                     name: "Globex Inc".into(),
                     address: vec!["456 Ave".into()],
                     company_id: None,
                     vat_number: None,
                 },
             ]),
-            default_recipient: Some("globex".into()),
+            default_recipient: Some(RecipientKey::try_new("globex").unwrap()),
             payment: Some(make_payment()),
             presets: Some(make_presets()),
             defaults: Some(Defaults::default()),
@@ -753,7 +744,7 @@ mod tests {
             ValidationOutcome::Complete(v) => {
                 assert_eq!(v.recipients.len(), 1, "v1 config should normalize to single-element recipients list");
                 assert_eq!(v.recipient.name, "Bob Corp");
-                assert!(!v.default_recipient_key.is_empty(), "default key should be auto-derived");
+                assert!(!v.default_recipient_key.as_str().is_empty(), "default key should be auto-derived");
             }
             ValidationOutcome::Incomplete { .. } => panic!("Expected Complete for v1 config"),
         }
@@ -839,7 +830,7 @@ mod tests {
 
     fn make_recipient_with_key() -> Recipient {
         Recipient {
-            key: Some("bob-corp".into()),
+            key: Some(RecipientKey::try_new("bob-corp").unwrap()),
             name: "Bob Corp".into(),
             address: vec!["456 Ave".into()],
             company_id: None,
@@ -857,7 +848,7 @@ mod tests {
 
     fn make_presets() -> Vec<Preset> {
         vec![Preset {
-            key: "dev".into(),
+            key: crate::domain::PresetKey::try_new("dev").unwrap(),
             description: "Dev".into(),
             default_rate: 100.0,
             currency: None,
@@ -870,7 +861,7 @@ mod tests {
             sender: Some(make_sender()),
             recipient: None,
             recipients: Some(vec![make_recipient_with_key()]),
-            default_recipient: Some("bob-corp".into()),
+            default_recipient: Some(RecipientKey::try_new("bob-corp").unwrap()),
             payment: Some(make_payment()),
             presets: Some(make_presets()),
             defaults: Some(Defaults::default()),

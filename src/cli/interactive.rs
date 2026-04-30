@@ -65,7 +65,11 @@ pub fn run_interactive(
         }},
     };
 
-    let recipient = select_recipient(prompter, &validated.recipients, &validated.default_recipient_key)?;
+    let recipient = select_recipient(
+        prompter,
+        &validated.recipients,
+        validated.default_recipient_key.as_str(),
+    )?;
     run_invoice_flow(prompter, &validated, &recipient, config_path, output_dir)
 }
 
@@ -171,7 +175,7 @@ mod tests {
 
     fn make_validated_config() -> ValidatedConfig {
         let recipient = Recipient {
-            key: Some("acme".into()),
+            key: Some(crate::domain::RecipientKey::try_new("acme").unwrap()),
             name: "Acme Corp".into(),
             address: vec!["123 Test St".into()],
             company_id: None,
@@ -185,14 +189,14 @@ mod tests {
             },
             recipient: recipient.clone(),
             recipients: vec![recipient],
-            default_recipient_key: "acme".into(),
+            default_recipient_key: crate::domain::RecipientKey::try_new("acme").unwrap(),
             payment: vec![PaymentMethod {
                 label: "SEPA".into(),
                 iban: crate::domain::Iban::try_new("DE89370400440532013000").unwrap(),
                 bic_swift: "TESTBIC".into(),
             }],
             presets: vec![Preset {
-                key: "dev".into(),
+                key: crate::domain::PresetKey::try_new("dev").unwrap(),
                 description: "Development".into(),
                 default_rate: 800.0,
                 currency: None,

@@ -20,7 +20,7 @@ pub fn format_preset_table(presets: &[Preset], default_currency: &str) -> String
 
     let key_w = presets
         .iter()
-        .map(|p| p.key.len())
+        .map(|p| p.key.as_str().len())
         .max()
         .unwrap_or(0)
         .max(min_key);
@@ -100,7 +100,7 @@ pub fn handle_preset_delete(
     // Find the preset first to get its description
     let preset = presets
         .iter()
-        .find(|p| p.key == key)
+        .find(|p| p.key.as_str() == key)
         .ok_or_else(|| AppError::PresetNotFound(key.to_string()))?;
 
     // Guard: cannot delete the last preset
@@ -131,7 +131,7 @@ mod tests {
 
     fn dev_preset() -> Preset {
         Preset {
-            key: "dev".to_string(),
+            key: crate::domain::PresetKey::try_new("dev").unwrap(),
             description: "Development Services".to_string(),
             default_rate: 100.0,
             currency: None,
@@ -190,7 +190,7 @@ mod tests {
         let presets = vec![
             dev_preset(),
             Preset {
-                key: "design".to_string(),
+                key: crate::domain::PresetKey::try_new("design").unwrap(),
                 description: "Design work".to_string(),
                 default_rate: 80.0,
                 currency: None,
@@ -224,7 +224,7 @@ mod tests {
         // Arrange
         let long_desc = "A".repeat(80);
         let presets = vec![Preset {
-            key: "lng".to_string(),
+            key: crate::domain::PresetKey::try_new("lng").unwrap(),
             description: long_desc.clone(),
             default_rate: 50.0,
             currency: None,
@@ -306,7 +306,7 @@ mod tests {
         };
         let presets = loaded.presets.unwrap();
         assert_eq!(presets.len(), 1);
-        assert_eq!(presets[0].key, "dev");
+        assert_eq!(presets[0].key.as_str(), "dev");
         let output = String::from_utf8(buf).unwrap();
         assert!(output.contains("deleted"), "Expected 'deleted' in output");
     }
@@ -413,7 +413,7 @@ mod tests {
     fn test_format_preset_table_shows_per_preset_currency() {
         // Arrange
         let presets = vec![Preset {
-            key: "dev".into(),
+            key: crate::domain::PresetKey::try_new("dev").unwrap(),
             description: "Development".into(),
             default_rate: 800.0,
             currency: Some("CZK".into()),
@@ -435,7 +435,7 @@ mod tests {
     fn test_format_preset_table_shows_default_when_none() {
         // Arrange
         let presets = vec![Preset {
-            key: "dev".into(),
+            key: crate::domain::PresetKey::try_new("dev").unwrap(),
             description: "Development".into(),
             default_rate: 800.0,
             currency: None,
@@ -456,14 +456,14 @@ mod tests {
         // Arrange
         let presets = vec![
             Preset {
-                key: "dev".into(),
+                key: crate::domain::PresetKey::try_new("dev").unwrap(),
                 description: "Development".into(),
                 default_rate: 800.0,
                 currency: Some("USD".into()),
                 tax_rate: None,
             },
             Preset {
-                key: "qa".into(),
+                key: crate::domain::PresetKey::try_new("qa").unwrap(),
                 description: "QA work".into(),
                 default_rate: 600.0,
                 currency: None,

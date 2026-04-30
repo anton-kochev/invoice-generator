@@ -39,7 +39,7 @@ pub fn synthetic_payment() -> Vec<PaymentMethod> {
 
 pub fn synthetic_presets() -> Vec<Preset> {
     vec![Preset {
-        key: "dev".into(),
+        key: crate::domain::PresetKey::try_new("dev").unwrap(),
         description: "Development Services".into(),
         default_rate: 100.0,
         currency: None,
@@ -85,14 +85,14 @@ pub fn config_with_two_presets() -> Config {
     let mut cfg = complete_config();
     cfg.presets = Some(vec![
         Preset {
-            key: "dev".into(),
+            key: crate::domain::PresetKey::try_new("dev").unwrap(),
             description: "Development Services".into(),
             default_rate: 100.0,
             currency: None,
             tax_rate: None,
         },
         Preset {
-            key: "design".into(),
+            key: crate::domain::PresetKey::try_new("design").unwrap(),
             description: "Design Work".into(),
             default_rate: 80.0,
             currency: None,
@@ -106,7 +106,7 @@ pub fn config_with_two_presets() -> Config {
 
 pub fn synthetic_recipient_acme() -> Recipient {
     Recipient {
-        key: Some("acme".into()),
+        key: Some(crate::domain::RecipientKey::try_new("acme").unwrap()),
         name: "Acme Corp".into(),
         address: vec!["100 Acme Blvd".into(), "Metropolis, IL 62960".into()],
         company_id: Some("AC-12345".into()),
@@ -116,7 +116,7 @@ pub fn synthetic_recipient_acme() -> Recipient {
 
 pub fn synthetic_recipient_globex() -> Recipient {
     Recipient {
-        key: Some("globex".into()),
+        key: Some(crate::domain::RecipientKey::try_new("globex").unwrap()),
         name: "Globex Inc".into(),
         address: vec!["200 Globex Ave".into()],
         company_id: None,
@@ -129,7 +129,7 @@ pub fn v2_complete_config() -> Config {
         sender: Some(synthetic_sender()),
         recipient: None,
         recipients: Some(vec![synthetic_recipient_acme()]),
-        default_recipient: Some("acme".into()),
+        default_recipient: Some(crate::domain::RecipientKey::try_new("acme").unwrap()),
         payment: Some(synthetic_payment()),
         presets: Some(synthetic_presets()),
         defaults: Some(synthetic_defaults()),
@@ -142,7 +142,7 @@ pub fn v2_config_two_recipients() -> Config {
         sender: Some(synthetic_sender()),
         recipient: None,
         recipients: Some(vec![synthetic_recipient_acme(), synthetic_recipient_globex()]),
-        default_recipient: Some("acme".into()),
+        default_recipient: Some(crate::domain::RecipientKey::try_new("acme").unwrap()),
         payment: Some(synthetic_payment()),
         presets: Some(synthetic_presets()),
         defaults: Some(synthetic_defaults()),

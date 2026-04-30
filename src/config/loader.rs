@@ -144,7 +144,7 @@ defaults:
                 assert_eq!(payment[0].bic_swift, "COBADEFFXXX");
 
                 let presets = config.presets.unwrap();
-                assert_eq!(presets[0].key, "dev");
+                assert_eq!(presets[0].key.as_str(), "dev");
                 assert_eq!(presets[0].default_rate, 100.0);
 
                 let defaults = config.defaults.unwrap();

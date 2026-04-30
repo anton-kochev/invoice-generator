@@ -21,12 +21,12 @@ pub fn select_recipient(
 
     let default_index = recipients
         .iter()
-        .position(|r| r.key.as_deref() == Some(default_key))
+        .position(|r| r.key.as_ref().is_some_and(|k| k.as_str() == default_key))
         .map(|i| i + 1)
         .unwrap_or(1) as u32;
 
     for (i, r) in recipients.iter().enumerate() {
-        let marker = if r.key.as_deref() == Some(default_key) {
+        let marker = if r.key.as_ref().is_some_and(|k| k.as_str() == default_key) {
             " (default)"
         } else {
             ""
@@ -35,7 +35,7 @@ pub fn select_recipient(
         prompter.message(&format!(
             "  [{}] {} \u{2014} {}, {}{}",
             i + 1,
-            r.key.as_deref().unwrap_or(""),
+            r.key.as_ref().map(|k| k.as_str()).unwrap_or(""),
             r.name,
             addr,
             marker,
@@ -201,7 +201,7 @@ mod tests {
     fn test_v1_config_single_recipient_auto_selects_without_prompt() {
         // Arrange — simulate v1 config that was normalized: single recipient with derived key
         let recipient = crate::config::types::Recipient {
-            key: Some("bob-corp".into()),
+            key: Some(crate::domain::RecipientKey::try_new("bob-corp").unwrap()),
             name: "Bob Corp".into(),
             address: vec!["456 Ave".into()],
             company_id: None,

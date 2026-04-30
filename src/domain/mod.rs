@@ -6,6 +6,10 @@
 //! of the program can rely on the invariant.
 pub mod hex_color;
 pub mod iban;
+pub mod preset_key;
+pub mod recipient_key;
 
 pub use hex_color::HexColor;
 pub use iban::Iban;
+pub use preset_key::PresetKey;
+pub use recipient_key::RecipientKey;

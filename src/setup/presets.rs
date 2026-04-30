@@ -2,8 +2,10 @@ use std::path::Path;
 
 use crate::config::types::{Config, Preset};
 use crate::config::writer::save_config;
+use crate::domain::PresetKey;
 use crate::error::AppError;
 use super::prompter::Prompter;
+use super::prompts::prompt_parsed;
 
 /// Collect invoice presets interactively and persist them to disk.
 pub fn collect_presets(
@@ -19,7 +21,11 @@ pub fn collect_presets(
     loop {
         prompter.message(&format!("Preset #{count}:"));
 
-        let key = prompter.required_text("Short key (e.g. 'dev'):")?;
+        let key = prompt_parsed(
+            prompter,
+            |p| p.required_text("Short key (e.g. 'dev'):"),
+            |raw: String| PresetKey::try_new(raw).map_err(|e| e.to_string()),
+        )?;
         let description = prompter.required_text("Description:")?;
         let default_rate = prompter.positive_f64("Default daily rate:")?;
 
@@ -69,7 +75,7 @@ mod tests {
         // Assert
         let presets = config.presets.as_ref().unwrap();
         assert_eq!(presets.len(), 1);
-        assert_eq!(presets[0].key, "dev");
+        assert_eq!(presets[0].key.as_str(), "dev");
         assert_eq!(presets[0].description, "Development Services");
         assert_eq!(presets[0].default_rate, 100.0);
         prompter.assert_exhausted();
@@ -97,8 +103,8 @@ mod tests {
         // Assert
         let presets = config.presets.unwrap();
         assert_eq!(presets.len(), 2);
-        assert_eq!(presets[0].key, "dev");
-        assert_eq!(presets[1].key, "design");
+        assert_eq!(presets[0].key.as_str(), "dev");
+        assert_eq!(presets[1].key.as_str(), "design");
         prompter.assert_exhausted();
     }
 
@@ -128,7 +134,7 @@ mod tests {
         // Assert
         let presets = config.presets.unwrap();
         assert_eq!(presets.len(), 3);
-        assert_eq!(presets[2].key, "c");
+        assert_eq!(presets[2].key.as_str(), "c");
         prompter.assert_exhausted();
     }
 
@@ -172,7 +178,7 @@ mod tests {
         let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let presets = loaded.presets.unwrap();
         assert_eq!(presets.len(), 1);
-        assert_eq!(presets[0].key, "dev");
+        assert_eq!(presets[0].key.as_str(), "dev");
         prompter.assert_exhausted();
     }
 }
