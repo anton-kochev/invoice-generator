@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and release (aarch64-apple-darwin)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run tests
+        run: cargo test --release --target aarch64-apple-darwin
+
+      - name: Build release binary
+        run: cargo build --release --target aarch64-apple-darwin
+
+      - name: Strip binary
+        run: strip target/aarch64-apple-darwin/release/invoice-generator
+
+      - name: Package tarball
+        id: package
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME}"
+          PKG="invoice-generator-${VERSION}-aarch64-apple-darwin"
+          mkdir -p "dist/${PKG}"
+          cp target/aarch64-apple-darwin/release/invoice-generator "dist/${PKG}/"
+          cp LICENSE README.md "dist/${PKG}/"
+          tar -C dist -czf "dist/${PKG}.tar.gz" "${PKG}"
+          shasum -a 256 "dist/${PKG}.tar.gz" > "dist/${PKG}.tar.gz.sha256"
+          echo "tarball=dist/${PKG}.tar.gz" >> "$GITHUB_OUTPUT"
+          echo "checksum=dist/${PKG}.tar.gz.sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            ${{ steps.package.outputs.tarball }}
+            ${{ steps.package.outputs.checksum }}
