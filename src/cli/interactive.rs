@@ -46,7 +46,7 @@ pub fn run_interactive(
                 }
             }
 
-            match config.validate()? {
+            match (*config).validate()? {
             ValidationOutcome::Complete(v) => {
                 println!("Config loaded successfully.");
                 println!("Sender: {}", v.sender.name);
@@ -144,11 +144,11 @@ pub fn run_invoice_flow(
                 output_dir,
             );
 
-            if output_path.exists() {
-                if !prompter.confirm("File already exists. Overwrite?", false)? {
-                    prompter.message("PDF generation aborted.");
-                    continue;
-                }
+            if output_path.exists()
+                && !prompter.confirm("File already exists. Overwrite?", false)?
+            {
+                prompter.message("PDF generation aborted.");
+                continue;
             }
 
             std::fs::write(&output_path, &pdf_bytes)?;

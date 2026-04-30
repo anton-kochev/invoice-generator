@@ -19,7 +19,7 @@ pub fn remove_preset(path: &Path, key: &str) -> Result<Preset, AppError> {
     use super::loader::{load_config, LoadResult};
 
     let config = match load_config(path)? {
-        LoadResult::Loaded(config) => config,
+        LoadResult::Loaded(config) => *config,
         LoadResult::NotFound => {
             return Err(AppError::ConfigIo(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
@@ -55,7 +55,7 @@ pub fn append_preset(path: &Path, preset: Preset) -> Result<(), AppError> {
     use super::loader::{load_config, LoadResult};
 
     let config = match load_config(path)? {
-        LoadResult::Loaded(config) => config,
+        LoadResult::Loaded(config) => *config,
         LoadResult::NotFound => {
             return Err(AppError::ConfigIo(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
@@ -100,7 +100,7 @@ pub fn append_recipient(path: &Path, recipient: Recipient, set_default: bool) ->
     use super::loader::{load_config, LoadResult};
 
     let config = match load_config(path)? {
-        LoadResult::Loaded(config) => config,
+        LoadResult::Loaded(config) => *config,
         LoadResult::NotFound => {
             return Err(AppError::ConfigIo(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
@@ -131,7 +131,7 @@ pub fn remove_recipient(path: &Path, key: &str) -> Result<Recipient, AppError> {
     use super::loader::{load_config, LoadResult};
 
     let config = match load_config(path)? {
-        LoadResult::Loaded(config) => config,
+        LoadResult::Loaded(config) => *config,
         LoadResult::NotFound => {
             return Err(AppError::ConfigIo(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
@@ -175,7 +175,7 @@ pub fn set_default_recipient(path: &Path, key: &str) -> Result<(), AppError> {
     use super::loader::{load_config, LoadResult};
 
     let config = match load_config(path)? {
-        LoadResult::Loaded(config) => config,
+        LoadResult::Loaded(config) => *config,
         LoadResult::NotFound => {
             return Err(AppError::ConfigIo(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
@@ -275,7 +275,7 @@ mod tests {
 
     fn unwrap_loaded(result: Result<LoadResult, AppError>) -> Config {
         match result.unwrap() {
-            LoadResult::Loaded(c) => c,
+            LoadResult::Loaded(c) => *c,
             LoadResult::NotFound => panic!("Expected Loaded, got NotFound"),
         }
     }

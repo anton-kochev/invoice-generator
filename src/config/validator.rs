@@ -167,7 +167,7 @@ impl Config {
         if let Some(ref list) = recipients {
             // Check for empty keys
             for r in list {
-                if r.key.as_ref().map_or(true, |k| k.is_empty()) {
+                if r.key.as_ref().is_none_or(|k| k.is_empty()) {
                     return Err(AppError::InvalidDefaultRecipient(
                         "recipient has empty or missing key".into(),
                     ));

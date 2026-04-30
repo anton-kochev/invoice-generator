@@ -105,7 +105,7 @@ pub fn handle_recipient_add(
 
     // Load config to check for duplicate keys
     let config = match load_config(config_path)? {
-        LoadResult::Loaded(c) => c,
+        LoadResult::Loaded(c) => *c,
         LoadResult::NotFound => return Err(AppError::ConfigNotFound),
     };
 
@@ -160,7 +160,7 @@ pub fn handle_recipient_delete(
 
     // Load config to get recipient details for confirmation
     let config = match load_config(config_path)? {
-        LoadResult::Loaded(c) => c,
+        LoadResult::Loaded(c) => *c,
         LoadResult::NotFound => return Err(AppError::ConfigNotFound),
     };
 
@@ -194,7 +194,7 @@ pub fn handle_recipient_delete(
     if is_default {
         // Reload to get remaining recipients
         let updated = match load_config(config_path)? {
-            LoadResult::Loaded(c) => c,
+            LoadResult::Loaded(c) => *c,
             LoadResult::NotFound => return Err(AppError::ConfigNotFound),
         };
         let remaining = updated.recipients.as_deref().unwrap_or_default();
@@ -375,7 +375,7 @@ mod tests {
 
         // Assert
         let loaded = match load_config(&cfg_path(&dir)).unwrap() {
-            LoadResult::Loaded(c) => c,
+            LoadResult::Loaded(c) => *c,
             _ => panic!("Expected Loaded"),
         };
         let recipients = loaded.recipients.unwrap();
@@ -410,7 +410,7 @@ mod tests {
 
         // Assert
         let loaded = match load_config(&cfg_path(&dir)).unwrap() {
-            LoadResult::Loaded(c) => c,
+            LoadResult::Loaded(c) => *c,
             _ => panic!("Expected Loaded"),
         };
         let recipients = loaded.recipients.unwrap();
@@ -441,7 +441,7 @@ mod tests {
 
         // Assert
         let loaded = match load_config(&cfg_path(&dir)).unwrap() {
-            LoadResult::Loaded(c) => c,
+            LoadResult::Loaded(c) => *c,
             _ => panic!("Expected Loaded"),
         };
         let recipients = loaded.recipients.unwrap();
@@ -515,7 +515,7 @@ mod tests {
         // Assert
         assert!(result.is_ok());
         let loaded = match load_config(&cfg_path(&dir)).unwrap() {
-            LoadResult::Loaded(c) => c,
+            LoadResult::Loaded(c) => *c,
             _ => panic!("Expected Loaded"),
         };
         let recipients = loaded.recipients.unwrap();
@@ -540,7 +540,7 @@ mod tests {
         // Assert
         assert!(result.is_ok());
         let loaded = match load_config(&cfg_path(&dir)).unwrap() {
-            LoadResult::Loaded(c) => c,
+            LoadResult::Loaded(c) => *c,
             _ => panic!("Expected Loaded"),
         };
         let recipients = loaded.recipients.unwrap();
@@ -596,7 +596,7 @@ mod tests {
         // Assert
         assert!(result.is_ok(), "Expected Ok, got {result:?}");
         let loaded = match load_config(&cfg_path(&dir)).unwrap() {
-            LoadResult::Loaded(c) => c,
+            LoadResult::Loaded(c) => *c,
             _ => panic!("Expected Loaded"),
         };
         assert_eq!(loaded.default_recipient, Some("globex".into()));
@@ -630,7 +630,7 @@ mod tests {
         // Assert
         assert!(result.is_ok(), "Expected Ok, got {result:?}");
         let loaded = match load_config(&cfg_path(&dir)).unwrap() {
-            LoadResult::Loaded(c) => c,
+            LoadResult::Loaded(c) => *c,
             _ => panic!("Expected Loaded"),
         };
         assert_eq!(loaded.default_recipient, Some("initech".into()));

@@ -57,10 +57,10 @@ fn parse_items(json: &str) -> Result<Vec<ItemSpec>, AppError> {
     }
     for item in &items {
         validate_days(item.days)?;
-        if let Some(tr) = item.tax_rate {
-            if tr < 0.0 {
-                return Err(AppError::InvalidTaxRate(format!("{tr}")));
-            }
+        if let Some(tr) = item.tax_rate
+            && tr < 0.0
+        {
+            return Err(AppError::InvalidTaxRate(format!("{tr}")));
         }
     }
     Ok(items)

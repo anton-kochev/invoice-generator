@@ -7,10 +7,11 @@ use crate::error::AppError;
 use crate::locale::Locale;
 
 /// Available invoice template styles.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum TemplateKey {
     Callisto,
+    #[default]
     Leda,
     Thebe,
     Amalthea,
@@ -36,12 +37,6 @@ impl TemplateKey {
             Self::Amalthea => "High-contrast & vivid",
             Self::Metis => "Bare-bones & printable",
         }
-    }
-}
-
-impl Default for TemplateKey {
-    fn default() -> Self {
-        Self::Leda
     }
 }
 

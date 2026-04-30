@@ -15,7 +15,7 @@ pub const CONFIG_FILENAME: &str = "config.yaml";
 #[derive(Debug)]
 pub enum LoadResult {
     /// Config file was found and parsed.
-    Loaded(Config),
+    Loaded(Box<Config>),
     /// No config file exists in the directory.
     NotFound,
 }
@@ -62,10 +62,10 @@ pub fn load_config(path: &Path) -> Result<LoadResult, AppError> {
     }
     let contents = std::fs::read_to_string(path)?;
     if contents.trim().is_empty() {
-        return Ok(LoadResult::Loaded(Config::default()));
+        return Ok(LoadResult::Loaded(Box::default()));
     }
     let config: Config = serde_yaml::from_str(&contents)?;
-    Ok(LoadResult::Loaded(config))
+    Ok(LoadResult::Loaded(Box::new(config)))
 }
 
 #[cfg(test)]
@@ -196,7 +196,7 @@ sender:
         // Assert
         match result {
             LoadResult::Loaded(config) => {
-                assert_eq!(config, Config::default());
+                assert_eq!(*config, Config::default());
             }
             LoadResult::NotFound => panic!("Expected Loaded"),
         }

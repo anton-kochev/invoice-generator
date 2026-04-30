@@ -179,7 +179,7 @@ pub fn setup_dir(config: Option<&Config>) -> TempDir {
 /// Extract Config from a LoadResult, panicking on NotFound.
 pub fn unwrap_loaded(result: Result<LoadResult, AppError>) -> Config {
     match result.unwrap() {
-        LoadResult::Loaded(c) => c,
+        LoadResult::Loaded(c) => *c,
         LoadResult::NotFound => panic!("Expected Loaded, got NotFound"),
     }
 }

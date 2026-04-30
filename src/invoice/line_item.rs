@@ -528,7 +528,7 @@ mod tests {
         // Assert — verify preset was persisted to disk
         use crate::config::loader::{load_config, LoadResult};
         let config = match load_config(&cfg_path(&dir)).unwrap() {
-            LoadResult::Loaded(c) => c,
+            LoadResult::Loaded(c) => *c,
             LoadResult::NotFound => panic!("Config file should exist"),
         };
         let presets_on_disk = config.presets.unwrap();
@@ -557,7 +557,7 @@ mod tests {
         // Assert — original "dev" preset still present
         use crate::config::loader::{load_config, LoadResult};
         let config = match load_config(&cfg_path(&dir)).unwrap() {
-            LoadResult::Loaded(c) => c,
+            LoadResult::Loaded(c) => *c,
             LoadResult::NotFound => panic!("Config file should exist"),
         };
         let presets_on_disk = config.presets.unwrap();

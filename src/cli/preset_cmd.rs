@@ -91,7 +91,7 @@ pub fn handle_preset_delete(
 ) -> Result<(), AppError> {
     // Load config to get preset details for confirmation
     let config = match load_config(config_path)? {
-        LoadResult::Loaded(c) => c,
+        LoadResult::Loaded(c) => *c,
         LoadResult::NotFound => return Err(AppError::ConfigNotFound),
     };
 
@@ -301,7 +301,7 @@ mod tests {
         // Assert
         assert!(result.is_ok());
         let loaded = match load_config(&cfg_path(&dir)).unwrap() {
-            LoadResult::Loaded(c) => c,
+            LoadResult::Loaded(c) => *c,
             _ => panic!("Expected Loaded"),
         };
         let presets = loaded.presets.unwrap();
@@ -325,7 +325,7 @@ mod tests {
         // Assert
         assert!(result.is_ok());
         let loaded = match load_config(&cfg_path(&dir)).unwrap() {
-            LoadResult::Loaded(c) => c,
+            LoadResult::Loaded(c) => *c,
             _ => panic!("Expected Loaded"),
         };
         let presets = loaded.presets.unwrap();
