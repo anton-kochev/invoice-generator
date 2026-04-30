@@ -97,14 +97,14 @@ pub fn handle_recipient_list(
 /// Handle `invoice recipient add` — interactively add a new recipient.
 pub fn handle_recipient_add(
     prompter: &dyn Prompter,
-    dir: &Path,
+    config_path: &Path,
     writer: &mut dyn Write,
 ) -> Result<(), AppError> {
-    use crate::config::loader::{load_config, LoadResult, CONFIG_FILENAME};
+    use crate::config::loader::{load_config, LoadResult};
     use crate::config::writer::append_recipient;
 
     // Load config to check for duplicate keys
-    let config = match load_config(dir)? {
+    let config = match load_config(config_path)? {
         LoadResult::Loaded(c) => c,
         LoadResult::NotFound => return Err(AppError::ConfigNotFound),
     };
@@ -139,23 +139,27 @@ pub fn handle_recipient_add(
         vat_number,
     };
 
-    append_recipient(dir, recipient, set_default)?;
-    writeln!(writer, "✓ Recipient \"{key}\" added to {CONFIG_FILENAME}")?;
+    append_recipient(config_path, recipient, set_default)?;
+    writeln!(
+        writer,
+        "✓ Recipient \"{key}\" added to {}",
+        config_path.display()
+    )?;
     Ok(())
 }
 
 /// Handle `invoice recipient delete <key>` — confirm and remove a recipient.
 pub fn handle_recipient_delete(
     prompter: &dyn Prompter,
-    dir: &Path,
+    config_path: &Path,
     key: &str,
     writer: &mut dyn Write,
 ) -> Result<(), AppError> {
-    use crate::config::loader::{load_config, LoadResult, CONFIG_FILENAME};
+    use crate::config::loader::{load_config, LoadResult};
     use crate::config::writer::{remove_recipient, set_default_recipient};
 
     // Load config to get recipient details for confirmation
-    let config = match load_config(dir)? {
+    let config = match load_config(config_path)? {
         LoadResult::Loaded(c) => c,
         LoadResult::NotFound => return Err(AppError::ConfigNotFound),
     };
@@ -184,12 +188,12 @@ pub fn handle_recipient_delete(
 
     let is_default = config.default_recipient.as_deref() == Some(key);
 
-    remove_recipient(dir, key)?;
+    remove_recipient(config_path, key)?;
 
     // If deleting the default, reassign
     if is_default {
         // Reload to get remaining recipients
-        let updated = match load_config(dir)? {
+        let updated = match load_config(config_path)? {
             LoadResult::Loaded(c) => c,
             LoadResult::NotFound => return Err(AppError::ConfigNotFound),
         };
@@ -198,7 +202,7 @@ pub fn handle_recipient_delete(
         if remaining.len() == 1 {
             // Auto-assign the only remaining recipient
             let new_key = remaining[0].key.as_deref().unwrap_or("");
-            set_default_recipient(dir, new_key)?;
+            set_default_recipient(config_path, new_key)?;
         } else if remaining.len() > 1 {
             // Prompt for new default
             prompter.message("\nSelect new default recipient:\n");
@@ -219,11 +223,15 @@ pub fn handle_recipient_delete(
                 prompter.message(&format!("Please enter a number between 1 and {max}."));
             };
             let new_key = remaining[choice as usize - 1].key.as_deref().unwrap_or("");
-            set_default_recipient(dir, new_key)?;
+            set_default_recipient(config_path, new_key)?;
         }
     }
 
-    writeln!(writer, "✓ Recipient \"{key}\" deleted from {CONFIG_FILENAME}")?;
+    writeln!(
+        writer,
+        "✓ Recipient \"{key}\" deleted from {}",
+        config_path.display()
+    )?;
     Ok(())
 }
 
@@ -363,10 +371,10 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        handle_recipient_add(&prompter, dir.path(), &mut buf).unwrap();
+        handle_recipient_add(&prompter, &cfg_path(&dir), &mut buf).unwrap();
 
         // Assert
-        let loaded = match load_config(dir.path()).unwrap() {
+        let loaded = match load_config(&cfg_path(&dir)).unwrap() {
             LoadResult::Loaded(c) => c,
             _ => panic!("Expected Loaded"),
         };
@@ -398,10 +406,10 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        handle_recipient_add(&prompter, dir.path(), &mut buf).unwrap();
+        handle_recipient_add(&prompter, &cfg_path(&dir), &mut buf).unwrap();
 
         // Assert
-        let loaded = match load_config(dir.path()).unwrap() {
+        let loaded = match load_config(&cfg_path(&dir)).unwrap() {
             LoadResult::Loaded(c) => c,
             _ => panic!("Expected Loaded"),
         };
@@ -429,10 +437,10 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        handle_recipient_add(&prompter, dir.path(), &mut buf).unwrap();
+        handle_recipient_add(&prompter, &cfg_path(&dir), &mut buf).unwrap();
 
         // Assert
-        let loaded = match load_config(dir.path()).unwrap() {
+        let loaded = match load_config(&cfg_path(&dir)).unwrap() {
             LoadResult::Loaded(c) => c,
             _ => panic!("Expected Loaded"),
         };
@@ -464,14 +472,14 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        handle_recipient_add(&prompter, dir.path(), &mut buf).unwrap();
+        handle_recipient_add(&prompter, &cfg_path(&dir), &mut buf).unwrap();
 
         // Assert
         let output = String::from_utf8(buf).unwrap();
         assert!(output.contains("✓"), "Expected checkmark in output");
         assert!(output.contains("newcorp"), "Expected key in output");
         assert!(
-            output.contains("invoice_config.yaml"),
+            output.contains("config.yaml"),
             "Expected filename in output"
         );
     }
@@ -484,7 +492,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_recipient_add(&prompter, dir.path(), &mut buf);
+        let result = handle_recipient_add(&prompter, &cfg_path(&dir), &mut buf);
 
         // Assert
         assert!(matches!(result, Err(AppError::ConfigNotFound)));
@@ -502,11 +510,11 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_recipient_delete(&prompter, dir.path(), "globex", &mut buf);
+        let result = handle_recipient_delete(&prompter, &cfg_path(&dir), "globex", &mut buf);
 
         // Assert
         assert!(result.is_ok());
-        let loaded = match load_config(dir.path()).unwrap() {
+        let loaded = match load_config(&cfg_path(&dir)).unwrap() {
             LoadResult::Loaded(c) => c,
             _ => panic!("Expected Loaded"),
         };
@@ -527,11 +535,11 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_recipient_delete(&prompter, dir.path(), "globex", &mut buf);
+        let result = handle_recipient_delete(&prompter, &cfg_path(&dir), "globex", &mut buf);
 
         // Assert
         assert!(result.is_ok());
-        let loaded = match load_config(dir.path()).unwrap() {
+        let loaded = match load_config(&cfg_path(&dir)).unwrap() {
             LoadResult::Loaded(c) => c,
             _ => panic!("Expected Loaded"),
         };
@@ -551,7 +559,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_recipient_delete(&prompter, dir.path(), "nope", &mut buf);
+        let result = handle_recipient_delete(&prompter, &cfg_path(&dir), "nope", &mut buf);
 
         // Assert
         assert!(matches!(result, Err(AppError::RecipientNotFound { .. })));
@@ -567,7 +575,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_recipient_delete(&prompter, dir.path(), "acme", &mut buf);
+        let result = handle_recipient_delete(&prompter, &cfg_path(&dir), "acme", &mut buf);
 
         // Assert
         assert!(matches!(result, Err(AppError::LastRecipient)));
@@ -583,11 +591,11 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_recipient_delete(&prompter, dir.path(), "acme", &mut buf);
+        let result = handle_recipient_delete(&prompter, &cfg_path(&dir), "acme", &mut buf);
 
         // Assert
         assert!(result.is_ok(), "Expected Ok, got {result:?}");
-        let loaded = match load_config(dir.path()).unwrap() {
+        let loaded = match load_config(&cfg_path(&dir)).unwrap() {
             LoadResult::Loaded(c) => c,
             _ => panic!("Expected Loaded"),
         };
@@ -617,11 +625,11 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_recipient_delete(&prompter, dir.path(), "acme", &mut buf);
+        let result = handle_recipient_delete(&prompter, &cfg_path(&dir), "acme", &mut buf);
 
         // Assert
         assert!(result.is_ok(), "Expected Ok, got {result:?}");
-        let loaded = match load_config(dir.path()).unwrap() {
+        let loaded = match load_config(&cfg_path(&dir)).unwrap() {
             LoadResult::Loaded(c) => c,
             _ => panic!("Expected Loaded"),
         };
@@ -639,7 +647,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        handle_recipient_delete(&prompter, dir.path(), "globex", &mut buf).unwrap();
+        handle_recipient_delete(&prompter, &cfg_path(&dir), "globex", &mut buf).unwrap();
 
         // Assert
         let prompts = prompter.prompts.borrow();
@@ -656,7 +664,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_recipient_delete(&prompter, dir.path(), "acme", &mut buf);
+        let result = handle_recipient_delete(&prompter, &cfg_path(&dir), "acme", &mut buf);
 
         // Assert
         assert!(matches!(result, Err(AppError::ConfigNotFound)));

@@ -129,12 +129,17 @@ fn resolve_recipient<'a>(
 }
 
 /// Handle `invoice generate` — non-interactive invoice generation.
+///
+/// `config_path` is the path to the config file (e.g. `~/.config/invoice-generator/config.yaml`).
+/// `output_dir` is the directory the resulting PDF is written to (typically the user's CWD).
+/// Logo paths in the config are resolved relative to the config file's parent directory.
 pub fn handle_generate(
     args: &GenerateArgs,
-    cwd: &Path,
+    config_path: &Path,
+    output_dir: &Path,
     writer: &mut dyn Write,
 ) -> Result<(), AppError> {
-    let validated = load_validated_config(cwd)?;
+    let validated = load_validated_config(config_path)?;
     let recipient = resolve_recipient(args.client.as_deref(), &validated)?;
     let template = match args.template.as_deref() {
         Some(key) => TemplateKey::from_str(key).map_err(|_| AppError::InvalidTemplateKey {
@@ -156,8 +161,9 @@ pub fn handle_generate(
         None => validated.locale,
     };
     let summary = build_summary(period, line_items, &validated.defaults)?;
-    let pdf_bytes = generate_pdf(&summary, &validated, recipient, cwd, template, locale)?;
-    let output_path = pdf_output_path(&validated.sender.name, &period, cwd);
+    let config_dir = config_path.parent().unwrap_or_else(|| Path::new("."));
+    let pdf_bytes = generate_pdf(&summary, &validated, recipient, config_dir, template, locale)?;
+    let output_path = pdf_output_path(&validated.sender.name, &period, output_dir);
     std::fs::write(&output_path, &pdf_bytes)?;
     writeln!(writer, "PDF saved: {}", output_path.display())?;
     Ok(())
@@ -363,7 +369,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_generate(&args, dir.path(), &mut buf);
+        let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
         assert!(matches!(result, Err(AppError::ConfigNotFound)));
@@ -378,7 +384,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_generate(&args, dir.path(), &mut buf);
+        let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
         assert!(matches!(result, Err(AppError::PresetNotFound(_))));
@@ -393,7 +399,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        handle_generate(&args, dir.path(), &mut buf).unwrap();
+        handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf).unwrap();
 
         // Assert
         let output = String::from_utf8(buf).unwrap();
@@ -415,7 +421,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        handle_generate(&args, dir.path(), &mut buf).unwrap();
+        handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf).unwrap();
 
         // Assert
         let bytes = std::fs::read(&pdf_path).unwrap();
@@ -435,7 +441,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        handle_generate(&args, dir.path(), &mut buf).unwrap();
+        handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf).unwrap();
 
         // Assert
         let output = String::from_utf8(buf).unwrap();
@@ -452,7 +458,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_generate(&args, dir.path(), &mut buf);
+        let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
         match result {
@@ -471,7 +477,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        handle_generate(&args, dir.path(), &mut buf).unwrap();
+        handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf).unwrap();
 
         // Assert
         let pdf_path = dir.path().join("Invoice_Alice_Smith_Mar2026.pdf");
@@ -490,7 +496,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        handle_generate(&args, dir.path(), &mut buf).unwrap();
+        handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf).unwrap();
 
         // Assert — verify the PDF was generated (rate override is internal to line items)
         let output = String::from_utf8(buf).unwrap();
@@ -578,7 +584,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_generate(&args, dir.path(), &mut buf);
+        let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
         assert!(result.is_ok(), "Expected Ok, got {result:?}");
@@ -596,7 +602,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_generate(&args, dir.path(), &mut buf);
+        let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
         assert!(matches!(result, Err(AppError::RecipientNotFound { .. })));
@@ -613,7 +619,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_generate(&args, dir.path(), &mut buf);
+        let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
         assert!(result.is_ok(), "v1 config should work without --client flag: {result:?}");
@@ -650,7 +656,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_generate(&args, dir.path(), &mut buf);
+        let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
         assert!(result.is_ok(), "Expected Ok, got {result:?}");
@@ -668,7 +674,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_generate(&args, dir.path(), &mut buf);
+        let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
         assert!(matches!(result, Err(AppError::MixedCurrency(_))));
@@ -754,7 +760,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_generate(&args, dir.path(), &mut buf);
+        let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
         assert!(result.is_ok(), "Expected Ok, got {result:?}");
@@ -772,7 +778,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_generate(&args, dir.path(), &mut buf);
+        let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
         assert!(result.is_ok(), "Expected Ok, got {result:?}");
@@ -790,7 +796,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_generate(&args, dir.path(), &mut buf);
+        let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
         assert!(matches!(result, Err(AppError::InvalidTaxRate(_))));
@@ -805,7 +811,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_generate(&args, dir.path(), &mut buf);
+        let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
         assert!(result.is_ok(), "Expected Ok, got {result:?}");
@@ -823,7 +829,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_generate(&args, dir.path(), &mut buf);
+        let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
         assert!(result.is_ok(), "Expected Ok, got {result:?}");
@@ -841,7 +847,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_generate(&args, dir.path(), &mut buf);
+        let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
         assert!(result.is_ok(), "Expected Ok, got {result:?}");
@@ -858,7 +864,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_generate(&args, dir.path(), &mut buf);
+        let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
         assert!(result.is_ok(), "Expected Ok, got {result:?}");
@@ -874,7 +880,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_generate(&args, dir.path(), &mut buf);
+        let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
         assert!(matches!(result, Err(AppError::InvalidTemplateKey { .. })));
@@ -892,7 +898,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_generate(&args, dir.path(), &mut buf);
+        let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
         assert!(result.is_ok(), "Expected Ok, got {result:?}");
@@ -911,7 +917,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_generate(&args, dir.path(), &mut buf);
+        let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
         assert!(result.is_ok(), "Expected Ok, got {result:?}");
@@ -929,7 +935,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_generate(&args, dir.path(), &mut buf);
+        let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert — should succeed (falls back to en-US), not error
         assert!(result.is_ok(), "Unsupported locale should fall back, not error: {result:?}");
@@ -948,7 +954,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_generate(&args, dir.path(), &mut buf);
+        let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
         assert!(result.is_ok(), "Expected Ok, got {result:?}");
@@ -966,7 +972,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_generate(&args, dir.path(), &mut buf);
+        let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
         match result {

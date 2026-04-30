@@ -38,7 +38,9 @@ fn run(cli: Cli) -> Result<(), error::AppError> {
     match cli.command {
         None => cli::interactive::run_interactive(&prompter, &cwd),
         Some(Command::Generate(args)) => {
-            cli::generate_cmd::handle_generate(&args, &cwd, &mut std::io::stdout())
+            // NOTE: main.rs wiring is updated by a separate slice (resolve_config_path).
+            // For now pass cwd for both config_path and output_dir to keep the build green.
+            cli::generate_cmd::handle_generate(&args, &cwd, &cwd, &mut std::io::stdout())
         }
         Some(Command::Preset { action }) => match action {
             PresetAction::List => {
