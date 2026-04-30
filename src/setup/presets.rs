@@ -9,7 +9,7 @@ use super::prompter::Prompter;
 pub fn collect_presets(
     prompter: &dyn Prompter,
     config: &mut Config,
-    dir: &Path,
+    config_path: &Path,
 ) -> Result<(), AppError> {
     prompter.message("\n--- Presets ---\n");
 
@@ -39,7 +39,7 @@ pub fn collect_presets(
     }
 
     config.presets = Some(presets);
-    save_config(dir, config)?;
+    save_config(config_path, config)?;
 
     Ok(())
 }
@@ -64,7 +64,7 @@ mod tests {
         ]);
 
         // Act
-        collect_presets(&prompter, &mut config, dir.path()).unwrap();
+        collect_presets(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
         // Assert
         let presets = config.presets.as_ref().unwrap();
@@ -92,7 +92,7 @@ mod tests {
         ]);
 
         // Act
-        collect_presets(&prompter, &mut config, dir.path()).unwrap();
+        collect_presets(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
         // Assert
         let presets = config.presets.unwrap();
@@ -123,7 +123,7 @@ mod tests {
         ]);
 
         // Act
-        collect_presets(&prompter, &mut config, dir.path()).unwrap();
+        collect_presets(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
         // Assert
         let presets = config.presets.unwrap();
@@ -145,7 +145,7 @@ mod tests {
         ]);
 
         // Act
-        collect_presets(&prompter, &mut config, dir.path()).unwrap();
+        collect_presets(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
         // Assert
         let presets = config.presets.unwrap();
@@ -166,10 +166,10 @@ mod tests {
         ]);
 
         // Act
-        collect_presets(&prompter, &mut config, dir.path()).unwrap();
+        collect_presets(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
         // Assert
-        let loaded = unwrap_loaded(load_config(dir.path()));
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let presets = loaded.presets.unwrap();
         assert_eq!(presets.len(), 1);
         assert_eq!(presets[0].key, "dev");

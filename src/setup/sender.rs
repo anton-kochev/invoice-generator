@@ -9,7 +9,7 @@ use super::prompter::Prompter;
 pub fn collect_sender(
     prompter: &dyn Prompter,
     config: &mut Config,
-    dir: &Path,
+    config_path: &Path,
 ) -> Result<(), AppError> {
     prompter.message("\n--- Sender Information ---\n");
 
@@ -23,7 +23,7 @@ pub fn collect_sender(
         email,
     });
 
-    save_config(dir, config)?;
+    save_config(config_path, config)?;
 
     Ok(())
 }
@@ -47,7 +47,7 @@ mod tests {
         ]);
 
         // Act
-        collect_sender(&prompter, &mut config, dir.path()).unwrap();
+        collect_sender(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
         // Assert
         let sender = config.sender.as_ref().unwrap();
@@ -55,7 +55,7 @@ mod tests {
         assert_eq!(sender.address, vec!["42 Elm St"]);
         assert_eq!(sender.email, "alice@example.com");
 
-        let loaded = unwrap_loaded(load_config(dir.path()));
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         assert_eq!(loaded.sender.unwrap().name, "Alice Smith");
 
         prompter.assert_exhausted();
@@ -77,7 +77,7 @@ mod tests {
         ]);
 
         // Act
-        collect_sender(&prompter, &mut config, dir.path()).unwrap();
+        collect_sender(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
         // Assert
         let sender = config.sender.unwrap();
@@ -98,7 +98,7 @@ mod tests {
         ]);
 
         // Act
-        collect_sender(&prompter, &mut config, dir.path()).unwrap();
+        collect_sender(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
         // Assert
         let sender = config.sender.unwrap();
@@ -119,7 +119,7 @@ mod tests {
         ]);
 
         // Act
-        collect_sender(&prompter, &mut config, dir.path()).unwrap();
+        collect_sender(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
         // Assert
         let messages = prompter.messages.borrow();
@@ -145,12 +145,12 @@ mod tests {
         ]);
 
         // Act
-        collect_sender(&prompter, &mut config, dir.path()).unwrap();
+        collect_sender(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
         // Assert
         assert!(config.sender.is_some());
         assert!(config.recipient.is_some());
-        let loaded = unwrap_loaded(load_config(dir.path()));
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         assert_eq!(loaded.recipient.unwrap().name, "Bob Corp");
         prompter.assert_exhausted();
     }

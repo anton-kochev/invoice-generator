@@ -22,7 +22,7 @@ pub fn run_setup(
     prompter: &dyn Prompter,
     config: &mut Config,
     missing: &[ConfigSection],
-    dir: &Path,
+    config_path: &Path,
 ) -> Result<(), AppError> {
     // Show appropriate header
     let is_fresh = missing.len() == 4
@@ -41,21 +41,21 @@ pub fn run_setup(
     // Dispatch to collectors for missing sections
     for section in missing {
         match section {
-            ConfigSection::Sender => sender::collect_sender(prompter, config, dir)?,
-            ConfigSection::Recipient => recipient::collect_recipient(prompter, config, dir)?,
-            ConfigSection::Payment => payment::collect_payment(prompter, config, dir)?,
-            ConfigSection::Presets => presets::collect_presets(prompter, config, dir)?,
+            ConfigSection::Sender => sender::collect_sender(prompter, config, config_path)?,
+            ConfigSection::Recipient => recipient::collect_recipient(prompter, config, config_path)?,
+            ConfigSection::Payment => payment::collect_payment(prompter, config, config_path)?,
+            ConfigSection::Presets => presets::collect_presets(prompter, config, config_path)?,
         }
     }
 
     // Defaults are not in ConfigSection (always have a fallback),
     // but we still prompt during setup if not already set.
     if config.defaults.is_none() {
-        defaults::collect_defaults(prompter, config, dir)?;
+        defaults::collect_defaults(prompter, config, config_path)?;
     }
 
     // Display summary
-    summary::display_summary(prompter, config);
+    summary::display_summary(prompter, config, config_path);
 
     Ok(())
 }
@@ -78,7 +78,7 @@ mod tests {
         let prompter = MockPrompter::new(full_setup_responses());
 
         // Act
-        run_setup(&prompter, &mut config, &all_missing, dir.path()).unwrap();
+        run_setup(&prompter, &mut config, &all_missing, &cfg_path(&dir)).unwrap();
 
         // Assert
         let messages = prompter.messages.borrow();
@@ -100,7 +100,7 @@ mod tests {
         let prompter = MockPrompter::new(resume_from_recipient_responses());
 
         // Act
-        run_setup(&prompter, &mut config, &missing, dir.path()).unwrap();
+        run_setup(&prompter, &mut config, &missing, &cfg_path(&dir)).unwrap();
 
         // Assert
         let messages = prompter.messages.borrow();
@@ -142,7 +142,7 @@ mod tests {
         ]);
 
         // Act
-        run_setup(&prompter, &mut config, &missing, dir.path()).unwrap();
+        run_setup(&prompter, &mut config, &missing, &cfg_path(&dir)).unwrap();
 
         // Assert
         assert_eq!(config.sender.as_ref().unwrap().name, "Alice Smith");
@@ -165,7 +165,7 @@ mod tests {
         let prompter = MockPrompter::new(full_setup_responses());
 
         // Act
-        run_setup(&prompter, &mut config, &all_missing, dir.path()).unwrap();
+        run_setup(&prompter, &mut config, &all_missing, &cfg_path(&dir)).unwrap();
 
         // Assert
         assert!(config.sender.is_some());
@@ -188,7 +188,7 @@ mod tests {
         let prompter = MockPrompter::new(full_setup_responses());
 
         // Act
-        run_setup(&prompter, &mut config, &all_missing, dir.path()).unwrap();
+        run_setup(&prompter, &mut config, &all_missing, &cfg_path(&dir)).unwrap();
 
         // Assert — defaults collected even though not in missing
         assert!(config.defaults.is_some());

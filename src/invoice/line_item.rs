@@ -15,7 +15,7 @@ pub fn collect_all_line_items(
     prompter: &dyn Prompter,
     presets: &[Preset],
     default_currency: &str,
-    dir: &Path,
+    config_path: &Path,
 ) -> Result<Vec<LineItem>, AppError> {
     let mut items = Vec::new();
     let mut presets = presets.to_vec();
@@ -32,10 +32,11 @@ pub fn collect_all_line_items(
             }
             PresetSelection::CreateNew => {
                 let new_preset = preset_creation::collect_new_preset(prompter, &presets)?;
-                append_preset(dir, new_preset.clone())?;
+                append_preset(config_path, new_preset.clone())?;
                 prompter.message(&format!(
-                    "Preset \"{}\" saved to invoice_config.yaml",
-                    new_preset.key
+                    "Preset \"{}\" saved to {}",
+                    new_preset.key,
+                    config_path.display()
                 ));
                 let item_number = (items.len() + 1) as u32;
                 let currency = effective_currency(&new_preset, default_currency);
@@ -103,7 +104,12 @@ mod tests {
     use crate::config::types::{Config, Defaults, PaymentMethod, Recipient, Sender};
     use crate::config::writer::save_config;
     use crate::setup::mock_prompter::{MockPrompter, MockResponse};
+    use std::path::PathBuf;
     use tempfile::TempDir;
+
+    fn cfg_path(dir: &TempDir) -> PathBuf {
+        dir.path().join("config.yaml")
+    }
 
     fn setup_test_dir() -> TempDir {
         let dir = TempDir::new().unwrap();
@@ -142,7 +148,7 @@ mod tests {
             }),
             branding: None,
         };
-        save_config(dir.path(), &config).unwrap();
+        save_config(&cfg_path(&dir), &config).unwrap();
         dir
     }
 
@@ -312,7 +318,7 @@ mod tests {
         ]);
 
         // Act
-        let items = collect_all_line_items(&prompter, &presets, "EUR", dir.path()).unwrap();
+        let items = collect_all_line_items(&prompter, &presets, "EUR", &cfg_path(&dir)).unwrap();
 
         // Assert
         assert_eq!(items.len(), 1);
@@ -337,7 +343,7 @@ mod tests {
         ]);
 
         // Act
-        let items = collect_all_line_items(&prompter, &presets, "EUR", dir.path()).unwrap();
+        let items = collect_all_line_items(&prompter, &presets, "EUR", &cfg_path(&dir)).unwrap();
 
         // Assert
         assert_eq!(items.len(), 2);
@@ -358,7 +364,7 @@ mod tests {
         ]);
 
         // Act
-        let items = collect_all_line_items(&prompter, &presets, "EUR", dir.path()).unwrap();
+        let items = collect_all_line_items(&prompter, &presets, "EUR", &cfg_path(&dir)).unwrap();
 
         // Assert
         assert_eq!(items.len(), 3);
@@ -379,7 +385,7 @@ mod tests {
         ]);
 
         // Act
-        let _ = collect_all_line_items(&prompter, &presets, "EUR", dir.path()).unwrap();
+        let _ = collect_all_line_items(&prompter, &presets, "EUR", &cfg_path(&dir)).unwrap();
 
         // Assert
         let messages = prompter.messages.borrow();
@@ -399,7 +405,7 @@ mod tests {
         ]);
 
         // Act
-        let items = collect_all_line_items(&prompter, &presets, "EUR", dir.path()).unwrap();
+        let items = collect_all_line_items(&prompter, &presets, "EUR", &cfg_path(&dir)).unwrap();
 
         // Assert
         assert_eq!(items[0].description, "Software development");
@@ -422,7 +428,7 @@ mod tests {
         ]);
 
         // Act
-        let items = collect_all_line_items(&prompter, &presets, "EUR", dir.path()).unwrap();
+        let items = collect_all_line_items(&prompter, &presets, "EUR", &cfg_path(&dir)).unwrap();
 
         // Assert
         assert_eq!(items.len(), 1);
@@ -430,7 +436,10 @@ mod tests {
         assert!((items[0].amount - 2500.0).abs() < f64::EPSILON);
         let messages = prompter.messages.borrow();
         let all = messages.join("\n");
-        assert!(all.contains("Preset \"design\" saved to invoice_config.yaml"));
+        assert!(
+            all.contains("Preset \"design\" saved to") && all.contains("config.yaml"),
+            "Expected save message with config.yaml path, got: {all}"
+        );
         prompter.assert_exhausted();
     }
 
@@ -456,7 +465,7 @@ mod tests {
         ]);
 
         // Act
-        let items = collect_all_line_items(&prompter, &presets, "EUR", dir.path()).unwrap();
+        let items = collect_all_line_items(&prompter, &presets, "EUR", &cfg_path(&dir)).unwrap();
 
         // Assert
         assert_eq!(items.len(), 2);
@@ -487,7 +496,7 @@ mod tests {
         ]);
 
         // Act
-        let items = collect_all_line_items(&prompter, &presets, "EUR", dir.path()).unwrap();
+        let items = collect_all_line_items(&prompter, &presets, "EUR", &cfg_path(&dir)).unwrap();
 
         // Assert
         assert_eq!(items.len(), 2);
@@ -514,11 +523,11 @@ mod tests {
         ]);
 
         // Act
-        collect_all_line_items(&prompter, &presets, "EUR", dir.path()).unwrap();
+        collect_all_line_items(&prompter, &presets, "EUR", &cfg_path(&dir)).unwrap();
 
         // Assert — verify preset was persisted to disk
         use crate::config::loader::{load_config, LoadResult};
-        let config = match load_config(dir.path()).unwrap() {
+        let config = match load_config(&cfg_path(&dir)).unwrap() {
             LoadResult::Loaded(c) => c,
             LoadResult::NotFound => panic!("Config file should exist"),
         };
@@ -543,11 +552,11 @@ mod tests {
         ]);
 
         // Act
-        collect_all_line_items(&prompter, &presets, "EUR", dir.path()).unwrap();
+        collect_all_line_items(&prompter, &presets, "EUR", &cfg_path(&dir)).unwrap();
 
         // Assert — original "dev" preset still present
         use crate::config::loader::{load_config, LoadResult};
-        let config = match load_config(dir.path()).unwrap() {
+        let config = match load_config(&cfg_path(&dir)).unwrap() {
             LoadResult::Loaded(c) => c,
             LoadResult::NotFound => panic!("Config file should exist"),
         };
@@ -567,7 +576,7 @@ mod tests {
         ]);
 
         // Act
-        let items = collect_all_line_items(&prompter, &presets, "EUR", dir.path()).unwrap();
+        let items = collect_all_line_items(&prompter, &presets, "EUR", &cfg_path(&dir)).unwrap();
 
         // Assert
         assert!((items[0].amount - 10000.0).abs() < f64::EPSILON);
@@ -766,7 +775,7 @@ mod tests {
         ]);
 
         // Act
-        let items = collect_all_line_items(&prompter, &presets, "EUR", dir.path()).unwrap();
+        let items = collect_all_line_items(&prompter, &presets, "EUR", &cfg_path(&dir)).unwrap();
 
         // Assert
         assert_eq!(items.len(), 1);
@@ -807,7 +816,7 @@ mod tests {
         ]);
 
         // Act
-        let items = collect_all_line_items(&prompter, &presets, "EUR", dir.path()).unwrap();
+        let items = collect_all_line_items(&prompter, &presets, "EUR", &cfg_path(&dir)).unwrap();
 
         // Assert
         assert_eq!(items.len(), 2);

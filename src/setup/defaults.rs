@@ -11,7 +11,7 @@ use super::prompter::Prompter;
 pub fn collect_defaults(
     prompter: &dyn Prompter,
     config: &mut Config,
-    dir: &Path,
+    config_path: &Path,
 ) -> Result<(), AppError> {
     prompter.message("\n--- Defaults ---\n");
 
@@ -51,7 +51,7 @@ pub fn collect_defaults(
         locale,
     });
 
-    save_config(dir, config)?;
+    save_config(config_path, config)?;
 
     Ok(())
 }
@@ -78,7 +78,7 @@ mod tests {
         ]);
 
         // Act
-        collect_defaults(&prompter, &mut config, dir.path()).unwrap();
+        collect_defaults(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
         // Assert
         let defaults = config.defaults.as_ref().unwrap();
@@ -102,7 +102,7 @@ mod tests {
         ]);
 
         // Act
-        collect_defaults(&prompter, &mut config, dir.path()).unwrap();
+        collect_defaults(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
         // Assert
         let defaults = config.defaults.unwrap();
@@ -126,10 +126,10 @@ mod tests {
         ]);
 
         // Act
-        collect_defaults(&prompter, &mut config, dir.path()).unwrap();
+        collect_defaults(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
         // Assert
-        let loaded = unwrap_loaded(load_config(dir.path()));
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let defaults = loaded.defaults.unwrap();
         assert_eq!(defaults.currency, "CHF");
         assert_eq!(defaults.invoice_date_day, 1);
@@ -150,7 +150,7 @@ mod tests {
             MockResponse::Text("en-US".into()),
         ]);
         // Act
-        collect_defaults(&prompter, &mut config, dir.path()).unwrap();
+        collect_defaults(&prompter, &mut config, &cfg_path(&dir)).unwrap();
         // Assert
         let defaults = config.defaults.as_ref().unwrap();
         assert_eq!(defaults.template, TemplateKey::Leda);
@@ -170,7 +170,7 @@ mod tests {
             MockResponse::Text("en-US".into()),
         ]);
         // Act
-        collect_defaults(&prompter, &mut config, dir.path()).unwrap();
+        collect_defaults(&prompter, &mut config, &cfg_path(&dir)).unwrap();
         // Assert
         assert_eq!(config.defaults.as_ref().unwrap().template, TemplateKey::Callisto);
         prompter.assert_exhausted();
@@ -189,9 +189,9 @@ mod tests {
             MockResponse::Text("en-US".into()),
         ]);
         // Act
-        collect_defaults(&prompter, &mut config, dir.path()).unwrap();
+        collect_defaults(&prompter, &mut config, &cfg_path(&dir)).unwrap();
         // Assert
-        let loaded = unwrap_loaded(load_config(dir.path()));
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         assert_eq!(loaded.defaults.unwrap().template, TemplateKey::Thebe);
         prompter.assert_exhausted();
     }
@@ -210,7 +210,7 @@ mod tests {
             MockResponse::Text("en-US".into()),
         ]);
         // Act
-        collect_defaults(&prompter, &mut config, dir.path()).unwrap();
+        collect_defaults(&prompter, &mut config, &cfg_path(&dir)).unwrap();
         // Assert
         assert_eq!(config.defaults.as_ref().unwrap().template, TemplateKey::Leda);
         prompter.assert_exhausted();
@@ -230,7 +230,7 @@ mod tests {
             MockResponse::Text("en-US".into()),
         ]);
         // Act
-        collect_defaults(&prompter, &mut config, dir.path()).unwrap();
+        collect_defaults(&prompter, &mut config, &cfg_path(&dir)).unwrap();
         // Assert
         let messages = prompter.messages.borrow();
         assert!(
@@ -254,7 +254,7 @@ mod tests {
         ]);
 
         // Act
-        collect_defaults(&prompter, &mut config, dir.path()).unwrap();
+        collect_defaults(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
         // Assert
         let defaults = config.defaults.as_ref().unwrap();
@@ -276,7 +276,7 @@ mod tests {
         ]);
 
         // Act
-        collect_defaults(&prompter, &mut config, dir.path()).unwrap();
+        collect_defaults(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
         // Assert
         let defaults = config.defaults.as_ref().unwrap();
@@ -299,7 +299,7 @@ mod tests {
         ]);
 
         // Act
-        collect_defaults(&prompter, &mut config, dir.path()).unwrap();
+        collect_defaults(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
         // Assert
         let defaults = config.defaults.as_ref().unwrap();
@@ -326,10 +326,10 @@ mod tests {
         ]);
 
         // Act
-        collect_defaults(&prompter, &mut config, dir.path()).unwrap();
+        collect_defaults(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
         // Assert
-        let loaded = unwrap_loaded(load_config(dir.path()));
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let defaults = loaded.defaults.unwrap();
         assert_eq!(defaults.locale, Locale::FrFr);
         prompter.assert_exhausted();

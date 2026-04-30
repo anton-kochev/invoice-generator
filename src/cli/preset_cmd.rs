@@ -1,7 +1,7 @@
 use std::io::Write;
 use std::path::Path;
 
-use crate::config::loader::{load_config, LoadResult, CONFIG_FILENAME};
+use crate::config::loader::{load_config, LoadResult};
 use crate::config::types::Preset;
 use crate::config::validator::ValidatedConfig;
 use crate::config::writer::remove_preset;
@@ -85,12 +85,12 @@ pub fn handle_preset_list(
 /// Handle `invoice preset delete <key>` — confirm and remove preset.
 pub fn handle_preset_delete(
     prompter: &dyn Prompter,
-    dir: &Path,
+    config_path: &Path,
     key: &str,
     writer: &mut dyn Write,
 ) -> Result<(), AppError> {
     // Load config to get preset details for confirmation
-    let config = match load_config(dir)? {
+    let config = match load_config(config_path)? {
         LoadResult::Loaded(c) => c,
         LoadResult::NotFound => return Err(AppError::ConfigNotFound),
     };
@@ -114,8 +114,13 @@ pub fn handle_preset_delete(
         return Ok(());
     }
 
-    remove_preset(dir, key)?;
-    writeln!(writer, "✓ Preset \"{}\" deleted from {}", key, CONFIG_FILENAME)?;
+    remove_preset(config_path, key)?;
+    writeln!(
+        writer,
+        "✓ Preset \"{}\" deleted from {}",
+        key,
+        config_path.display()
+    )?;
     Ok(())
 }
 
@@ -276,7 +281,7 @@ mod tests {
         let dir = setup_dir(None);
 
         // Act
-        let result = crate::cli::load_validated_config(dir.path());
+        let result = crate::cli::load_validated_config(&cfg_path(&dir));
 
         // Assert
         assert!(matches!(result, Err(AppError::ConfigNotFound)));
@@ -291,11 +296,11 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_preset_delete(&prompter, dir.path(), "design", &mut buf);
+        let result = handle_preset_delete(&prompter, &cfg_path(&dir), "design", &mut buf);
 
         // Assert
         assert!(result.is_ok());
-        let loaded = match load_config(dir.path()).unwrap() {
+        let loaded = match load_config(&cfg_path(&dir)).unwrap() {
             LoadResult::Loaded(c) => c,
             _ => panic!("Expected Loaded"),
         };
@@ -315,11 +320,11 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_preset_delete(&prompter, dir.path(), "design", &mut buf);
+        let result = handle_preset_delete(&prompter, &cfg_path(&dir), "design", &mut buf);
 
         // Assert
         assert!(result.is_ok());
-        let loaded = match load_config(dir.path()).unwrap() {
+        let loaded = match load_config(&cfg_path(&dir)).unwrap() {
             LoadResult::Loaded(c) => c,
             _ => panic!("Expected Loaded"),
         };
@@ -338,7 +343,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_preset_delete(&prompter, dir.path(), "nope", &mut buf);
+        let result = handle_preset_delete(&prompter, &cfg_path(&dir), "nope", &mut buf);
 
         // Assert
         assert!(matches!(result, Err(AppError::PresetNotFound(_))));
@@ -354,7 +359,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_preset_delete(&prompter, dir.path(), "dev", &mut buf);
+        let result = handle_preset_delete(&prompter, &cfg_path(&dir), "dev", &mut buf);
 
         // Assert
         assert!(matches!(result, Err(AppError::LastPreset)));
@@ -370,7 +375,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        handle_preset_delete(&prompter, dir.path(), "design", &mut buf).unwrap();
+        handle_preset_delete(&prompter, &cfg_path(&dir), "design", &mut buf).unwrap();
 
         // Assert
         let prompts = prompter.prompts.borrow();
@@ -395,7 +400,7 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
-        let result = handle_preset_delete(&prompter, dir.path(), "dev", &mut buf);
+        let result = handle_preset_delete(&prompter, &cfg_path(&dir), "dev", &mut buf);
 
         // Assert
         assert!(matches!(result, Err(AppError::ConfigNotFound)));

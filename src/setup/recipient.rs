@@ -12,7 +12,7 @@ use super::prompter::Prompter;
 pub fn collect_recipient(
     prompter: &dyn Prompter,
     config: &mut Config,
-    dir: &Path,
+    config_path: &Path,
 ) -> Result<(), AppError> {
     prompter.message("\n--- Recipient Information ---\n");
 
@@ -36,7 +36,7 @@ pub fn collect_recipient(
     config.default_recipient = Some(key);
     config.recipient = None;
 
-    save_config(dir, config)?;
+    save_config(config_path, config)?;
 
     Ok(())
 }
@@ -62,7 +62,7 @@ mod tests {
         ]);
 
         // Act
-        collect_recipient(&prompter, &mut config, dir.path()).unwrap();
+        collect_recipient(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
         // Assert
         let r = &config.recipients.as_ref().unwrap()[0];
@@ -89,7 +89,7 @@ mod tests {
         ]);
 
         // Act
-        collect_recipient(&prompter, &mut config, dir.path()).unwrap();
+        collect_recipient(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
         // Assert
         let r = &config.recipients.as_ref().unwrap()[0];
@@ -112,7 +112,7 @@ mod tests {
         ]);
 
         // Act
-        collect_recipient(&prompter, &mut config, dir.path()).unwrap();
+        collect_recipient(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
         // Assert
         let r = &config.recipients.as_ref().unwrap()[0];
@@ -135,10 +135,10 @@ mod tests {
         ]);
 
         // Act
-        collect_recipient(&prompter, &mut config, dir.path()).unwrap();
+        collect_recipient(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
         // Assert
-        let loaded = unwrap_loaded(load_config(dir.path()));
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         assert_eq!(loaded.recipients.as_ref().unwrap()[0].name, "Acme Corp");
         assert_eq!(loaded.default_recipient, Some("acme".into()));
         prompter.assert_exhausted();
@@ -158,7 +158,7 @@ mod tests {
         ]);
 
         // Act
-        collect_recipient(&prompter, &mut config, dir.path()).unwrap();
+        collect_recipient(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
         // Assert
         let messages = prompter.messages.borrow();
@@ -185,7 +185,7 @@ mod tests {
         ]);
 
         // Act
-        collect_recipient(&prompter, &mut config, dir.path()).unwrap();
+        collect_recipient(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
         // Assert
         assert!(config.recipient.is_none(), "v1 recipient should be None");

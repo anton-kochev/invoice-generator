@@ -9,7 +9,7 @@ use super::prompter::Prompter;
 pub fn collect_payment(
     prompter: &dyn Prompter,
     config: &mut Config,
-    dir: &Path,
+    config_path: &Path,
 ) -> Result<(), AppError> {
     prompter.message("\n--- Payment Methods ---\n");
 
@@ -35,7 +35,7 @@ pub fn collect_payment(
     }
 
     config.payment = Some(methods);
-    save_config(dir, config)?;
+    save_config(config_path, config)?;
 
     Ok(())
 }
@@ -60,7 +60,7 @@ mod tests {
         ]);
 
         // Act
-        collect_payment(&prompter, &mut config, dir.path()).unwrap();
+        collect_payment(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
         // Assert
         let payment = config.payment.as_ref().unwrap();
@@ -87,7 +87,7 @@ mod tests {
         ]);
 
         // Act
-        collect_payment(&prompter, &mut config, dir.path()).unwrap();
+        collect_payment(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
         // Assert
         let payment = config.payment.unwrap();
@@ -110,7 +110,7 @@ mod tests {
         ]);
 
         // Act
-        collect_payment(&prompter, &mut config, dir.path()).unwrap();
+        collect_payment(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
         // Assert
         let payment = config.payment.unwrap();
@@ -132,10 +132,10 @@ mod tests {
         ]);
 
         // Act
-        collect_payment(&prompter, &mut config, dir.path()).unwrap();
+        collect_payment(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
         // Assert
-        let loaded = unwrap_loaded(load_config(dir.path()));
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let payment = loaded.payment.unwrap();
         assert_eq!(payment.len(), 1);
         assert_eq!(payment[0].label, "SEPA");
@@ -154,7 +154,7 @@ mod tests {
         ]);
 
         // Act
-        collect_payment(&prompter, &mut config, dir.path()).unwrap();
+        collect_payment(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
         // Assert
         let messages = prompter.messages.borrow();

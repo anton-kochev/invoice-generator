@@ -5,7 +5,7 @@ pub mod preset_cmd;
 pub mod recipient_cmd;
 pub mod recipient_selection;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use clap::{Parser, Subcommand};
 
@@ -17,6 +17,10 @@ use crate::error::AppError;
 #[derive(Parser)]
 #[command(name = "invoice", version, about = "Generate professional invoices")]
 pub struct Cli {
+    /// Path to config file (overrides INVOICE_GENERATOR_CONFIG and the XDG default)
+    #[arg(long, global = true, value_name = "PATH")]
+    pub config: Option<PathBuf>,
+
     #[command(subcommand)]
     pub command: Option<Command>,
 }
@@ -97,8 +101,8 @@ pub enum PresetAction {
 
 /// Load and validate config for non-interactive subcommands.
 /// Never triggers the setup wizard — returns error if config missing or incomplete.
-pub fn load_validated_config(dir: &Path) -> Result<ValidatedConfig, AppError> {
-    match load_config(dir)? {
+pub fn load_validated_config(config_path: &Path) -> Result<ValidatedConfig, AppError> {
+    match load_config(config_path)? {
         LoadResult::NotFound => Err(AppError::ConfigNotFound),
         LoadResult::Loaded(config) => match config.validate()? {
             ValidationOutcome::Complete(v) => Ok(v),

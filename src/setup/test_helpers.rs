@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use tempfile::TempDir;
 
 use crate::config::loader::LoadResult;
@@ -159,10 +161,17 @@ pub fn validated(config: Config) -> crate::config::validator::ValidatedConfig {
 
 // ── Tempdir Helper ──
 
+/// Path to the config file inside a tempdir. Loader/writer functions take a
+/// file path (not a directory), so tests use this helper instead of bare
+/// `dir.path()`.
+pub fn cfg_path(dir: &TempDir) -> PathBuf {
+    dir.path().join("config.yaml")
+}
+
 pub fn setup_dir(config: Option<&Config>) -> TempDir {
     let dir = TempDir::new().unwrap();
     if let Some(cfg) = config {
-        save_config(dir.path(), cfg).unwrap();
+        save_config(&cfg_path(&dir), cfg).unwrap();
     }
     dir
 }

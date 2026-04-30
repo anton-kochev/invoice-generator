@@ -1,8 +1,10 @@
+use std::path::Path;
+
 use crate::config::types::Config;
 use super::prompter::Prompter;
 
 /// Display a summary of the completed setup configuration.
-pub fn display_summary(prompter: &dyn Prompter, config: &Config) {
+pub fn display_summary(prompter: &dyn Prompter, config: &Config, config_path: &Path) {
     prompter.message("\n===== Setup Complete =====\n");
 
     if let Some(sender) = &config.sender {
@@ -22,7 +24,10 @@ pub fn display_summary(prompter: &dyn Prompter, config: &Config) {
         prompter.message(&format!("Currency:       {}", defaults.currency));
     }
 
-    prompter.message("\nYou can edit these anytime in invoice_config.yaml.");
+    prompter.message(&format!(
+        "\nYou can edit these anytime in {}.",
+        config_path.display()
+    ));
     prompter.message("Proceeding to invoice generation...");
 }
 
@@ -32,6 +37,10 @@ mod tests {
     use crate::setup::mock_prompter::MockPrompter;
     use crate::setup::test_helpers::*;
 
+    fn fake_config_path() -> std::path::PathBuf {
+        std::path::PathBuf::from("/tmp/invoice-generator/config.yaml")
+    }
+
     #[test]
     fn test_display_summary_includes_sender_name() {
         // Arrange
@@ -39,7 +48,7 @@ mod tests {
         let prompter = MockPrompter::new(vec![]);
 
         // Act
-        display_summary(&prompter, &config);
+        display_summary(&prompter, &config, &fake_config_path());
 
         // Assert
         let messages = prompter.messages.borrow();
@@ -54,7 +63,7 @@ mod tests {
         let prompter = MockPrompter::new(vec![]);
 
         // Act
-        display_summary(&prompter, &config);
+        display_summary(&prompter, &config, &fake_config_path());
 
         // Assert
         let messages = prompter.messages.borrow();
@@ -69,7 +78,7 @@ mod tests {
         let prompter = MockPrompter::new(vec![]);
 
         // Act
-        display_summary(&prompter, &config);
+        display_summary(&prompter, &config, &fake_config_path());
 
         // Assert
         let messages = prompter.messages.borrow();
@@ -85,7 +94,7 @@ mod tests {
         let prompter = MockPrompter::new(vec![]);
 
         // Act
-        display_summary(&prompter, &config);
+        display_summary(&prompter, &config, &fake_config_path());
 
         // Assert
         let messages = prompter.messages.borrow();
@@ -100,12 +109,12 @@ mod tests {
         let prompter = MockPrompter::new(vec![]);
 
         // Act
-        display_summary(&prompter, &config);
+        display_summary(&prompter, &config, &fake_config_path());
 
         // Assert
         let messages = prompter.messages.borrow();
         let output = messages.join("\n");
-        assert!(output.contains("invoice_config.yaml"), "Should mention config file");
+        assert!(output.contains("config.yaml"), "Should mention config file");
         assert!(output.contains("roceeding"), "Should mention proceeding");
     }
 }
