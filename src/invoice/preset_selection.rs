@@ -1,6 +1,7 @@
 use crate::config::types::Preset;
 use crate::error::AppError;
 use crate::setup::prompter::Prompter;
+use crate::setup::prompts::prompt_u32_in_range;
 
 use super::currency::effective_currency;
 use super::types::PresetSelection;
@@ -28,18 +29,12 @@ pub fn select_preset(
         ));
     }
 
-    let max = presets.len() + 1;
+    let max = (presets.len() + 1) as u32;
     prompter.message(&format!("  [{max}] + Create new preset"));
 
-    let choice = loop {
-        let n = prompter.u32_with_default("Select preset number:", 1)?;
-        if n >= 1 && n as usize <= max {
-            break n;
-        }
-        prompter.message(&format!("Please enter a number between 1 and {max}."));
-    };
+    let choice = prompt_u32_in_range(prompter, "Select preset number:", 1..=max, 1)?;
 
-    if choice as usize == max {
+    if choice == max {
         Ok(PresetSelection::CreateNew)
     } else {
         Ok(PresetSelection::Existing(presets[choice as usize - 1].clone()))

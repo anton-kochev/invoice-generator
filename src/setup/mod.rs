@@ -2,6 +2,7 @@ pub mod defaults;
 pub mod payment;
 pub mod presets;
 pub mod prompter;
+pub mod prompts;
 pub mod recipient;
 pub mod sender;
 pub mod summary;

@@ -5,6 +5,7 @@ use crate::config::types::Recipient;
 use crate::config::validator::ValidatedConfig;
 use crate::error::AppError;
 use crate::setup::prompter::Prompter;
+use crate::setup::prompts::{prompt_u32_in_range, prompt_until_valid};
 
 /// Format recipients as a table string with columns: Key, Name, Address, Company ID.
 ///
@@ -112,17 +113,20 @@ pub fn handle_recipient_add(
     let existing_recipients = config.recipients.as_deref().unwrap_or_default();
 
     // Prompt for key, rejecting duplicates
-    let key = loop {
-        let candidate = prompter.required_text("Recipient key (short identifier):")?;
-        if existing_recipients
-            .iter()
-            .any(|r| r.key.as_deref() == Some(&candidate))
-        {
-            prompter.message(&format!("Key \"{candidate}\" already exists. Choose another:"));
-            continue;
-        }
-        break candidate;
-    };
+    let key = prompt_until_valid(
+        prompter,
+        |p| p.required_text("Recipient key (short identifier):"),
+        |candidate: &String| {
+            if existing_recipients
+                .iter()
+                .any(|r| r.key.as_deref() == Some(candidate.as_str()))
+            {
+                Err(format!("Key \"{candidate}\" already exists. Choose another:"))
+            } else {
+                Ok(())
+            }
+        },
+    )?;
 
     let name = prompter.required_text("Company name:")?;
     let address = prompter.multi_line("Address")?;
@@ -214,14 +218,9 @@ pub fn handle_recipient_delete(
                     r.name,
                 ));
             }
-            let max = remaining.len();
-            let choice = loop {
-                let n = prompter.u32_with_default("Select recipient number:", 1)?;
-                if n >= 1 && n as usize <= max {
-                    break n;
-                }
-                prompter.message(&format!("Please enter a number between 1 and {max}."));
-            };
+            let max = remaining.len() as u32;
+            let choice =
+                prompt_u32_in_range(prompter, "Select recipient number:", 1..=max, 1)?;
             let new_key = remaining[choice as usize - 1].key.as_deref().unwrap_or("");
             set_default_recipient(config_path, new_key)?;
         }

@@ -1,6 +1,7 @@
 use crate::config::types::Recipient;
 use crate::error::AppError;
 use crate::setup::prompter::Prompter;
+use crate::setup::prompts::prompt_u32_in_range;
 
 /// Select a recipient for the invoice.
 ///
@@ -41,14 +42,13 @@ pub fn select_recipient(
         ));
     }
 
-    let max = recipients.len();
-    let choice = loop {
-        let n = prompter.u32_with_default("Select recipient number:", default_index)?;
-        if n >= 1 && n as usize <= max {
-            break n;
-        }
-        prompter.message(&format!("Please enter a number between 1 and {max}."));
-    };
+    let max = recipients.len() as u32;
+    let choice = prompt_u32_in_range(
+        prompter,
+        "Select recipient number:",
+        1..=max,
+        default_index,
+    )?;
 
     Ok(recipients[choice as usize - 1].clone())
 }

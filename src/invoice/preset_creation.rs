@@ -1,6 +1,7 @@
 use crate::config::types::Preset;
 use crate::error::AppError;
 use crate::setup::prompter::Prompter;
+use crate::setup::prompts::prompt_until_valid;
 
 /// Interactively collect a new preset from the user.
 ///
@@ -12,16 +13,17 @@ pub fn collect_new_preset(
     prompter: &dyn Prompter,
     existing_presets: &[Preset],
 ) -> Result<Preset, AppError> {
-    let key = loop {
-        let candidate = prompter.required_text("Short key (e.g. 'dev'):")?;
-        if existing_presets.iter().any(|p| p.key == candidate) {
-            prompter.message(&format!(
-                "Key \"{candidate}\" already exists. Choose another:"
-            ));
-        } else {
-            break candidate;
-        }
-    };
+    let key = prompt_until_valid(
+        prompter,
+        |p| p.required_text("Short key (e.g. 'dev'):"),
+        |candidate: &String| {
+            if existing_presets.iter().any(|p| &p.key == candidate) {
+                Err(format!("Key \"{candidate}\" already exists. Choose another:"))
+            } else {
+                Ok(())
+            }
+        },
+    )?;
 
     let description = prompter.required_text("Description:")?;
     let default_rate = prompter.positive_f64("Default daily rate:")?;

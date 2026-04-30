@@ -1,5 +1,6 @@
 use crate::error::AppError;
 use crate::setup::prompter::Prompter;
+use crate::setup::prompts::prompt_u32_in_range;
 
 use super::types::InvoicePeriod;
 
@@ -27,23 +28,8 @@ pub fn collect_invoice_period(
 
     let (default_month, default_year) = default_period(current_month, current_year);
 
-    // Prompt for month with validation
-    let month = loop {
-        let m = prompter.u32_with_default("Invoice month (1-12):", default_month)?;
-        if (1..=12).contains(&m) {
-            break m;
-        }
-        prompter.message("Month must be between 1 and 12.");
-    };
-
-    // Prompt for year with validation
-    let year = loop {
-        let y = prompter.u32_with_default("Invoice year:", default_year)?;
-        if (2000..=2099).contains(&y) {
-            break y;
-        }
-        prompter.message("Year must be between 2000 and 2099.");
-    };
+    let month = prompt_u32_in_range(prompter, "Invoice month (1-12):", 1..=12, default_month)?;
+    let year = prompt_u32_in_range(prompter, "Invoice year:", 2000..=2099, default_year)?;
 
     Ok(InvoicePeriod::new(month, year).unwrap())
 }
