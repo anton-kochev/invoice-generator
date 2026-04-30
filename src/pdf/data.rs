@@ -114,7 +114,7 @@ impl<'a> InvoiceData<'a> {
                 period: locale.format_period(period_month, period_year),
                 date: locale.format_date(summary.invoice_date),
                 due_date: locale.format_date(summary.due_date),
-                currency: summary.currency.clone(),
+                currency: summary.currency.to_string(),
                 line_items: summary
                     .line_items
                     .iter()
@@ -179,10 +179,10 @@ mod tests {
             period: InvoicePeriod::new(3, 2026).unwrap(),
             invoice_date: Date::from_calendar_date(2026, Month::April, 9).unwrap(),
             due_date: Date::from_calendar_date(2026, Month::May, 9).unwrap(),
-            currency: "EUR".into(),
+            currency: crate::domain::Currency::Eur,
             line_items: vec![
-                LineItem::new("Software development".into(), 10.0, 800.0, "EUR".into()),
-                LineItem::new("Technical consulting".into(), 5.0, 1000.0, "EUR".into()),
+                LineItem::new("Software development".into(), 10.0, 800.0, crate::domain::Currency::Eur),
+                LineItem::new("Technical consulting".into(), 5.0, 1000.0, crate::domain::Currency::Eur),
             ],
             subtotal: 13000.0,
             tax_total: 0.0,
@@ -287,13 +287,13 @@ mod tests {
             period: InvoicePeriod::new(3, 2026).unwrap(),
             invoice_date: Date::from_calendar_date(2026, Month::April, 9).unwrap(),
             due_date: Date::from_calendar_date(2026, Month::May, 9).unwrap(),
-            currency: "EUR".into(),
+            currency: crate::domain::Currency::Eur,
             line_items: vec![
                 LineItem::with_tax(
                     "Software development".into(),
                     10.0,
                     800.0,
-                    "EUR".into(),
+                    crate::domain::Currency::Eur,
                     21.0,
                 ),
             ],

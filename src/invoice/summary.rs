@@ -73,10 +73,11 @@ pub fn build_summary(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::Currency;
 
     fn make_defaults() -> Defaults {
         Defaults {
-            currency: "EUR".into(),
+            currency: Currency::Eur,
             invoice_date_day: 9,
             payment_terms_days: 30,
             ..Defaults::default()
@@ -85,8 +86,8 @@ mod tests {
 
     fn make_items() -> Vec<LineItem> {
         vec![
-            LineItem::new("Software development".into(), 10.0, 800.0, "EUR".into()),
-            LineItem::new("Technical consulting".into(), 5.0, 1000.0, "EUR".into()),
+            LineItem::new("Software development".into(), 10.0, 800.0, Currency::Eur),
+            LineItem::new("Technical consulting".into(), 5.0, 1000.0, Currency::Eur),
         ]
     }
 
@@ -272,7 +273,7 @@ mod tests {
         // Arrange
         let period = InvoicePeriod::new(3, 2026).unwrap();
         let defaults = Defaults {
-            currency: "EUR".into(),
+            currency: Currency::Eur,
             invoice_date_day: 9,
             payment_terms_days: 14,
             ..Defaults::default()
@@ -294,7 +295,7 @@ mod tests {
     fn build_summary_total_single_item() {
         // Arrange
         let period = InvoicePeriod::new(3, 2026).unwrap();
-        let items = vec![LineItem::new("Dev".into(), 10.0, 800.0, "EUR".into())];
+        let items = vec![LineItem::new("Dev".into(), 10.0, 800.0, Currency::Eur)];
 
         // Act
         let summary = build_summary(period, items, &make_defaults()).unwrap();
@@ -321,8 +322,8 @@ mod tests {
         // Arrange
         let period = InvoicePeriod::new(3, 2026).unwrap();
         let items = vec![
-            LineItem::new("A".into(), 1.0, 33.33, "EUR".into()),
-            LineItem::new("B".into(), 1.0, 66.67, "EUR".into()),
+            LineItem::new("A".into(), 1.0, 33.33, Currency::Eur),
+            LineItem::new("B".into(), 1.0, 66.67, Currency::Eur),
         ];
 
         // Act
@@ -337,7 +338,7 @@ mod tests {
         // Arrange
         let period = InvoicePeriod::new(3, 2026).unwrap();
         let defaults = Defaults {
-            currency: "USD".into(),
+            currency: Currency::Usd,
             invoice_date_day: 9,
             payment_terms_days: 30,
             ..Defaults::default()
@@ -346,13 +347,13 @@ mod tests {
         // Act
         let summary = build_summary(
             period,
-            vec![LineItem::new("Dev".into(), 1.0, 100.0, "EUR".into())],
+            vec![LineItem::new("Dev".into(), 1.0, 100.0, Currency::Eur)],
             &defaults,
         )
         .unwrap();
 
         // Assert — currency comes from line items, not defaults
-        assert_eq!(summary.currency, "EUR");
+        assert_eq!(summary.currency, Currency::Eur);
     }
 
     #[test]
@@ -363,7 +364,7 @@ mod tests {
         // Act
         let summary = build_summary(
             period,
-            vec![LineItem::new("Dev".into(), 1.0, 100.0, "EUR".into())],
+            vec![LineItem::new("Dev".into(), 1.0, 100.0, Currency::Eur)],
             &make_defaults(),
         )
         .unwrap();
@@ -374,21 +375,21 @@ mod tests {
 
     #[test]
     fn build_summary_derives_currency_from_line_items() {
-        // Arrange
+        // Arrange — UAH replaces the old CZK fixture (closed Currency enum).
         let period = InvoicePeriod::new(3, 2026).unwrap();
         let defaults = Defaults {
-            currency: "EUR".into(),
+            currency: Currency::Eur,
             invoice_date_day: 9,
             payment_terms_days: 30,
             ..Defaults::default()
         };
-        let items = vec![LineItem::new("Dev".into(), 10.0, 800.0, "CZK".into())];
+        let items = vec![LineItem::new("Dev".into(), 10.0, 800.0, Currency::Uah)];
 
         // Act
         let summary = build_summary(period, items, &defaults).unwrap();
 
         // Assert — currency comes from items, not defaults
-        assert_eq!(summary.currency, "CZK");
+        assert_eq!(summary.currency, Currency::Uah);
     }
 
     #[test]
@@ -396,15 +397,15 @@ mod tests {
         // Arrange
         let period = InvoicePeriod::new(3, 2026).unwrap();
         let items = vec![
-            LineItem::new("Dev".into(), 10.0, 800.0, "EUR".into()),
-            LineItem::new("QA".into(), 5.0, 600.0, "USD".into()),
+            LineItem::new("Dev".into(), 10.0, 800.0, Currency::Eur),
+            LineItem::new("QA".into(), 5.0, 600.0, Currency::Usd),
         ];
 
         // Act
         let result = build_summary(period, items, &make_defaults());
 
         // Assert
-        assert!(matches!(result, Err(crate::error::AppError::MixedCurrency(_))));
+        assert!(matches!(result, Err(crate::error::AppError::MixedCurrency { .. })));
     }
 
     // --- subtotal / tax_total tests ---
@@ -440,8 +441,8 @@ mod tests {
         // Arrange
         let period = InvoicePeriod::new(3, 2026).unwrap();
         let items = vec![
-            LineItem::with_tax("Dev".into(), 10.0, 800.0, "EUR".into(), 21.0),
-            LineItem::with_tax("QA".into(), 5.0, 1000.0, "EUR".into(), 21.0),
+            LineItem::with_tax("Dev".into(), 10.0, 800.0, Currency::Eur, 21.0),
+            LineItem::with_tax("QA".into(), 5.0, 1000.0, Currency::Eur, 21.0),
         ];
 
         // Act
@@ -456,8 +457,8 @@ mod tests {
         // Arrange
         let period = InvoicePeriod::new(3, 2026).unwrap();
         let items = vec![
-            LineItem::with_tax("Dev".into(), 10.0, 800.0, "EUR".into(), 21.0),
-            LineItem::with_tax("QA".into(), 5.0, 1000.0, "EUR".into(), 21.0),
+            LineItem::with_tax("Dev".into(), 10.0, 800.0, Currency::Eur, 21.0),
+            LineItem::with_tax("QA".into(), 5.0, 1000.0, Currency::Eur, 21.0),
         ];
 
         // Act
@@ -472,8 +473,8 @@ mod tests {
         // Arrange
         let period = InvoicePeriod::new(3, 2026).unwrap();
         let items = vec![
-            LineItem::with_tax("Dev".into(), 10.0, 800.0, "EUR".into(), 21.0),
-            LineItem::with_tax("QA".into(), 5.0, 1000.0, "EUR".into(), 21.0),
+            LineItem::with_tax("Dev".into(), 10.0, 800.0, Currency::Eur, 21.0),
+            LineItem::with_tax("QA".into(), 5.0, 1000.0, Currency::Eur, 21.0),
         ];
 
         // Act
@@ -489,8 +490,8 @@ mod tests {
         // Arrange
         let period = InvoicePeriod::new(3, 2026).unwrap();
         let items = vec![
-            LineItem::with_tax("Dev".into(), 10.0, 800.0, "EUR".into(), 21.0),
-            LineItem::new("Admin".into(), 2.0, 500.0, "EUR".into()),
+            LineItem::with_tax("Dev".into(), 10.0, 800.0, Currency::Eur, 21.0),
+            LineItem::new("Admin".into(), 2.0, 500.0, Currency::Eur),
         ];
 
         // Act
@@ -514,8 +515,8 @@ mod tests {
         // item2: 1 day * 66.67 = 66.67, tax at 10% = 6.667 -> 6.67
         // tax_total = round(3.33 + 6.67) = round(10.0) = 10.0
         let items = vec![
-            LineItem::with_tax("A".into(), 1.0, 33.33, "EUR".into(), 10.0),
-            LineItem::with_tax("B".into(), 1.0, 66.67, "EUR".into(), 10.0),
+            LineItem::with_tax("A".into(), 1.0, 33.33, Currency::Eur, 10.0),
+            LineItem::with_tax("B".into(), 1.0, 66.67, Currency::Eur, 10.0),
         ];
 
         // Act

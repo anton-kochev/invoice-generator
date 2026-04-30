@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use crate::config::types::{Preset, Recipient, TemplateKey};
 use crate::config::validator::ValidatedConfig;
+use crate::domain::Currency;
 use crate::error::AppError;
 use crate::locale::Locale;
 use crate::invoice::summary::build_summary;
@@ -67,7 +68,7 @@ fn parse_items(json: &str) -> Result<Vec<ItemSpec>, AppError> {
 }
 
 /// Resolve CLI arguments into concrete `LineItem`s using the config's presets.
-fn resolve_line_items(args: &GenerateArgs, presets: &[Preset], default_currency: &str) -> Result<Vec<LineItem>, AppError> {
+fn resolve_line_items(args: &GenerateArgs, presets: &[Preset], default_currency: Currency) -> Result<Vec<LineItem>, AppError> {
     if let Some(ref json) = args.items {
         // Multi-item mode: --items JSON
         let specs = parse_items(json)?;
@@ -76,7 +77,7 @@ fn resolve_line_items(args: &GenerateArgs, presets: &[Preset], default_currency:
             .map(|spec| {
                 let preset = find_preset(&spec.preset, presets)?;
                 let rate = spec.rate.unwrap_or(preset.default_rate);
-                let currency = effective_currency(preset, default_currency).to_string();
+                let currency = effective_currency(preset, default_currency);
                 let tax_rate = spec.tax_rate.or(preset.tax_rate).unwrap_or(0.0);
                 let item = if tax_rate > 0.0 {
                     LineItem::with_tax(preset.description.clone(), spec.days, rate, currency, tax_rate)
@@ -92,7 +93,7 @@ fn resolve_line_items(args: &GenerateArgs, presets: &[Preset], default_currency:
         let days = args.days.expect("clap enforces days with preset");
         validate_days(days)?;
         let preset = find_preset(key, presets)?;
-        let currency = effective_currency(preset, default_currency).to_string();
+        let currency = effective_currency(preset, default_currency);
         let tax_rate = preset.tax_rate.unwrap_or(0.0);
         let item = if tax_rate > 0.0 {
             LineItem::with_tax(preset.description.clone(), days, preset.default_rate, currency, tax_rate)
@@ -149,7 +150,7 @@ pub fn handle_generate(
         None => validated.template,
     };
     let period = validate_period(args.month, args.year)?;
-    let line_items = resolve_line_items(args, &validated.presets, &validated.defaults.currency)?;
+    let line_items = resolve_line_items(args, &validated.presets, validated.defaults.currency)?;
     let locale = match args.locale.as_deref() {
         Some(code) => match Locale::from_str(code) {
             Ok(l) => l,
@@ -630,7 +631,7 @@ mod tests {
 
     // ── Phase 9: Currency wiring tests ──
 
-    fn config_with_currency_presets(entries: &[(&str, f64, Option<&str>)]) -> crate::config::types::Config {
+    fn config_with_currency_presets(entries: &[(&str, f64, Option<Currency>)]) -> crate::config::types::Config {
         use crate::config::types::{Config, Preset};
         use crate::domain::PresetKey;
         let presets: Vec<Preset> = entries
@@ -639,7 +640,7 @@ mod tests {
                 key: PresetKey::try_new(*key).unwrap(),
                 description: format!("{key} services"),
                 default_rate: *rate,
-                currency: currency.map(|c| c.to_string()),
+                currency: *currency,
                 tax_rate: None,
             })
             .collect();
@@ -651,8 +652,8 @@ mod tests {
 
     #[test]
     fn test_handle_generate_single_item_preset_currency_override() {
-        // Arrange
-        let config = config_with_currency_presets(&[("dev", 800.0, Some("CZK"))]);
+        // Arrange — UAH replaces the old CZK fixture (closed Currency enum).
+        let config = config_with_currency_presets(&[("dev", 800.0, Some(Currency::Uah))]);
         let dir = setup_dir(Some(&config));
         let args = generate_single_args(3, 2026, "dev", 10.0);
         let mut buf: Vec<u8> = Vec::new();
@@ -669,7 +670,7 @@ mod tests {
     #[test]
     fn test_handle_generate_items_mixed_currency_returns_error() {
         // Arrange
-        let config = config_with_currency_presets(&[("alpha", 800.0, Some("EUR")), ("beta", 500.0, Some("USD"))]);
+        let config = config_with_currency_presets(&[("alpha", 800.0, Some(Currency::Eur)), ("beta", 500.0, Some(Currency::Usd))]);
         let dir = setup_dir(Some(&config));
         let json = r#"[{"preset":"alpha","days":10},{"preset":"beta","days":5}]"#;
         let args = generate_items_args(3, 2026, json);
@@ -679,7 +680,7 @@ mod tests {
         let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
-        assert!(matches!(result, Err(AppError::MixedCurrency(_))));
+        assert!(matches!(result, Err(AppError::MixedCurrency { .. })));
     }
 
     fn config_with_tax_presets(entries: &[(&str, f64, Option<f64>)]) -> crate::config::types::Config {
@@ -825,7 +826,7 @@ mod tests {
     #[test]
     fn test_handle_generate_items_same_override_currency_succeeds() {
         // Arrange
-        let config = config_with_currency_presets(&[("alpha", 800.0, Some("USD")), ("beta", 500.0, Some("USD"))]);
+        let config = config_with_currency_presets(&[("alpha", 800.0, Some(Currency::Usd)), ("beta", 500.0, Some(Currency::Usd))]);
         let dir = setup_dir(Some(&config));
         let json = r#"[{"preset":"alpha","days":10},{"preset":"beta","days":5}]"#;
         let args = generate_items_args(3, 2026, json);

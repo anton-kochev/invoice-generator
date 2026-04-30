@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-use crate::domain::{HexColor, Iban, PresetKey, RecipientKey};
+use crate::domain::{Currency, HexColor, Iban, PresetKey, RecipientKey};
 use crate::error::AppError;
 use crate::locale::Locale;
 
@@ -158,14 +158,15 @@ pub struct Preset {
     pub key: PresetKey,
     pub description: String,
     pub default_rate: f64,
+    /// Per-preset currency override (validated to be USD/EUR/UAH at deserialize-time).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub currency: Option<String>,
+    pub currency: Option<Currency>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tax_rate: Option<f64>,
 }
 
-fn default_currency() -> String {
-    "EUR".to_string()
+fn default_currency() -> Currency {
+    Currency::Eur
 }
 
 const fn default_invoice_date_day() -> u32 {
@@ -179,8 +180,9 @@ const fn default_payment_terms_days() -> u32 {
 /// Default values applied to new invoices.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Defaults {
+    /// Default currency for line items (validated to USD/EUR/UAH at deserialize-time).
     #[serde(default = "default_currency")]
-    pub currency: String,
+    pub currency: Currency,
     #[serde(default = "default_invoice_date_day")]
     pub invoice_date_day: u32,
     #[serde(default = "default_payment_terms_days")]
@@ -300,7 +302,7 @@ mod tests {
         let preset: Preset = serde_yaml::from_str(yaml).unwrap();
 
         // Assert
-        assert_eq!(preset.currency, Some("USD".into()));
+        assert_eq!(preset.currency, Some(Currency::Usd));
     }
 
     #[test]
@@ -323,12 +325,13 @@ mod tests {
 
     #[test]
     fn test_preset_with_currency_round_trips() {
-        // Arrange
+        // Arrange — UAH replaces the old CZK fixture: only USD/EUR/UAH are
+        // accepted by the closed `Currency` enum.
         let preset = Preset {
             key: PresetKey::try_new("dev").unwrap(),
             description: "Development".into(),
             default_rate: 800.0,
-            currency: Some("CZK".into()),
+            currency: Some(Currency::Uah),
             tax_rate: None,
         };
 
@@ -337,7 +340,20 @@ mod tests {
         let loaded: Preset = serde_yaml::from_str(&yaml).unwrap();
 
         // Assert
-        assert_eq!(loaded.currency, Some("CZK".into()));
+        assert_eq!(loaded.currency, Some(Currency::Uah));
+    }
+
+    #[test]
+    fn test_preset_with_unsupported_currency_rejected_at_deserialize() {
+        // Arrange — CZK was previously accepted as a free-form string but is
+        // now rejected by the closed `Currency` enum at parse time.
+        let yaml = "key: dev\ndescription: Development\ndefault_rate: 800.0\ncurrency: CZK\n";
+
+        // Act
+        let result: Result<Preset, _> = serde_yaml::from_str(yaml);
+
+        // Assert
+        assert!(result.is_err(), "Expected deserialize failure for CZK");
     }
 
     #[test]

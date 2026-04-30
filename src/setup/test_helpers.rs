@@ -49,7 +49,7 @@ pub fn synthetic_presets() -> Vec<Preset> {
 
 pub fn synthetic_defaults() -> Defaults {
     Defaults {
-        currency: "USD".into(),
+        currency: crate::domain::Currency::Usd,
         invoice_date_day: 5,
         payment_terms_days: 14,
         template: TemplateKey::Leda,

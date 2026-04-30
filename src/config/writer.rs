@@ -296,7 +296,7 @@ mod tests {
 
     fn synthetic_defaults() -> Defaults {
         Defaults {
-            currency: "USD".to_string(),
+            currency: crate::domain::Currency::Usd,
             invoice_date_day: 5,
             payment_terms_days: 14,
             ..Defaults::default()

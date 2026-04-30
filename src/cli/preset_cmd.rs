@@ -5,6 +5,7 @@ use crate::config::loader::{load_config, LoadResult};
 use crate::config::types::Preset;
 use crate::config::validator::ValidatedConfig;
 use crate::config::writer::remove_preset;
+use crate::domain::Currency;
 use crate::error::AppError;
 use crate::invoice::currency::effective_currency;
 use crate::setup::prompter::Prompter;
@@ -13,7 +14,7 @@ use crate::setup::prompter::Prompter;
 ///
 /// Dynamic column widths based on data (minimum widths: Key=3, Description=11, Rate=12).
 /// Rate is formatted with 2 decimal places and right-aligned.
-pub fn format_preset_table(presets: &[Preset], default_currency: &str) -> String {
+pub fn format_preset_table(presets: &[Preset], default_currency: Currency) -> String {
     let min_key = 3;
     let min_desc = 11;
     let min_rate = 12;
@@ -38,7 +39,7 @@ pub fn format_preset_table(presets: &[Preset], default_currency: &str) -> String
         .max(min_rate);
     let curr_w = presets
         .iter()
-        .map(|p| effective_currency(p, default_currency).len())
+        .map(|p| effective_currency(p, default_currency).code().len())
         .max()
         .unwrap_or(0)
         .max(8); // "Currency".len()
@@ -77,7 +78,7 @@ pub fn handle_preset_list(
     validated: &ValidatedConfig,
     writer: &mut dyn Write,
 ) -> Result<(), AppError> {
-    let table = format_preset_table(&validated.presets, &validated.defaults.currency);
+    let table = format_preset_table(&validated.presets, validated.defaults.currency);
     writer.write_all(table.as_bytes())?;
     Ok(())
 }
@@ -145,7 +146,7 @@ mod tests {
         let presets = vec![dev_preset()];
 
         // Act
-        let output = format_preset_table(&presets, "EUR");
+        let output = format_preset_table(&presets, Currency::Eur);
 
         // Assert
         assert!(output.contains("Key"), "Missing 'Key' header");
@@ -160,7 +161,7 @@ mod tests {
         let presets = vec![dev_preset()];
 
         // Act
-        let output = format_preset_table(&presets, "EUR");
+        let output = format_preset_table(&presets, Currency::Eur);
 
         // Assert
         assert!(output.contains("dev"), "Missing key 'dev'");
@@ -178,7 +179,7 @@ mod tests {
         let presets = vec![dev_preset()];
 
         // Act
-        let output = format_preset_table(&presets, "USD");
+        let output = format_preset_table(&presets, Currency::Usd);
 
         // Assert
         assert!(output.contains("USD"), "Missing currency 'USD'");
@@ -199,7 +200,7 @@ mod tests {
         ];
 
         // Act
-        let output = format_preset_table(&presets, "EUR");
+        let output = format_preset_table(&presets, Currency::Eur);
 
         // Assert
         assert!(output.contains("dev"), "Missing 'dev'");
@@ -212,7 +213,7 @@ mod tests {
         let presets: Vec<Preset> = vec![];
 
         // Act
-        let output = format_preset_table(&presets, "EUR");
+        let output = format_preset_table(&presets, Currency::Eur);
 
         // Assert
         assert!(output.contains("Key"), "Missing header in empty table");
@@ -232,7 +233,7 @@ mod tests {
         }];
 
         // Act
-        let output = format_preset_table(&presets, "EUR");
+        let output = format_preset_table(&presets, Currency::Eur);
 
         // Assert
         assert!(
@@ -270,7 +271,7 @@ mod tests {
             "Missing description"
         );
         assert!(
-            output.contains(&validated.defaults.currency),
+            output.contains(validated.defaults.currency.code()),
             "Missing currency"
         );
     }
@@ -411,24 +412,24 @@ mod tests {
 
     #[test]
     fn test_format_preset_table_shows_per_preset_currency() {
-        // Arrange
+        // Arrange — UAH replaces the old CZK fixture (closed Currency enum).
         let presets = vec![Preset {
             key: crate::domain::PresetKey::try_new("dev").unwrap(),
             description: "Development".into(),
             default_rate: 800.0,
-            currency: Some("CZK".into()),
+            currency: Some(Currency::Uah),
             tax_rate: None,
         }];
 
         // Act
-        let table = format_preset_table(&presets, "EUR");
+        let table = format_preset_table(&presets, Currency::Eur);
 
         // Assert
-        assert!(table.contains("CZK"), "Expected 'CZK' in table:\n{table}");
+        assert!(table.contains("UAH"), "Expected 'UAH' in table:\n{table}");
         // Should NOT show the default EUR for this preset
         let data_lines: Vec<&str> = table.lines().skip(2).collect(); // skip header + separator
         let dev_line = data_lines.iter().find(|l| l.contains("dev")).unwrap();
-        assert!(dev_line.contains("CZK"), "Dev row should show CZK: {dev_line}");
+        assert!(dev_line.contains("UAH"), "Dev row should show UAH: {dev_line}");
     }
 
     #[test]
@@ -443,7 +444,7 @@ mod tests {
         }];
 
         // Act
-        let table = format_preset_table(&presets, "EUR");
+        let table = format_preset_table(&presets, Currency::Eur);
 
         // Assert
         let data_lines: Vec<&str> = table.lines().skip(2).collect();
@@ -459,7 +460,7 @@ mod tests {
                 key: crate::domain::PresetKey::try_new("dev").unwrap(),
                 description: "Development".into(),
                 default_rate: 800.0,
-                currency: Some("USD".into()),
+                currency: Some(Currency::Usd),
                 tax_rate: None,
             },
             Preset {
@@ -472,7 +473,7 @@ mod tests {
         ];
 
         // Act
-        let table = format_preset_table(&presets, "EUR");
+        let table = format_preset_table(&presets, Currency::Eur);
 
         // Assert
         let data_lines: Vec<&str> = table.lines().skip(2).collect();

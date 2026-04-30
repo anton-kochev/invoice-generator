@@ -3,6 +3,7 @@ use std::str::FromStr;
 
 use crate::config::types::{Config, Defaults, TemplateKey};
 use crate::config::writer::save_config;
+use crate::domain::Currency;
 use crate::error::AppError;
 use crate::locale::Locale;
 use super::prompter::Prompter;
@@ -16,7 +17,16 @@ pub fn collect_defaults(
 ) -> Result<(), AppError> {
     prompter.message("\n--- Defaults ---\n");
 
-    let currency = prompter.text_with_default("Currency:", "EUR")?;
+    let currency = prompt_parsed(
+        prompter,
+        |p| p.text_with_default("Currency:", "EUR"),
+        |input: String| {
+            Currency::from_str(&input).map_err(|_| {
+                let list: Vec<&str> = Currency::ALL.iter().map(|c| c.code()).collect();
+                format!("Unsupported currency. Available: {}", list.join(", "))
+            })
+        },
+    )?;
     let invoice_date_day = prompter.u32_with_default("Invoice date (day of month):", 9)?;
     let payment_terms_days = prompter.u32_with_default("Payment terms (days):", 30)?;
 
@@ -84,7 +94,7 @@ mod tests {
 
         // Assert
         let defaults = config.defaults.as_ref().unwrap();
-        assert_eq!(defaults.currency, "EUR");
+        assert_eq!(defaults.currency, Currency::Eur);
         assert_eq!(defaults.invoice_date_day, 9);
         assert_eq!(defaults.payment_terms_days, 30);
         prompter.assert_exhausted();
@@ -108,7 +118,7 @@ mod tests {
 
         // Assert
         let defaults = config.defaults.unwrap();
-        assert_eq!(defaults.currency, "USD");
+        assert_eq!(defaults.currency, Currency::Usd);
         assert_eq!(defaults.invoice_date_day, 15);
         assert_eq!(defaults.payment_terms_days, 14);
         prompter.assert_exhausted();
@@ -116,11 +126,11 @@ mod tests {
 
     #[test]
     fn test_collect_defaults_persists_to_disk() {
-        // Arrange
+        // Arrange — UAH replaces the old CHF fixture (closed Currency enum).
         let dir = setup_dir(None);
         let mut config = empty_config();
         let prompter = MockPrompter::new(vec![
-            MockResponse::Text("CHF".into()),
+            MockResponse::Text("UAH".into()),
             MockResponse::U32(1),
             MockResponse::U32(60),
             MockResponse::Text("leda".into()),
@@ -133,9 +143,37 @@ mod tests {
         // Assert
         let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let defaults = loaded.defaults.unwrap();
-        assert_eq!(defaults.currency, "CHF");
+        assert_eq!(defaults.currency, Currency::Uah);
         assert_eq!(defaults.invoice_date_day, 1);
         assert_eq!(defaults.payment_terms_days, 60);
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_collect_defaults_unsupported_currency_reprompts() {
+        // Arrange — CHF is no longer supported; user is reprompted until a valid one.
+        let dir = setup_dir(None);
+        let mut config = empty_config();
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("CHF".into()),  // rejected
+            MockResponse::Text("EUR".into()),  // accepted
+            MockResponse::U32(9),
+            MockResponse::U32(30),
+            MockResponse::Text("leda".into()),
+            MockResponse::Text("en-US".into()),
+        ]);
+
+        // Act
+        collect_defaults(&prompter, &mut config, &cfg_path(&dir)).unwrap();
+
+        // Assert
+        let defaults = config.defaults.as_ref().unwrap();
+        assert_eq!(defaults.currency, Currency::Eur);
+        let messages = prompter.messages.borrow();
+        assert!(
+            messages.iter().any(|m| m.contains("Unsupported currency")),
+            "Expected 'Unsupported currency' message, got: {messages:?}"
+        );
         prompter.assert_exhausted();
     }
 

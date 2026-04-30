@@ -2,6 +2,7 @@ use std::path::Path;
 
 use crate::config::types::Preset;
 use crate::config::writer::append_preset;
+use crate::domain::Currency;
 use crate::error::AppError;
 use crate::setup::prompter::Prompter;
 
@@ -14,7 +15,7 @@ use super::types::{LineItem, PresetSelection};
 pub fn collect_all_line_items(
     prompter: &dyn Prompter,
     presets: &[Preset],
-    default_currency: &str,
+    default_currency: Currency,
     config_path: &Path,
 ) -> Result<Vec<LineItem>, AppError> {
     let mut items = Vec::new();
@@ -59,7 +60,7 @@ pub fn collect_line_item_details(
     prompter: &dyn Prompter,
     preset: &Preset,
     item_number: u32,
-    currency: &str,
+    currency: Currency,
 ) -> Result<LineItem, AppError> {
     prompter.message(&format!(
         "\nLine item #{}: {}",
@@ -81,9 +82,9 @@ pub fn collect_line_item_details(
     };
 
     let item = if tax_rate > 0.0 {
-        LineItem::with_tax(preset.description.clone(), days, rate, currency.to_string(), tax_rate)
+        LineItem::with_tax(preset.description.clone(), days, rate, currency, tax_rate)
     } else {
-        LineItem::new(preset.description.clone(), days, rate, currency.to_string())
+        LineItem::new(preset.description.clone(), days, rate, currency)
     };
 
     prompter.message(&format!(
@@ -103,7 +104,7 @@ mod tests {
     use super::*;
     use crate::config::types::{Config, Defaults, PaymentMethod, Recipient, Sender};
     use crate::config::writer::save_config;
-    use crate::domain::PresetKey;
+    use crate::domain::{Currency, PresetKey};
     use crate::setup::mock_prompter::{MockPrompter, MockResponse};
     use std::path::PathBuf;
     use tempfile::TempDir;
@@ -142,7 +143,7 @@ mod tests {
                 tax_rate: None,
             }]),
             defaults: Some(Defaults {
-                currency: "EUR".into(),
+                currency: Currency::Eur,
                 invoice_date_day: 9,
                 payment_terms_days: 30,
                 ..Defaults::default()
@@ -192,7 +193,7 @@ mod tests {
         ]);
 
         // Act
-        let _ = collect_line_item_details(&prompter, &preset, 1, "EUR").unwrap();
+        let _ = collect_line_item_details(&prompter, &preset, 1, Currency::Eur).unwrap();
 
         // Assert
         let messages = prompter.messages.borrow();
@@ -210,7 +211,7 @@ mod tests {
         ]);
 
         // Act
-        let item = collect_line_item_details(&prompter, &preset, 1, "EUR").unwrap();
+        let item = collect_line_item_details(&prompter, &preset, 1, Currency::Eur).unwrap();
 
         // Assert
         assert!((item.days - 10.0).abs() < f64::EPSILON);
@@ -229,7 +230,7 @@ mod tests {
         ]);
 
         // Act
-        let item = collect_line_item_details(&prompter, &preset, 1, "EUR").unwrap();
+        let item = collect_line_item_details(&prompter, &preset, 1, Currency::Eur).unwrap();
 
         // Assert
         assert!((item.days - 5.0).abs() < f64::EPSILON);
@@ -248,7 +249,7 @@ mod tests {
         ]);
 
         // Act
-        let item = collect_line_item_details(&prompter, &preset, 1, "EUR").unwrap();
+        let item = collect_line_item_details(&prompter, &preset, 1, Currency::Eur).unwrap();
 
         // Assert
         assert!((item.amount - 1234.0).abs() < f64::EPSILON);
@@ -264,7 +265,7 @@ mod tests {
         ]);
 
         // Act
-        let _ = collect_line_item_details(&prompter, &preset, 1, "EUR").unwrap();
+        let _ = collect_line_item_details(&prompter, &preset, 1, Currency::Eur).unwrap();
 
         // Assert
         let messages = prompter.messages.borrow();
@@ -281,7 +282,7 @@ mod tests {
         ]);
 
         // Act
-        let item = collect_line_item_details(&prompter, &preset, 1, "EUR").unwrap();
+        let item = collect_line_item_details(&prompter, &preset, 1, Currency::Eur).unwrap();
 
         // Assert
         assert_eq!(item.description, "Software development");
@@ -297,7 +298,7 @@ mod tests {
         ]);
 
         // Act
-        let _ = collect_line_item_details(&prompter, &preset, 3, "EUR").unwrap();
+        let _ = collect_line_item_details(&prompter, &preset, 3, Currency::Eur).unwrap();
 
         // Assert
         let messages = prompter.messages.borrow();
@@ -319,7 +320,7 @@ mod tests {
         ]);
 
         // Act
-        let items = collect_all_line_items(&prompter, &presets, "EUR", &cfg_path(&dir)).unwrap();
+        let items = collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
 
         // Assert
         assert_eq!(items.len(), 1);
@@ -344,7 +345,7 @@ mod tests {
         ]);
 
         // Act
-        let items = collect_all_line_items(&prompter, &presets, "EUR", &cfg_path(&dir)).unwrap();
+        let items = collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
 
         // Assert
         assert_eq!(items.len(), 2);
@@ -365,7 +366,7 @@ mod tests {
         ]);
 
         // Act
-        let items = collect_all_line_items(&prompter, &presets, "EUR", &cfg_path(&dir)).unwrap();
+        let items = collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
 
         // Assert
         assert_eq!(items.len(), 3);
@@ -386,7 +387,7 @@ mod tests {
         ]);
 
         // Act
-        let _ = collect_all_line_items(&prompter, &presets, "EUR", &cfg_path(&dir)).unwrap();
+        let _ = collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
 
         // Assert
         let messages = prompter.messages.borrow();
@@ -406,7 +407,7 @@ mod tests {
         ]);
 
         // Act
-        let items = collect_all_line_items(&prompter, &presets, "EUR", &cfg_path(&dir)).unwrap();
+        let items = collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
 
         // Assert
         assert_eq!(items[0].description, "Software development");
@@ -429,7 +430,7 @@ mod tests {
         ]);
 
         // Act
-        let items = collect_all_line_items(&prompter, &presets, "EUR", &cfg_path(&dir)).unwrap();
+        let items = collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
 
         // Assert
         assert_eq!(items.len(), 1);
@@ -466,7 +467,7 @@ mod tests {
         ]);
 
         // Act
-        let items = collect_all_line_items(&prompter, &presets, "EUR", &cfg_path(&dir)).unwrap();
+        let items = collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
 
         // Assert
         assert_eq!(items.len(), 2);
@@ -497,7 +498,7 @@ mod tests {
         ]);
 
         // Act
-        let items = collect_all_line_items(&prompter, &presets, "EUR", &cfg_path(&dir)).unwrap();
+        let items = collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
 
         // Assert
         assert_eq!(items.len(), 2);
@@ -524,7 +525,7 @@ mod tests {
         ]);
 
         // Act
-        collect_all_line_items(&prompter, &presets, "EUR", &cfg_path(&dir)).unwrap();
+        collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
 
         // Assert — verify preset was persisted to disk
         use crate::config::loader::{load_config, LoadResult};
@@ -553,7 +554,7 @@ mod tests {
         ]);
 
         // Act
-        collect_all_line_items(&prompter, &presets, "EUR", &cfg_path(&dir)).unwrap();
+        collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
 
         // Assert — original "dev" preset still present
         use crate::config::loader::{load_config, LoadResult};
@@ -577,7 +578,7 @@ mod tests {
         ]);
 
         // Act
-        let items = collect_all_line_items(&prompter, &presets, "EUR", &cfg_path(&dir)).unwrap();
+        let items = collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
 
         // Assert
         assert!((items[0].amount - 10000.0).abs() < f64::EPSILON);
@@ -586,12 +587,12 @@ mod tests {
 
     #[test]
     fn collect_line_item_uses_preset_effective_currency() {
-        // Arrange
+        // Arrange — UAH replaces the old CZK fixture (closed Currency enum).
         let preset = Preset {
             key: PresetKey::try_new("dev").unwrap(),
             description: "Software development".into(),
             default_rate: 800.0,
-            currency: Some("CZK".into()),
+            currency: Some(Currency::Uah),
             tax_rate: None,
         };
         let prompter = MockPrompter::new(vec![
@@ -600,10 +601,10 @@ mod tests {
         ]);
 
         // Act
-        let item = collect_line_item_details(&prompter, &preset, 1, "CZK").unwrap();
+        let item = collect_line_item_details(&prompter, &preset, 1, Currency::Uah).unwrap();
 
         // Assert
-        assert_eq!(item.currency, "CZK");
+        assert_eq!(item.currency, Currency::Uah);
         prompter.assert_exhausted();
     }
 
@@ -625,7 +626,7 @@ mod tests {
         ]);
 
         // Act
-        let item = collect_line_item_details(&prompter, &preset, 1, "EUR").unwrap();
+        let item = collect_line_item_details(&prompter, &preset, 1, Currency::Eur).unwrap();
 
         // Assert
         assert!((item.tax_rate - 0.0).abs() < f64::EPSILON);
@@ -649,7 +650,7 @@ mod tests {
         ]);
 
         // Act
-        let item = collect_line_item_details(&prompter, &preset, 1, "EUR").unwrap();
+        let item = collect_line_item_details(&prompter, &preset, 1, Currency::Eur).unwrap();
 
         // Assert
         assert!((item.tax_rate - 0.0).abs() < f64::EPSILON);
@@ -673,7 +674,7 @@ mod tests {
         ]);
 
         // Act
-        let item = collect_line_item_details(&prompter, &preset, 1, "EUR").unwrap();
+        let item = collect_line_item_details(&prompter, &preset, 1, Currency::Eur).unwrap();
 
         // Assert
         assert!((item.tax_rate - 21.0).abs() < f64::EPSILON);
@@ -698,7 +699,7 @@ mod tests {
         ]);
 
         // Act
-        let item = collect_line_item_details(&prompter, &preset, 1, "EUR").unwrap();
+        let item = collect_line_item_details(&prompter, &preset, 1, Currency::Eur).unwrap();
 
         // Assert
         assert!((item.tax_rate - 0.0).abs() < f64::EPSILON);
@@ -722,7 +723,7 @@ mod tests {
         ]);
 
         // Act
-        let item = collect_line_item_details(&prompter, &preset, 1, "EUR").unwrap();
+        let item = collect_line_item_details(&prompter, &preset, 1, Currency::Eur).unwrap();
 
         // Assert
         assert!((item.tax_rate - 10.0).abs() < f64::EPSILON);
@@ -746,7 +747,7 @@ mod tests {
         ]);
 
         // Act
-        let _ = collect_line_item_details(&prompter, &preset, 1, "EUR").unwrap();
+        let _ = collect_line_item_details(&prompter, &preset, 1, Currency::Eur).unwrap();
 
         // Assert
         let messages = prompter.messages.borrow();
@@ -776,7 +777,7 @@ mod tests {
         ]);
 
         // Act
-        let items = collect_all_line_items(&prompter, &presets, "EUR", &cfg_path(&dir)).unwrap();
+        let items = collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
 
         // Assert
         assert_eq!(items.len(), 1);
@@ -817,7 +818,7 @@ mod tests {
         ]);
 
         // Act
-        let items = collect_all_line_items(&prompter, &presets, "EUR", &cfg_path(&dir)).unwrap();
+        let items = collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
 
         // Assert
         assert_eq!(items.len(), 2);
@@ -842,10 +843,10 @@ mod tests {
         ]);
 
         // Act
-        let item = collect_line_item_details(&prompter, &preset, 1, "EUR").unwrap();
+        let item = collect_line_item_details(&prompter, &preset, 1, Currency::Eur).unwrap();
 
         // Assert
-        assert_eq!(item.currency, "EUR");
+        assert_eq!(item.currency, Currency::Eur);
         prompter.assert_exhausted();
     }
 }

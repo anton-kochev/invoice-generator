@@ -70,9 +70,12 @@ pub enum AppError {
     #[error("Cannot delete — at least one recipient must exist.")]
     LastRecipient,
 
-    /// Line items have conflicting currencies.
-    #[error("Mixed currencies in line items: {0}")]
-    MixedCurrency(String),
+    /// Line items have conflicting currencies — first conflict reported.
+    #[error("Mixed currencies in line items: {first} and {second}")]
+    MixedCurrency {
+        first: crate::domain::Currency,
+        second: crate::domain::Currency,
+    },
 
     /// Invalid tax rate (must be >= 0).
     #[error("Invalid tax rate: {0} (must be >= 0)")]
@@ -172,7 +175,10 @@ mod tests {
     #[test]
     fn test_mixed_currency_error_displays_currencies() {
         // Arrange
-        let err = AppError::MixedCurrency("EUR, USD".into());
+        let err = AppError::MixedCurrency {
+            first: crate::domain::Currency::Eur,
+            second: crate::domain::Currency::Usd,
+        };
 
         // Act
         let msg = format!("{err}");

@@ -294,7 +294,7 @@ mod tests {
                 assert_eq!(v.recipient.key, Some(RecipientKey::try_new("bob-corp").unwrap()));
                 assert_eq!(v.payment.len(), 1);
                 assert_eq!(v.presets.len(), 1);
-                assert_eq!(v.defaults.currency, "EUR");
+                assert_eq!(v.defaults.currency, crate::domain::Currency::Eur);
             }
             ValidationOutcome::Incomplete { .. } => panic!("Expected Complete"),
         }
@@ -314,7 +314,7 @@ mod tests {
         // Assert
         match result {
             ValidationOutcome::Complete(v) => {
-                assert_eq!(v.defaults.currency, "EUR");
+                assert_eq!(v.defaults.currency, crate::domain::Currency::Eur);
                 assert_eq!(v.defaults.invoice_date_day, 9);
                 assert_eq!(v.defaults.payment_terms_days, 30);
             }

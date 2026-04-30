@@ -194,7 +194,7 @@ mod tests {
         // Assert — defaults collected even though not in missing
         assert!(config.defaults.is_some());
         let defaults = config.defaults.unwrap();
-        assert_eq!(defaults.currency, "EUR");
+        assert_eq!(defaults.currency, crate::domain::Currency::Eur);
         prompter.assert_exhausted();
     }
 }

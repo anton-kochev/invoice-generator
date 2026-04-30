@@ -94,7 +94,7 @@ pub fn run_invoice_flow(
         let line_items = invoice::line_item::collect_all_line_items(
             prompter,
             &presets,
-            &validated.defaults.currency,
+            validated.defaults.currency,
             config_path,
         )?;
 

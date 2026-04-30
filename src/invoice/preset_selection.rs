@@ -1,4 +1,5 @@
 use crate::config::types::Preset;
+use crate::domain::Currency;
 use crate::error::AppError;
 use crate::setup::prompter::Prompter;
 use crate::setup::prompts::prompt_u32_in_range;
@@ -13,7 +14,7 @@ use super::types::PresetSelection;
 pub fn select_preset(
     prompter: &dyn Prompter,
     presets: &[Preset],
-    currency: &str,
+    currency: Currency,
 ) -> Result<PresetSelection, AppError> {
     prompter.message("\nSelect a preset for this line item:\n");
 
@@ -73,7 +74,7 @@ mod tests {
         let prompter = MockPrompter::new(vec![MockResponse::U32(1)]);
 
         // Act
-        select_preset(&prompter, &presets, "EUR").unwrap();
+        select_preset(&prompter, &presets, Currency::Eur).unwrap();
 
         // Assert
         let messages = prompter.messages.borrow();
@@ -105,7 +106,7 @@ mod tests {
         let prompter = MockPrompter::new(vec![MockResponse::U32(1)]);
 
         // Act
-        select_preset(&prompter, &presets, "USD").unwrap();
+        select_preset(&prompter, &presets, Currency::Usd).unwrap();
 
         // Assert
         let messages = prompter.messages.borrow();
@@ -125,7 +126,7 @@ mod tests {
         let prompter = MockPrompter::new(vec![MockResponse::U32(1)]);
 
         // Act
-        let result = select_preset(&prompter, &presets, "EUR").unwrap();
+        let result = select_preset(&prompter, &presets, Currency::Eur).unwrap();
 
         // Assert
         assert_eq!(result, PresetSelection::Existing(presets[0].clone()));
@@ -139,7 +140,7 @@ mod tests {
         let prompter = MockPrompter::new(vec![MockResponse::U32(2)]);
 
         // Act
-        let result = select_preset(&prompter, &presets, "EUR").unwrap();
+        let result = select_preset(&prompter, &presets, Currency::Eur).unwrap();
 
         // Assert
         assert_eq!(result, PresetSelection::Existing(presets[1].clone()));
@@ -153,7 +154,7 @@ mod tests {
         let prompter = MockPrompter::new(vec![MockResponse::U32(3)]);
 
         // Act
-        let result = select_preset(&prompter, &presets, "EUR").unwrap();
+        let result = select_preset(&prompter, &presets, Currency::Eur).unwrap();
 
         // Assert
         assert_eq!(result, PresetSelection::CreateNew);
@@ -173,7 +174,7 @@ mod tests {
         let prompter = MockPrompter::new(vec![MockResponse::U32(2)]);
 
         // Act
-        let result = select_preset(&prompter, &presets, "EUR").unwrap();
+        let result = select_preset(&prompter, &presets, Currency::Eur).unwrap();
 
         // Assert
         assert_eq!(result, PresetSelection::CreateNew);
@@ -193,7 +194,7 @@ mod tests {
         let prompter = MockPrompter::new(vec![MockResponse::U32(0), MockResponse::U32(1)]);
 
         // Act
-        let result = select_preset(&prompter, &presets, "EUR").unwrap();
+        let result = select_preset(&prompter, &presets, Currency::Eur).unwrap();
 
         // Assert
         assert_eq!(result, PresetSelection::Existing(presets[0].clone()));
@@ -213,7 +214,7 @@ mod tests {
         let prompter = MockPrompter::new(vec![MockResponse::U32(99), MockResponse::U32(2)]);
 
         // Act
-        let result = select_preset(&prompter, &presets, "EUR").unwrap();
+        let result = select_preset(&prompter, &presets, Currency::Eur).unwrap();
 
         // Assert
         assert_eq!(result, PresetSelection::Existing(presets[1].clone()));
@@ -227,7 +228,7 @@ mod tests {
         let prompter = MockPrompter::new(vec![MockResponse::U32(4), MockResponse::U32(3)]);
 
         // Act
-        let result = select_preset(&prompter, &presets, "EUR").unwrap();
+        let result = select_preset(&prompter, &presets, Currency::Eur).unwrap();
 
         // Assert
         assert_eq!(result, PresetSelection::CreateNew);
@@ -245,7 +246,7 @@ mod tests {
         ]);
 
         // Act
-        let result = select_preset(&prompter, &presets, "EUR").unwrap();
+        let result = select_preset(&prompter, &presets, Currency::Eur).unwrap();
 
         // Assert
         assert_eq!(result, PresetSelection::Existing(presets[0].clone()));
@@ -274,7 +275,7 @@ mod tests {
         let prompter = MockPrompter::new(vec![MockResponse::U32(1)]);
 
         // Act
-        let result = select_preset(&prompter, &presets, "EUR").unwrap();
+        let result = select_preset(&prompter, &presets, Currency::Eur).unwrap();
 
         // Assert
         match result {
@@ -303,7 +304,7 @@ mod tests {
         let prompter = MockPrompter::new(vec![MockResponse::U32(6)]);
 
         // Act
-        let result = select_preset(&prompter, &presets, "EUR").unwrap();
+        let result = select_preset(&prompter, &presets, Currency::Eur).unwrap();
 
         // Assert
         assert_eq!(result, PresetSelection::CreateNew);
@@ -323,13 +324,13 @@ mod tests {
             key: PresetKey::try_new("dev").unwrap(),
             description: "Development".into(),
             default_rate: 800.0,
-            currency: Some("USD".into()),
+            currency: Some(Currency::Usd),
             tax_rate: None,
         }];
         let prompter = MockPrompter::new(vec![MockResponse::U32(1)]);
 
         // Act
-        let _ = select_preset(&prompter, &presets, "EUR");
+        let _ = select_preset(&prompter, &presets, Currency::Eur);
 
         // Assert
         let messages = prompter.messages.borrow();
@@ -351,7 +352,7 @@ mod tests {
         let prompter = MockPrompter::new(vec![MockResponse::U32(1)]);
 
         // Act
-        let _ = select_preset(&prompter, &presets, "EUR");
+        let _ = select_preset(&prompter, &presets, Currency::Eur);
 
         // Assert
         let messages = prompter.messages.borrow();

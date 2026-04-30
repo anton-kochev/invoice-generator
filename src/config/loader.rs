@@ -148,7 +148,7 @@ defaults:
                 assert_eq!(presets[0].default_rate, 100.0);
 
                 let defaults = config.defaults.unwrap();
-                assert_eq!(defaults.currency, "USD");
+                assert_eq!(defaults.currency, crate::domain::Currency::Usd);
                 assert_eq!(defaults.payment_terms_days, 14);
                 assert_eq!(defaults.invoice_date_day, 5);
             }
@@ -294,7 +294,7 @@ recipient:
         match result {
             LoadResult::Loaded(config) => {
                 let defaults = config.defaults.unwrap();
-                assert_eq!(defaults.currency, "EUR");
+                assert_eq!(defaults.currency, crate::domain::Currency::Eur);
                 assert_eq!(defaults.invoice_date_day, 9);
                 assert_eq!(defaults.payment_terms_days, 30);
             }
