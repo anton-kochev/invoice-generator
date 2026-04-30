@@ -1,2 +1,5 @@
 /target
 /node_modules
+/invoice_config.yaml
+/package.json
+/package-lock.json
