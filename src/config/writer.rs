@@ -2,30 +2,28 @@ use std::path::Path;
 
 use crate::error::AppError;
 
-use super::loader::CONFIG_FILENAME;
 use super::types::{Config, Preset, Recipient};
 
-/// Serialize `config` to YAML and write it to `dir/CONFIG_FILENAME`.
-pub fn save_config(dir: &Path, config: &Config) -> Result<(), AppError> {
+/// Serialize `config` to YAML and write it to `path`.
+pub fn save_config(path: &Path, config: &Config) -> Result<(), AppError> {
     let yaml = serde_yaml::to_string(config)?;
-    let path = dir.join(CONFIG_FILENAME);
     std::fs::write(path, yaml)?;
     Ok(())
 }
 
-/// Remove a preset by key from the config file in `dir`.
+/// Remove a preset by key from the config file at `path`.
 ///
 /// Returns the removed preset on success.
 /// Checks the last-preset guard BEFORE key lookup.
-pub fn remove_preset(dir: &Path, key: &str) -> Result<Preset, AppError> {
+pub fn remove_preset(path: &Path, key: &str) -> Result<Preset, AppError> {
     use super::loader::{load_config, LoadResult};
 
-    let config = match load_config(dir)? {
+    let config = match load_config(path)? {
         LoadResult::Loaded(config) => config,
         LoadResult::NotFound => {
             return Err(AppError::ConfigIo(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                format!("config file not found in {}", dir.display()),
+                format!("config file not found at {}", path.display()),
             )));
         }
     };
@@ -45,23 +43,23 @@ pub fn remove_preset(dir: &Path, key: &str) -> Result<Preset, AppError> {
     let removed = presets.remove(pos);
     config.presets = Some(presets);
 
-    save_config(dir, &config)?;
+    save_config(path, &config)?;
     Ok(removed)
 }
 
-/// Append a preset to the config file in `dir`.
+/// Append a preset to the config file at `path`.
 ///
 /// Loads the existing config, pushes the new preset, and saves it back.
 /// Returns an error if no config file exists yet.
-pub fn append_preset(dir: &Path, preset: Preset) -> Result<(), AppError> {
+pub fn append_preset(path: &Path, preset: Preset) -> Result<(), AppError> {
     use super::loader::{load_config, LoadResult};
 
-    let config = match load_config(dir)? {
+    let config = match load_config(path)? {
         LoadResult::Loaded(config) => config,
         LoadResult::NotFound => {
             return Err(AppError::ConfigIo(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                format!("config file not found in {}", dir.display()),
+                format!("config file not found at {}", path.display()),
             )));
         }
     };
@@ -71,7 +69,7 @@ pub fn append_preset(dir: &Path, preset: Preset) -> Result<(), AppError> {
     presets.push(preset);
     config.presets = Some(presets);
 
-    save_config(dir, &config)
+    save_config(path, &config)
 }
 
 /// Migrate a v1 Config (single `recipient:`) to v2 (`recipients:` list).
@@ -95,18 +93,18 @@ fn ensure_recipients_v2(config: &mut Config) {
     }
 }
 
-/// Append a recipient to the config file in `dir`.
+/// Append a recipient to the config file at `path`.
 ///
 /// If `set_default` is true, also sets `default_recipient` to the new recipient's key.
-pub fn append_recipient(dir: &Path, recipient: Recipient, set_default: bool) -> Result<(), AppError> {
+pub fn append_recipient(path: &Path, recipient: Recipient, set_default: bool) -> Result<(), AppError> {
     use super::loader::{load_config, LoadResult};
 
-    let config = match load_config(dir)? {
+    let config = match load_config(path)? {
         LoadResult::Loaded(config) => config,
         LoadResult::NotFound => {
             return Err(AppError::ConfigIo(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                format!("config file not found in {}", dir.display()),
+                format!("config file not found at {}", path.display()),
             )));
         }
     };
@@ -122,22 +120,22 @@ pub fn append_recipient(dir: &Path, recipient: Recipient, set_default: bool) -> 
     recipients.push(recipient);
     config.recipients = Some(recipients);
 
-    save_config(dir, &config)
+    save_config(path, &config)
 }
 
-/// Remove a recipient by key from the config file in `dir`.
+/// Remove a recipient by key from the config file at `path`.
 ///
 /// Returns the removed recipient on success.
 /// If the removed recipient was the default, clears `default_recipient` (caller handles reassignment).
-pub fn remove_recipient(dir: &Path, key: &str) -> Result<Recipient, AppError> {
+pub fn remove_recipient(path: &Path, key: &str) -> Result<Recipient, AppError> {
     use super::loader::{load_config, LoadResult};
 
-    let config = match load_config(dir)? {
+    let config = match load_config(path)? {
         LoadResult::Loaded(config) => config,
         LoadResult::NotFound => {
             return Err(AppError::ConfigIo(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                format!("config file not found in {}", dir.display()),
+                format!("config file not found at {}", path.display()),
             )));
         }
     };
@@ -166,22 +164,22 @@ pub fn remove_recipient(dir: &Path, key: &str) -> Result<Recipient, AppError> {
         config.default_recipient = None;
     }
 
-    save_config(dir, &config)?;
+    save_config(path, &config)?;
     Ok(removed)
 }
 
-/// Set the default recipient key in the config file.
+/// Set the default recipient key in the config file at `path`.
 ///
 /// Verifies the key exists in the recipients list before updating.
-pub fn set_default_recipient(dir: &Path, key: &str) -> Result<(), AppError> {
+pub fn set_default_recipient(path: &Path, key: &str) -> Result<(), AppError> {
     use super::loader::{load_config, LoadResult};
 
-    let config = match load_config(dir)? {
+    let config = match load_config(path)? {
         LoadResult::Loaded(config) => config,
         LoadResult::NotFound => {
             return Err(AppError::ConfigIo(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                format!("config file not found in {}", dir.display()),
+                format!("config file not found at {}", path.display()),
             )));
         }
     };
@@ -198,7 +196,7 @@ pub fn set_default_recipient(dir: &Path, key: &str) -> Result<(), AppError> {
     }
 
     config.default_recipient = Some(key.to_string());
-    save_config(dir, &config)
+    save_config(path, &config)
 }
 
 #[cfg(test)]
@@ -206,7 +204,14 @@ mod tests {
     use super::*;
     use crate::config::loader::{load_config, LoadResult};
     use crate::config::types::*;
+    use std::path::PathBuf;
     use tempfile::TempDir;
+
+    /// Path to the config file inside a tempdir — tests now pass a file path,
+    /// not a directory, since the loader/writer functions take `&Path` to a file.
+    fn cfg_path(dir: &TempDir) -> PathBuf {
+        dir.path().join("config.yaml")
+    }
 
     // ── Helpers ──
 
@@ -283,11 +288,11 @@ mod tests {
         let dir = TempDir::new().unwrap();
 
         // Act
-        let result = save_config(dir.path(), &Config::default());
+        let result = save_config(&cfg_path(&dir), &Config::default());
 
         // Assert
         assert!(result.is_ok());
-        assert!(dir.path().join(CONFIG_FILENAME).exists());
+        assert!(cfg_path(&dir).exists());
     }
 
     // ── Cycle 2: test_save_config_complete_round_trips ──
@@ -299,8 +304,8 @@ mod tests {
         let original = complete_config();
 
         // Act
-        save_config(dir.path(), &original).unwrap();
-        let loaded = unwrap_loaded(load_config(dir.path()));
+        save_config(&cfg_path(&dir), &original).unwrap();
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
 
         // Assert
         assert_eq!(loaded, original);
@@ -318,17 +323,17 @@ mod tests {
         };
 
         // Act
-        save_config(dir.path(), &config).unwrap();
+        save_config(&cfg_path(&dir), &config).unwrap();
 
         // Assert
-        let loaded = unwrap_loaded(load_config(dir.path()));
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         assert_eq!(loaded.sender, Some(synthetic_sender()));
         assert!(loaded.recipient.is_none());
         assert!(loaded.payment.is_none());
         assert!(loaded.presets.is_none());
         assert!(loaded.defaults.is_none());
 
-        let raw = std::fs::read_to_string(dir.path().join(CONFIG_FILENAME)).unwrap();
+        let raw = std::fs::read_to_string(cfg_path(&dir)).unwrap();
         assert!(!raw.contains("null"), "YAML output should not contain 'null'");
     }
 
@@ -346,7 +351,7 @@ mod tests {
             }),
             ..Config::default()
         };
-        save_config(dir.path(), &alice).unwrap();
+        save_config(&cfg_path(&dir), &alice).unwrap();
 
         let bob = Config {
             sender: Some(Sender {
@@ -358,10 +363,10 @@ mod tests {
         };
 
         // Act
-        save_config(dir.path(), &bob).unwrap();
+        save_config(&cfg_path(&dir), &bob).unwrap();
 
         // Assert
-        let loaded = unwrap_loaded(load_config(dir.path()));
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         assert_eq!(loaded.sender.unwrap().name, "Bob");
     }
 
@@ -373,8 +378,8 @@ mod tests {
         let dir = TempDir::new().unwrap();
 
         // Act
-        save_config(dir.path(), &complete_config()).unwrap();
-        let raw = std::fs::read_to_string(dir.path().join(CONFIG_FILENAME)).unwrap();
+        save_config(&cfg_path(&dir), &complete_config()).unwrap();
+        let raw = std::fs::read_to_string(cfg_path(&dir)).unwrap();
 
         // Assert
         let parsed: Result<Config, _> = serde_yaml::from_str(&raw);
@@ -392,7 +397,7 @@ mod tests {
         std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o444)).unwrap();
 
         // Act
-        let result = save_config(dir.path(), &Config::default());
+        let result = save_config(&cfg_path(&dir), &Config::default());
 
         // Assert
         assert!(matches!(result, Err(AppError::ConfigIo(_))));
@@ -407,7 +412,7 @@ mod tests {
     fn test_append_preset_to_existing_presets() {
         // Arrange
         let dir = TempDir::new().unwrap();
-        save_config(dir.path(), &complete_config()).unwrap();
+        save_config(&cfg_path(&dir), &complete_config()).unwrap();
         let new_preset = Preset {
             key: "design".to_string(),
             description: "Design work".to_string(),
@@ -417,10 +422,10 @@ mod tests {
         };
 
         // Act
-        append_preset(dir.path(), new_preset).unwrap();
+        append_preset(&cfg_path(&dir), new_preset).unwrap();
 
         // Assert
-        let loaded = unwrap_loaded(load_config(dir.path()));
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let presets = loaded.presets.unwrap();
         assert_eq!(presets.len(), 2);
         assert_eq!(presets[0].key, "dev");
@@ -434,11 +439,11 @@ mod tests {
         // Arrange
         let dir = TempDir::new().unwrap();
         let original = complete_config();
-        save_config(dir.path(), &original).unwrap();
+        save_config(&cfg_path(&dir), &original).unwrap();
 
         // Act
         append_preset(
-            dir.path(),
+            &cfg_path(&dir),
             Preset {
                 key: "qa".to_string(),
                 description: "QA work".to_string(),
@@ -450,7 +455,7 @@ mod tests {
         .unwrap();
 
         // Assert
-        let loaded = unwrap_loaded(load_config(dir.path()));
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         assert_eq!(loaded.sender, original.sender);
         assert_eq!(loaded.recipient, original.recipient);
         assert_eq!(loaded.payment, original.payment);
@@ -467,11 +472,11 @@ mod tests {
             sender: Some(synthetic_sender()),
             ..Config::default()
         };
-        save_config(dir.path(), &config).unwrap();
+        save_config(&cfg_path(&dir), &config).unwrap();
 
         // Act
         append_preset(
-            dir.path(),
+            &cfg_path(&dir),
             Preset {
                 key: "ops".to_string(),
                 description: "Operations".to_string(),
@@ -483,7 +488,7 @@ mod tests {
         .unwrap();
 
         // Assert
-        let loaded = unwrap_loaded(load_config(dir.path()));
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let presets = loaded.presets.unwrap();
         assert_eq!(presets.len(), 1);
         assert_eq!(presets[0].key, "ops");
@@ -498,7 +503,7 @@ mod tests {
 
         // Act
         let result = append_preset(
-            dir.path(),
+            &cfg_path(&dir),
             Preset {
                 key: "x".to_string(),
                 description: "X".to_string(),
@@ -529,14 +534,14 @@ mod tests {
         tax_rate: None,
         });
         config.presets = Some(presets);
-        save_config(dir.path(), &config).unwrap();
+        save_config(&cfg_path(&dir), &config).unwrap();
 
         // Act
-        let removed = remove_preset(dir.path(), "design").unwrap();
+        let removed = remove_preset(&cfg_path(&dir), "design").unwrap();
 
         // Assert
         assert_eq!(removed.key, "design");
-        let loaded = unwrap_loaded(load_config(dir.path()));
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let remaining = loaded.presets.unwrap();
         assert_eq!(remaining.len(), 1);
         assert_eq!(remaining[0].key, "dev");
@@ -556,10 +561,10 @@ mod tests {
         tax_rate: None,
         });
         config.presets = Some(presets);
-        save_config(dir.path(), &config).unwrap();
+        save_config(&cfg_path(&dir), &config).unwrap();
 
         // Act
-        let result = remove_preset(dir.path(), "nope");
+        let result = remove_preset(&cfg_path(&dir), "nope");
 
         // Assert
         assert!(matches!(result, Err(AppError::PresetNotFound(_))));
@@ -569,10 +574,10 @@ mod tests {
     fn test_remove_preset_last_preset_returns_last_preset_error() {
         // Arrange
         let dir = TempDir::new().unwrap();
-        save_config(dir.path(), &complete_config()).unwrap();
+        save_config(&cfg_path(&dir), &complete_config()).unwrap();
 
         // Act
-        let result = remove_preset(dir.path(), "dev");
+        let result = remove_preset(&cfg_path(&dir), "dev");
 
         // Assert
         assert!(matches!(result, Err(AppError::LastPreset)));
@@ -592,13 +597,13 @@ mod tests {
         tax_rate: None,
         });
         config.presets = Some(presets);
-        save_config(dir.path(), &config).unwrap();
+        save_config(&cfg_path(&dir), &config).unwrap();
 
         // Act
-        remove_preset(dir.path(), "design").unwrap();
+        remove_preset(&cfg_path(&dir), "design").unwrap();
 
         // Assert
-        let loaded = unwrap_loaded(load_config(dir.path()));
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         assert_eq!(loaded.sender, config.sender);
         assert_eq!(loaded.recipient, config.recipient);
         assert_eq!(loaded.payment, config.payment);
@@ -611,7 +616,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
 
         // Act
-        let result = remove_preset(dir.path(), "dev");
+        let result = remove_preset(&cfg_path(&dir), "dev");
 
         // Assert
         assert!(matches!(result, Err(AppError::ConfigIo(_))));
@@ -647,14 +652,14 @@ mod tests {
             ]),
             ..complete_config()
         };
-        save_config(dir.path(), &config).unwrap();
+        save_config(&cfg_path(&dir), &config).unwrap();
 
         // Act
-        let removed = remove_preset(dir.path(), "design").unwrap();
+        let removed = remove_preset(&cfg_path(&dir), "design").unwrap();
 
         // Assert
         assert_eq!(removed.key, "design");
-        let loaded = unwrap_loaded(load_config(dir.path()));
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let remaining = loaded.presets.unwrap();
         assert_eq!(remaining.len(), 2);
         assert_eq!(remaining[0].key, "dev");
@@ -685,8 +690,8 @@ mod tests {
         };
 
         // Act
-        save_config(dir.path(), &config).unwrap();
-        let loaded = unwrap_loaded(load_config(dir.path()));
+        save_config(&cfg_path(&dir), &config).unwrap();
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
 
         // Assert
         assert_eq!(loaded.recipients.as_ref().unwrap().len(), 1);
@@ -719,8 +724,8 @@ mod tests {
         };
 
         // Act
-        save_config(dir.path(), &config).unwrap();
-        let raw = std::fs::read_to_string(dir.path().join(CONFIG_FILENAME)).unwrap();
+        save_config(&cfg_path(&dir), &config).unwrap();
+        let raw = std::fs::read_to_string(cfg_path(&dir)).unwrap();
 
         // Assert
         assert!(!raw.contains("null"), "YAML output should not contain 'null'");
@@ -798,10 +803,10 @@ mod tests {
             ]),
             ..complete_config()
         };
-        save_config(dir.path(), &config).unwrap();
+        save_config(&cfg_path(&dir), &config).unwrap();
 
         // Act
-        let result = remove_preset(dir.path(), "Dev");
+        let result = remove_preset(&cfg_path(&dir), "Dev");
 
         // Assert
         assert!(matches!(result, Err(AppError::PresetNotFound(_))));
@@ -817,7 +822,7 @@ mod tests {
             sender: Some(synthetic_sender()),
             ..Config::default()
         };
-        save_config(dir.path(), &config).unwrap();
+        save_config(&cfg_path(&dir), &config).unwrap();
 
         let recipient = Recipient {
             key: Some("acme".into()),
@@ -828,10 +833,10 @@ mod tests {
         };
 
         // Act
-        append_recipient(dir.path(), recipient, true).unwrap();
+        append_recipient(&cfg_path(&dir), recipient, true).unwrap();
 
         // Assert
-        let loaded = unwrap_loaded(load_config(dir.path()));
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let recipients = loaded.recipients.unwrap();
         assert_eq!(recipients.len(), 1);
         assert_eq!(recipients[0].key, Some("acme".into()));
@@ -842,7 +847,7 @@ mod tests {
     fn test_append_recipient_to_existing_recipients() {
         // Arrange
         let dir = TempDir::new().unwrap();
-        save_config(dir.path(), &complete_config_v2()).unwrap();
+        save_config(&cfg_path(&dir), &complete_config_v2()).unwrap();
 
         let new_recipient = Recipient {
             key: Some("globex".into()),
@@ -853,10 +858,10 @@ mod tests {
         };
 
         // Act
-        append_recipient(dir.path(), new_recipient, false).unwrap();
+        append_recipient(&cfg_path(&dir), new_recipient, false).unwrap();
 
         // Assert
-        let loaded = unwrap_loaded(load_config(dir.path()));
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let recipients = loaded.recipients.unwrap();
         assert_eq!(recipients.len(), 2);
         assert_eq!(recipients[1].key, Some("globex".into()));
@@ -867,7 +872,7 @@ mod tests {
     fn test_append_recipient_set_default_updates_key() {
         // Arrange
         let dir = TempDir::new().unwrap();
-        save_config(dir.path(), &complete_config_v2()).unwrap();
+        save_config(&cfg_path(&dir), &complete_config_v2()).unwrap();
 
         let new_recipient = Recipient {
             key: Some("globex".into()),
@@ -878,10 +883,10 @@ mod tests {
         };
 
         // Act
-        append_recipient(dir.path(), new_recipient, true).unwrap();
+        append_recipient(&cfg_path(&dir), new_recipient, true).unwrap();
 
         // Assert
-        let loaded = unwrap_loaded(load_config(dir.path()));
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         assert_eq!(loaded.default_recipient, Some("globex".into()));
     }
 
@@ -890,7 +895,7 @@ mod tests {
         // Arrange
         let dir = TempDir::new().unwrap();
         let original = complete_config_v2();
-        save_config(dir.path(), &original).unwrap();
+        save_config(&cfg_path(&dir), &original).unwrap();
 
         let new_recipient = Recipient {
             key: Some("globex".into()),
@@ -901,10 +906,10 @@ mod tests {
         };
 
         // Act
-        append_recipient(dir.path(), new_recipient, false).unwrap();
+        append_recipient(&cfg_path(&dir), new_recipient, false).unwrap();
 
         // Assert
-        let loaded = unwrap_loaded(load_config(dir.path()));
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         assert_eq!(loaded.sender, original.sender);
         assert_eq!(loaded.payment, original.payment);
         assert_eq!(loaded.presets, original.presets);
@@ -924,7 +929,7 @@ mod tests {
         };
 
         // Act
-        let result = append_recipient(dir.path(), recipient, true);
+        let result = append_recipient(&cfg_path(&dir), recipient, true);
 
         // Assert
         assert!(matches!(result, Err(AppError::ConfigIo(_))));
@@ -936,14 +941,14 @@ mod tests {
     fn test_remove_recipient_deletes_matching_key() {
         // Arrange
         let dir = TempDir::new().unwrap();
-        save_config(dir.path(), &complete_config_v2_two_recipients()).unwrap();
+        save_config(&cfg_path(&dir), &complete_config_v2_two_recipients()).unwrap();
 
         // Act
-        let removed = remove_recipient(dir.path(), "globex").unwrap();
+        let removed = remove_recipient(&cfg_path(&dir), "globex").unwrap();
 
         // Assert
         assert_eq!(removed.name, "Globex Inc");
-        let loaded = unwrap_loaded(load_config(dir.path()));
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let recipients = loaded.recipients.unwrap();
         assert_eq!(recipients.len(), 1);
         assert_eq!(recipients[0].key, Some("acme".into()));
@@ -954,10 +959,10 @@ mod tests {
     fn test_remove_recipient_unknown_key_returns_error() {
         // Arrange
         let dir = TempDir::new().unwrap();
-        save_config(dir.path(), &complete_config_v2_two_recipients()).unwrap();
+        save_config(&cfg_path(&dir), &complete_config_v2_two_recipients()).unwrap();
 
         // Act
-        let result = remove_recipient(dir.path(), "nope");
+        let result = remove_recipient(&cfg_path(&dir), "nope");
 
         // Assert
         assert!(matches!(result, Err(AppError::RecipientNotFound { .. })));
@@ -967,10 +972,10 @@ mod tests {
     fn test_remove_recipient_last_returns_error() {
         // Arrange
         let dir = TempDir::new().unwrap();
-        save_config(dir.path(), &complete_config_v2()).unwrap();
+        save_config(&cfg_path(&dir), &complete_config_v2()).unwrap();
 
         // Act
-        let result = remove_recipient(dir.path(), "acme");
+        let result = remove_recipient(&cfg_path(&dir), "acme");
 
         // Assert
         assert!(matches!(result, Err(AppError::LastRecipient)));
@@ -981,13 +986,13 @@ mod tests {
         // Arrange
         let dir = TempDir::new().unwrap();
         let original = complete_config_v2_two_recipients();
-        save_config(dir.path(), &original).unwrap();
+        save_config(&cfg_path(&dir), &original).unwrap();
 
         // Act
-        remove_recipient(dir.path(), "globex").unwrap();
+        remove_recipient(&cfg_path(&dir), "globex").unwrap();
 
         // Assert
-        let loaded = unwrap_loaded(load_config(dir.path()));
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         assert_eq!(loaded.sender, original.sender);
         assert_eq!(loaded.payment, original.payment);
         assert_eq!(loaded.presets, original.presets);
@@ -1000,7 +1005,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
 
         // Act
-        let result = remove_recipient(dir.path(), "acme");
+        let result = remove_recipient(&cfg_path(&dir), "acme");
 
         // Assert
         assert!(matches!(result, Err(AppError::ConfigIo(_))));
@@ -1012,13 +1017,13 @@ mod tests {
     fn test_set_default_recipient_updates_key() {
         // Arrange
         let dir = TempDir::new().unwrap();
-        save_config(dir.path(), &complete_config_v2_two_recipients()).unwrap();
+        save_config(&cfg_path(&dir), &complete_config_v2_two_recipients()).unwrap();
 
         // Act
-        set_default_recipient(dir.path(), "globex").unwrap();
+        set_default_recipient(&cfg_path(&dir), "globex").unwrap();
 
         // Assert
-        let loaded = unwrap_loaded(load_config(dir.path()));
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         assert_eq!(loaded.default_recipient, Some("globex".into()));
     }
 
@@ -1059,13 +1064,13 @@ mod tests {
     fn test_append_recipient_v1_no_key_set_default_false_migrates() {
         // Arrange
         let dir = TempDir::new().unwrap();
-        save_config(dir.path(), &v1_config_with_recipient()).unwrap();
+        save_config(&cfg_path(&dir), &v1_config_with_recipient()).unwrap();
 
         // Act
-        append_recipient(dir.path(), new_recipient(), false).unwrap();
+        append_recipient(&cfg_path(&dir), new_recipient(), false).unwrap();
 
         // Assert
-        let loaded = unwrap_loaded(load_config(dir.path()));
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let recipients = loaded.recipients.unwrap();
         assert_eq!(recipients.len(), 2);
         assert_eq!(recipients[0].key, Some("client-corp".into()));
@@ -1079,13 +1084,13 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let mut config = v1_config_with_recipient();
         config.recipient.as_mut().unwrap().key = Some("cc".into());
-        save_config(dir.path(), &config).unwrap();
+        save_config(&cfg_path(&dir), &config).unwrap();
 
         // Act
-        append_recipient(dir.path(), new_recipient(), false).unwrap();
+        append_recipient(&cfg_path(&dir), new_recipient(), false).unwrap();
 
         // Assert
-        let loaded = unwrap_loaded(load_config(dir.path()));
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let recipients = loaded.recipients.unwrap();
         assert_eq!(recipients[0].key, Some("cc".into()));
         assert_eq!(loaded.default_recipient, Some("cc".into()));
@@ -1095,13 +1100,13 @@ mod tests {
     fn test_append_recipient_v1_set_default_true_new_becomes_default() {
         // Arrange
         let dir = TempDir::new().unwrap();
-        save_config(dir.path(), &v1_config_with_recipient()).unwrap();
+        save_config(&cfg_path(&dir), &v1_config_with_recipient()).unwrap();
 
         // Act
-        append_recipient(dir.path(), new_recipient(), true).unwrap();
+        append_recipient(&cfg_path(&dir), new_recipient(), true).unwrap();
 
         // Assert
-        let loaded = unwrap_loaded(load_config(dir.path()));
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let recipients = loaded.recipients.unwrap();
         assert_eq!(recipients.len(), 2);
         assert_eq!(loaded.default_recipient, Some("macrosoft".into()));
@@ -1111,13 +1116,13 @@ mod tests {
     fn test_append_recipient_v1_clears_v1_field() {
         // Arrange
         let dir = TempDir::new().unwrap();
-        save_config(dir.path(), &v1_config_with_recipient()).unwrap();
+        save_config(&cfg_path(&dir), &v1_config_with_recipient()).unwrap();
 
         // Act
-        append_recipient(dir.path(), new_recipient(), false).unwrap();
+        append_recipient(&cfg_path(&dir), new_recipient(), false).unwrap();
 
         // Assert
-        let loaded = unwrap_loaded(load_config(dir.path()));
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         assert!(loaded.recipient.is_none(), "v1 recipient field should be cleared after migration");
     }
 
@@ -1125,13 +1130,13 @@ mod tests {
     fn test_append_recipient_v1_preserves_recipient_data() {
         // Arrange
         let dir = TempDir::new().unwrap();
-        save_config(dir.path(), &v1_config_with_recipient()).unwrap();
+        save_config(&cfg_path(&dir), &v1_config_with_recipient()).unwrap();
 
         // Act
-        append_recipient(dir.path(), new_recipient(), false).unwrap();
+        append_recipient(&cfg_path(&dir), new_recipient(), false).unwrap();
 
         // Assert
-        let loaded = unwrap_loaded(load_config(dir.path()));
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let migrated = &loaded.recipients.unwrap()[0];
         assert_eq!(migrated.name, "Client Corp");
         assert_eq!(migrated.address, vec!["456 Client Ave"]);
@@ -1143,10 +1148,10 @@ mod tests {
     fn test_set_default_recipient_unknown_key_returns_error() {
         // Arrange
         let dir = TempDir::new().unwrap();
-        save_config(dir.path(), &complete_config_v2_two_recipients()).unwrap();
+        save_config(&cfg_path(&dir), &complete_config_v2_two_recipients()).unwrap();
 
         // Act
-        let result = set_default_recipient(dir.path(), "nope");
+        let result = set_default_recipient(&cfg_path(&dir), "nope");
 
         // Assert
         assert!(matches!(result, Err(AppError::RecipientNotFound { .. })));
