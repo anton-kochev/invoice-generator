@@ -7,8 +7,9 @@ A CLI tool that generates professional PDF invoices through an interactive promp
 - [Features](#features)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
-- [Usage](#usage)
 - [Configuration](#configuration)
+- [Usage](#usage)
+- [Config File Format](#config-file-format)
 - [PDF Output](#pdf-output)
 - [License](#license)
 
@@ -42,6 +43,24 @@ cargo build --release
 ```
 
 The binary will be at `target/release/invoice-generator`.
+
+## Configuration
+
+By default, the config file lives at `~/.config/invoice-generator/config.yaml` (XDG Base Directory specification). The directory is created on first run.
+
+To override the location, use one of (in priority order):
+
+- `--config <PATH>` — CLI flag (works on all subcommands)
+- `INVOICE_GENERATOR_CONFIG=<PATH>` — environment variable
+
+### Upgrading from v0.1.0
+
+Earlier versions stored the config as `./invoice_config.yaml` in the current directory. To migrate:
+
+```sh
+mkdir -p ~/.config/invoice-generator
+mv ./invoice_config.yaml ~/.config/invoice-generator/config.yaml
+```
 
 ## Usage
 
@@ -116,9 +135,9 @@ Generate PDF? Yes
 PDF saved: /path/to/Invoice_Jane_Doe_Mar2026.pdf
 ```
 
-## Configuration
+## Config File Format
 
-The tool stores all static data in `invoice_config.yaml` in the current working directory. You can edit it by hand or let the setup wizard generate it.
+The tool stores all static data in a YAML config file (default: `~/.config/invoice-generator/config.yaml` — see [Configuration](#configuration) for overrides). You can edit it by hand or let the setup wizard generate it.
 
 ```yaml
 sender:
