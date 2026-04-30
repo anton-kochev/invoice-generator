@@ -241,7 +241,7 @@ sender:
             r#"
 payment:
   - label: "Transfer"
-    iban: "DE00000000000000000000"
+    iban: "DE89370400440532013000"
     bic: "COBADEFFXXX"
 "#,
         )
@@ -349,7 +349,7 @@ recipient:
   vat_number: "CZ00000"
 payment:
   - label: "Wire"
-    iban: "DE00000000000000000000"
+    iban: "DE89370400440532013000"
     bic_swift: "TESTDEFFXXX"
 presets:
   - key: "dev"

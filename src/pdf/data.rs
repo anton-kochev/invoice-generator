@@ -60,10 +60,13 @@ pub struct LineItemData {
 }
 
 /// Payment method details for the template.
+///
+/// `iban` is rendered as the canonical grouped form (`GB82 WEST 1234 5698 7654 32`)
+/// for human readability in the PDF.
 #[derive(Debug, Serialize)]
 pub struct PaymentData<'a> {
     pub label: &'a str,
-    pub iban: &'a str,
+    pub iban: String,
     pub bic_swift: &'a str,
 }
 
@@ -142,7 +145,7 @@ impl<'a> InvoiceData<'a> {
                 .iter()
                 .map(|p| PaymentData {
                     label: &p.label,
-                    iban: &p.iban,
+                    iban: p.iban.to_string(),
                     bic_swift: &p.bic_swift,
                 })
                 .collect(),
@@ -206,7 +209,7 @@ mod tests {
             default_recipient_key: "acme-corp".into(),
             payment: vec![PaymentMethod {
                 label: "Primary Bank Account".into(),
-                iban: "DE89 3704 0044 0532 0130 00".into(),
+                iban: crate::domain::Iban::try_new("DE89 3704 0044 0532 0130 00").unwrap(),
                 bic_swift: "COBADEFFXXX".into(),
             }],
             presets: vec![Preset {

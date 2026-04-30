@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-use crate::domain::HexColor;
+use crate::domain::{HexColor, Iban};
 use crate::error::AppError;
 use crate::locale::Locale;
 
@@ -143,7 +143,8 @@ pub struct Recipient {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PaymentMethod {
     pub label: String,
-    pub iban: String,
+    /// Validated IBAN (mod-97 checksum verified at deserialize-time).
+    pub iban: Iban,
     #[serde(alias = "bic")]
     pub bic_swift: String,
 }

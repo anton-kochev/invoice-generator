@@ -143,7 +143,7 @@ mod tests {
             default_recipient_key: "acme-corp".into(),
             payment: vec![PaymentMethod {
                 label: "Primary Bank Account".into(),
-                iban: "DE89 3704 0044 0532 0130 00".into(),
+                iban: crate::domain::Iban::try_new("DE89 3704 0044 0532 0130 00").unwrap(),
                 bic_swift: "COBADEFFXXX".into(),
             }],
             presets: vec![Preset {
@@ -343,7 +343,7 @@ mod tests {
             default_recipient_key: "acme-corp".into(),
             payment: vec![PaymentMethod {
                 label: "Primary Bank Account".into(),
-                iban: "DE89 3704 0044 0532 0130 00".into(),
+                iban: crate::domain::Iban::try_new("DE89 3704 0044 0532 0130 00").unwrap(),
                 bic_swift: "COBADEFFXXX".into(),
             }],
             presets: vec![Preset {

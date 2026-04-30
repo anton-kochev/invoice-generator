@@ -850,7 +850,7 @@ mod tests {
     fn make_payment() -> Vec<PaymentMethod> {
         vec![PaymentMethod {
             label: "SEPA".into(),
-            iban: "DE00".into(),
+            iban: crate::domain::Iban::try_new("DE89370400440532013000").unwrap(),
             bic_swift: "BIC".into(),
         }]
     }

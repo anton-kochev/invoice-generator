@@ -127,7 +127,7 @@ mod tests {
             // Payment (1 method)
             MockResponse::U32(1),
             MockResponse::Text("SEPA".into()),
-            MockResponse::Text("DE00".into()),
+            MockResponse::Text("DE89370400440532013000".into()),
             MockResponse::Text("BIC".into()),
             // Presets (1 preset)
             MockResponse::Text("dev".into()),

@@ -188,7 +188,7 @@ mod tests {
             default_recipient_key: "acme".into(),
             payment: vec![PaymentMethod {
                 label: "SEPA".into(),
-                iban: "DE00000000000000".into(),
+                iban: crate::domain::Iban::try_new("DE89370400440532013000").unwrap(),
                 bic_swift: "TESTBIC".into(),
             }],
             presets: vec![Preset {

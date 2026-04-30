@@ -130,7 +130,7 @@ mod tests {
             default_recipient: None,
             payment: Some(vec![PaymentMethod {
                 label: "SEPA Transfer".into(),
-                iban: "DE89370400440532013000".into(),
+                iban: crate::domain::Iban::try_new("DE89370400440532013000").unwrap(),
                 bic_swift: "COBADEFFXXX".into(),
             }]),
             presets: Some(vec![Preset {

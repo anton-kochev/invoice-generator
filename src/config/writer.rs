@@ -261,7 +261,7 @@ mod tests {
     fn synthetic_payment() -> Vec<PaymentMethod> {
         vec![PaymentMethod {
             label: "SEPA Transfer".to_string(),
-            iban: "DE89370400440532013000".to_string(),
+            iban: crate::domain::Iban::try_new("DE89370400440532013000").unwrap(),
             bic_swift: "COBADEFFXXX".to_string(),
         }]
     }

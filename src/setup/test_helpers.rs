@@ -31,7 +31,8 @@ pub fn synthetic_recipient() -> Recipient {
 pub fn synthetic_payment() -> Vec<PaymentMethod> {
     vec![PaymentMethod {
         label: "SEPA Transfer".into(),
-        iban: "DE89370400440532013000".into(),
+        iban: crate::domain::Iban::try_new("DE89370400440532013000")
+            .expect("synthetic IBAN must be valid"),
         bic_swift: "COBADEFFXXX".into(),
     }]
 }
@@ -231,7 +232,7 @@ pub fn resume_from_recipient_responses() -> Vec<MockResponse> {
         // Payment
         MockResponse::U32(1),
         MockResponse::Text("SEPA".into()),
-        MockResponse::Text("DE00".into()),
+        MockResponse::Text("DE89370400440532013000".into()),
         MockResponse::Text("BIC".into()),
         // Presets
         MockResponse::Text("dev".into()),

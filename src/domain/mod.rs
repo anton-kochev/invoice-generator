@@ -5,5 +5,7 @@
 //! the boundary (typically deserialization or interactive setup), so the rest
 //! of the program can rely on the invariant.
 pub mod hex_color;
+pub mod iban;
 
 pub use hex_color::HexColor;
+pub use iban::Iban;
