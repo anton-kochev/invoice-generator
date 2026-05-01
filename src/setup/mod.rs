@@ -12,11 +12,11 @@ pub mod mock_prompter;
 #[cfg(test)]
 pub mod test_helpers;
 
-use std::path::Path;
+use self::prompter::Prompter;
 use crate::config::types::Config;
 use crate::config::validator::ConfigSection;
 use crate::error::AppError;
-use self::prompter::Prompter;
+use std::path::Path;
 
 /// Run the first-time setup wizard, or resume from where a previous run left off.
 pub fn run_setup(
@@ -43,7 +43,9 @@ pub fn run_setup(
     for section in missing {
         match section {
             ConfigSection::Sender => sender::collect_sender(prompter, config, config_path)?,
-            ConfigSection::Recipient => recipient::collect_recipient(prompter, config, config_path)?,
+            ConfigSection::Recipient => {
+                recipient::collect_recipient(prompter, config, config_path)?
+            }
             ConfigSection::Payment => payment::collect_payment(prompter, config, config_path)?,
             ConfigSection::Presets => presets::collect_presets(prompter, config, config_path)?,
         }
@@ -73,8 +75,10 @@ mod tests {
         let dir = setup_dir(None);
         let mut config = empty_config();
         let all_missing = vec![
-            ConfigSection::Sender, ConfigSection::Recipient,
-            ConfigSection::Payment, ConfigSection::Presets,
+            ConfigSection::Sender,
+            ConfigSection::Recipient,
+            ConfigSection::Payment,
+            ConfigSection::Presets,
         ];
         let prompter = MockPrompter::new(full_setup_responses());
 
@@ -96,7 +100,9 @@ mod tests {
         let mut config = config_with_sender();
         let dir = setup_dir(Some(&config));
         let missing = vec![
-            ConfigSection::Recipient, ConfigSection::Payment, ConfigSection::Presets,
+            ConfigSection::Recipient,
+            ConfigSection::Payment,
+            ConfigSection::Presets,
         ];
         let prompter = MockPrompter::new(resume_from_recipient_responses());
 
@@ -160,8 +166,10 @@ mod tests {
         let dir = setup_dir(None);
         let mut config = empty_config();
         let all_missing = vec![
-            ConfigSection::Sender, ConfigSection::Recipient,
-            ConfigSection::Payment, ConfigSection::Presets,
+            ConfigSection::Sender,
+            ConfigSection::Recipient,
+            ConfigSection::Payment,
+            ConfigSection::Presets,
         ];
         let prompter = MockPrompter::new(full_setup_responses());
 
@@ -183,8 +191,10 @@ mod tests {
         let dir = setup_dir(None);
         let mut config = empty_config();
         let all_missing = vec![
-            ConfigSection::Sender, ConfigSection::Recipient,
-            ConfigSection::Payment, ConfigSection::Presets,
+            ConfigSection::Sender,
+            ConfigSection::Recipient,
+            ConfigSection::Payment,
+            ConfigSection::Presets,
         ];
         let prompter = MockPrompter::new(full_setup_responses());
 

@@ -346,7 +346,10 @@ mod tests {
         assert!(result_unknown.is_err());
         assert!(result_empty.is_err());
         let msg = result_unknown.unwrap_err().to_string();
-        assert!(msg.contains("xx-YY"), "Error should contain the invalid key");
+        assert!(
+            msg.contains("xx-YY"),
+            "Error should contain the invalid key"
+        );
         assert!(msg.contains("en-US"), "Error should list available locales");
     }
 
@@ -386,10 +389,18 @@ mod tests {
         use time::Month::*;
         let locale = Locale::EnUs;
         let expected = [
-            (January, "January"), (February, "February"), (March, "March"),
-            (April, "April"), (May, "May"), (June, "June"),
-            (July, "July"), (August, "August"), (September, "September"),
-            (October, "October"), (November, "November"), (December, "December"),
+            (January, "January"),
+            (February, "February"),
+            (March, "March"),
+            (April, "April"),
+            (May, "May"),
+            (June, "June"),
+            (July, "July"),
+            (August, "August"),
+            (September, "September"),
+            (October, "October"),
+            (November, "November"),
+            (December, "December"),
         ];
 
         // Act & Assert
@@ -404,10 +415,18 @@ mod tests {
         use time::Month::*;
         let locale = Locale::DeDe;
         let expected = [
-            (January, "Januar"), (February, "Februar"), (March, "März"),
-            (April, "April"), (May, "Mai"), (June, "Juni"),
-            (July, "Juli"), (August, "August"), (September, "September"),
-            (October, "Oktober"), (November, "November"), (December, "Dezember"),
+            (January, "Januar"),
+            (February, "Februar"),
+            (March, "März"),
+            (April, "April"),
+            (May, "Mai"),
+            (June, "Juni"),
+            (July, "Juli"),
+            (August, "August"),
+            (September, "September"),
+            (October, "Oktober"),
+            (November, "November"),
+            (December, "Dezember"),
         ];
 
         // Act & Assert
@@ -422,10 +441,18 @@ mod tests {
         use time::Month::*;
         let locale = Locale::FrFr;
         let expected = [
-            (January, "janvier"), (February, "février"), (March, "mars"),
-            (April, "avril"), (May, "mai"), (June, "juin"),
-            (July, "juillet"), (August, "août"), (September, "septembre"),
-            (October, "octobre"), (November, "novembre"), (December, "décembre"),
+            (January, "janvier"),
+            (February, "février"),
+            (March, "mars"),
+            (April, "avril"),
+            (May, "mai"),
+            (June, "juin"),
+            (July, "juillet"),
+            (August, "août"),
+            (September, "septembre"),
+            (October, "octobre"),
+            (November, "novembre"),
+            (December, "décembre"),
         ];
 
         // Act & Assert
@@ -440,10 +467,18 @@ mod tests {
         use time::Month::*;
         let locale = Locale::CsCz;
         let expected = [
-            (January, "leden"), (February, "únor"), (March, "březen"),
-            (April, "duben"), (May, "květen"), (June, "červen"),
-            (July, "červenec"), (August, "srpen"), (September, "září"),
-            (October, "říjen"), (November, "listopad"), (December, "prosinec"),
+            (January, "leden"),
+            (February, "únor"),
+            (March, "březen"),
+            (April, "duben"),
+            (May, "květen"),
+            (June, "červen"),
+            (July, "červenec"),
+            (August, "srpen"),
+            (September, "září"),
+            (October, "říjen"),
+            (November, "listopad"),
+            (December, "prosinec"),
         ];
 
         // Act & Assert
@@ -458,10 +493,18 @@ mod tests {
         use time::Month::*;
         let locale = Locale::UkUa;
         let expected = [
-            (January, "січень"), (February, "лютий"), (March, "березень"),
-            (April, "квітень"), (May, "травень"), (June, "червень"),
-            (July, "липень"), (August, "серпень"), (September, "вересень"),
-            (October, "жовтень"), (November, "листопад"), (December, "грудень"),
+            (January, "січень"),
+            (February, "лютий"),
+            (March, "березень"),
+            (April, "квітень"),
+            (May, "травень"),
+            (June, "червень"),
+            (July, "липень"),
+            (August, "серпень"),
+            (September, "вересень"),
+            (October, "жовтень"),
+            (November, "листопад"),
+            (December, "грудень"),
         ];
 
         // Act & Assert
@@ -475,8 +518,8 @@ mod tests {
         // Arrange
         use time::Month::*;
         let months = [
-            January, February, March, April, May, June,
-            July, August, September, October, November, December,
+            January, February, March, April, May, June, July, August, September, October, November,
+            December,
         ];
 
         // Act & Assert
@@ -498,7 +541,10 @@ mod tests {
         let locale = Locale::CsCz;
 
         // Act & Assert
-        assert_ne!(locale.month_name_genitive(January), locale.month_name(January));
+        assert_ne!(
+            locale.month_name_genitive(January),
+            locale.month_name(January)
+        );
         assert_ne!(locale.month_name_genitive(March), locale.month_name(March));
         assert_ne!(locale.month_name_genitive(May), locale.month_name(May));
         assert_eq!(locale.month_name_genitive(January), "ledna");
@@ -513,7 +559,10 @@ mod tests {
         let locale = Locale::UkUa;
 
         // Act & Assert
-        assert_ne!(locale.month_name_genitive(January), locale.month_name(January));
+        assert_ne!(
+            locale.month_name_genitive(January),
+            locale.month_name(January)
+        );
         assert_ne!(locale.month_name_genitive(March), locale.month_name(March));
         assert_ne!(locale.month_name_genitive(May), locale.month_name(May));
         assert_eq!(locale.month_name_genitive(January), "січня");

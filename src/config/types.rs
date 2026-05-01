@@ -189,7 +189,10 @@ pub struct Defaults {
     pub payment_terms_days: u32,
     #[serde(default)]
     pub template: TemplateKey,
-    #[serde(default, deserialize_with = "crate::locale::deserialize_locale_lenient")]
+    #[serde(
+        default,
+        deserialize_with = "crate::locale::deserialize_locale_lenient"
+    )]
     pub locale: Locale,
 }
 
@@ -247,23 +250,27 @@ mod tests {
         let yaml = serde_yaml::to_string(&config).unwrap();
 
         // Assert
-        assert!(!yaml.contains("recipients"), "None recipients should be omitted from YAML");
-        assert!(!yaml.contains("default_recipient"), "None default_recipient should be omitted");
+        assert!(
+            !yaml.contains("recipients"),
+            "None recipients should be omitted from YAML"
+        );
+        assert!(
+            !yaml.contains("default_recipient"),
+            "None default_recipient should be omitted"
+        );
     }
 
     #[test]
     fn v2_config_with_recipients_round_trips() {
         // Arrange
         let config = Config {
-            recipients: Some(vec![
-                Recipient {
-                    key: Some(RecipientKey::try_new("acme").unwrap()),
-                    name: "Acme Corp".into(),
-                    address: vec!["123 Main St".into()],
-                    company_id: None,
-                    vat_number: None,
-                },
-            ]),
+            recipients: Some(vec![Recipient {
+                key: Some(RecipientKey::try_new("acme").unwrap()),
+                name: "Acme Corp".into(),
+                address: vec!["123 Main St".into()],
+                company_id: None,
+                vat_number: None,
+            }]),
             default_recipient: Some(RecipientKey::try_new("acme").unwrap()),
             ..Config::default()
         };
@@ -320,7 +327,10 @@ mod tests {
         let yaml = serde_yaml::to_string(&preset).unwrap();
 
         // Assert
-        assert!(!yaml.contains("currency"), "None currency should be omitted from YAML");
+        assert!(
+            !yaml.contains("currency"),
+            "None currency should be omitted from YAML"
+        );
     }
 
     #[test]
@@ -395,7 +405,10 @@ mod tests {
         let yaml = serde_yaml::to_string(&preset).unwrap();
 
         // Assert
-        assert!(!yaml.contains("tax_rate"), "None tax_rate should be omitted from YAML");
+        assert!(
+            !yaml.contains("tax_rate"),
+            "None tax_rate should be omitted from YAML"
+        );
     }
 
     #[test]
@@ -432,7 +445,10 @@ mod tests {
         let yaml = serde_yaml::to_string(&preset).unwrap();
 
         // Assert
-        assert!(yaml.contains("tax_rate: 0.0"), "Zero tax_rate should be serialized, got: {yaml}");
+        assert!(
+            yaml.contains("tax_rate: 0.0"),
+            "Zero tax_rate should be serialized, got: {yaml}"
+        );
     }
 
     #[test]
@@ -450,13 +466,19 @@ mod tests {
     #[test]
     fn test_branding_none_omitted_from_yaml() {
         // Arrange
-        let config = Config { branding: None, ..Config::default() };
+        let config = Config {
+            branding: None,
+            ..Config::default()
+        };
 
         // Act
         let yaml = serde_yaml::to_string(&config).unwrap();
 
         // Assert
-        assert!(!yaml.contains("branding"), "None branding should be omitted from YAML");
+        assert!(
+            !yaml.contains("branding"),
+            "None branding should be omitted from YAML"
+        );
     }
 
     #[test]
@@ -468,7 +490,10 @@ mod tests {
             font: Some("Fira Code".into()),
             footer_text: Some("Custom footer".into()),
         };
-        let config = Config { branding: Some(branding), ..Config::default() };
+        let config = Config {
+            branding: Some(branding),
+            ..Config::default()
+        };
 
         // Act
         let yaml = serde_yaml::to_string(&config).unwrap();
@@ -490,7 +515,10 @@ mod tests {
             accent_color: Some(HexColor::try_new("#aabbcc").unwrap()),
             ..Branding::default()
         };
-        let config = Config { branding: Some(branding), ..Config::default() };
+        let config = Config {
+            branding: Some(branding),
+            ..Config::default()
+        };
 
         // Act
         let yaml = serde_yaml::to_string(&config).unwrap();
@@ -513,7 +541,10 @@ mod tests {
         let result: Result<Config, _> = serde_yaml::from_str(yaml);
 
         // Assert
-        assert!(result.is_err(), "Expected deserialize failure for #abc short form");
+        assert!(
+            result.is_err(),
+            "Expected deserialize failure for #abc short form"
+        );
     }
 
     #[test]
@@ -525,13 +556,19 @@ mod tests {
         let result: Result<Config, _> = serde_yaml::from_str(yaml);
 
         // Assert
-        assert!(result.is_err(), "Expected deserialize failure for non-hex value");
+        assert!(
+            result.is_err(),
+            "Expected deserialize failure for non-hex value"
+        );
     }
 
     #[test]
     fn test_branding_empty_struct_round_trips() {
         // Arrange — all fields None
-        let config = Config { branding: Some(Branding::default()), ..Config::default() };
+        let config = Config {
+            branding: Some(Branding::default()),
+            ..Config::default()
+        };
 
         // Act
         let yaml = serde_yaml::to_string(&config).unwrap();
@@ -588,7 +625,11 @@ mod tests {
         // Arrange & Act & Assert
         for key in TemplateKey::ALL {
             let display = format!("{key}");
-            assert_eq!(display, display.to_lowercase(), "Display for {key:?} should be lowercase");
+            assert_eq!(
+                display,
+                display.to_lowercase(),
+                "Display for {key:?} should be lowercase"
+            );
         }
     }
 
@@ -635,7 +676,10 @@ mod tests {
         // Act & Assert
         for name in names {
             let result: Result<TemplateKey, _> = name.parse();
-            assert!(result.is_ok(), "Should parse '{name}' as a valid TemplateKey");
+            assert!(
+                result.is_ok(),
+                "Should parse '{name}' as a valid TemplateKey"
+            );
         }
     }
 
@@ -647,7 +691,10 @@ mod tests {
         // Assert
         assert!(result.is_err());
         let msg = result.unwrap_err().to_string();
-        assert!(msg.contains("europa"), "Error should contain the invalid key");
+        assert!(
+            msg.contains("europa"),
+            "Error should contain the invalid key"
+        );
         assert!(msg.contains("leda"), "Error should list available keys");
     }
 
@@ -663,10 +710,16 @@ mod tests {
     #[test]
     fn test_template_key_from_str_case_insensitive() {
         // Arrange & Act & Assert
-        assert_eq!("CALLISTO".parse::<TemplateKey>().unwrap(), TemplateKey::Callisto);
+        assert_eq!(
+            "CALLISTO".parse::<TemplateKey>().unwrap(),
+            TemplateKey::Callisto
+        );
         assert_eq!("Leda".parse::<TemplateKey>().unwrap(), TemplateKey::Leda);
         assert_eq!("THEBE".parse::<TemplateKey>().unwrap(), TemplateKey::Thebe);
-        assert_eq!("AmAlThEa".parse::<TemplateKey>().unwrap(), TemplateKey::Amalthea);
+        assert_eq!(
+            "AmAlThEa".parse::<TemplateKey>().unwrap(),
+            TemplateKey::Amalthea
+        );
         assert_eq!("Metis".parse::<TemplateKey>().unwrap(), TemplateKey::Metis);
     }
 
@@ -744,7 +797,8 @@ mod tests {
     #[test]
     fn test_defaults_with_template_field_deserializes() {
         // Arrange
-        let yaml = "currency: EUR\ninvoice_date_day: 9\npayment_terms_days: 30\ntemplate: callisto\n";
+        let yaml =
+            "currency: EUR\ninvoice_date_day: 9\npayment_terms_days: 30\ntemplate: callisto\n";
 
         // Act
         let defaults: Defaults = serde_yaml::from_str(yaml).unwrap();
@@ -772,7 +826,10 @@ mod tests {
     #[test]
     fn test_branding_optional_fields_omitted_when_none() {
         // Arrange
-        let branding = Branding { logo: Some("logo.png".into()), ..Branding::default() };
+        let branding = Branding {
+            logo: Some("logo.png".into()),
+            ..Branding::default()
+        };
 
         // Act
         let yaml = serde_yaml::to_string(&branding).unwrap();

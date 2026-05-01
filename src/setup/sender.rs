@@ -1,9 +1,9 @@
 use std::path::Path;
 
+use super::prompter::Prompter;
 use crate::config::types::{Config, Sender};
 use crate::config::writer::save_config;
 use crate::error::AppError;
-use super::prompter::Prompter;
 
 /// Collect sender information interactively and persist it to disk.
 pub fn collect_sender(

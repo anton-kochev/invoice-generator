@@ -1,7 +1,7 @@
 use std::path::Path;
 
-use crate::config::types::Config;
 use super::prompter::Prompter;
+use crate::config::types::Config;
 
 /// Display a summary of the completed setup configuration.
 pub fn display_summary(prompter: &dyn Prompter, config: &Config, config_path: &Path) {
@@ -20,7 +20,10 @@ pub fn display_summary(prompter: &dyn Prompter, config: &Config, config_path: &P
         }
     }
     if let Some(defaults) = &config.defaults {
-        prompter.message(&format!("Payment terms:  {} days", defaults.payment_terms_days));
+        prompter.message(&format!(
+            "Payment terms:  {} days",
+            defaults.payment_terms_days
+        ));
         prompter.message(&format!("Currency:       {}", defaults.currency));
     }
 
@@ -53,7 +56,10 @@ mod tests {
         // Assert
         let messages = prompter.messages.borrow();
         let output = messages.join("\n");
-        assert!(output.contains("Alice Smith"), "Should include sender name, got: {output}");
+        assert!(
+            output.contains("Alice Smith"),
+            "Should include sender name, got: {output}"
+        );
     }
 
     #[test]
@@ -68,7 +74,10 @@ mod tests {
         // Assert
         let messages = prompter.messages.borrow();
         let output = messages.join("\n");
-        assert!(output.contains("Bob Corp"), "Should include recipient name, got: {output}");
+        assert!(
+            output.contains("Bob Corp"),
+            "Should include recipient name, got: {output}"
+        );
     }
 
     #[test]
@@ -99,7 +108,10 @@ mod tests {
         // Assert
         let messages = prompter.messages.borrow();
         let output = messages.join("\n");
-        assert!(output.contains("14"), "Should include payment terms days (14 from synthetic_defaults)");
+        assert!(
+            output.contains("14"),
+            "Should include payment terms days (14 from synthetic_defaults)"
+        );
     }
 
     #[test]

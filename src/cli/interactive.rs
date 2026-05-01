@@ -1,8 +1,10 @@
 use std::path::Path;
 
-use crate::config::loader::{load_config, missing_field_hints, LoadResult};
+use crate::config::loader::{LoadResult, load_config, missing_field_hints};
 use crate::config::types::{Config, TemplateKey};
-use crate::config::validator::{ConfigSection, ValidatedConfig, ValidatedRecipient, ValidationOutcome};
+use crate::config::validator::{
+    ConfigSection, ValidatedConfig, ValidatedRecipient, ValidationOutcome,
+};
 use crate::error::AppError;
 use crate::setup::prompter::Prompter;
 use crate::{invoice, pdf, setup};
@@ -37,9 +39,7 @@ pub fn run_interactive(
             if let Ok(raw) = std::fs::read_to_string(config_path) {
                 let hints = missing_field_hints(&raw);
                 if !hints.is_empty() {
-                    eprintln!(
-                        "Tip: Your config can use these fields in the \"defaults\" section:"
-                    );
+                    eprintln!("Tip: Your config can use these fields in the \"defaults\" section:");
                     for hint in &hints {
                         eprintln!("{hint}");
                     }
@@ -47,22 +47,26 @@ pub fn run_interactive(
             }
 
             match (*config).validate()? {
-            ValidationOutcome::Complete(v) => {
-                println!("Config loaded successfully.");
-                println!("Sender: {}", v.sender.name);
-                println!("Recipient: {}", v.default_recipient().name());
-                v
-            }
-            ValidationOutcome::Incomplete { mut config, missing } => {
-                setup::run_setup(prompter, &mut config, &missing, config_path)?;
-                match config.validate()? {
-                    ValidationOutcome::Complete(v) => v,
-                    ValidationOutcome::Incomplete { .. } => {
-                        unreachable!("Setup completed but config still incomplete")
+                ValidationOutcome::Complete(v) => {
+                    println!("Config loaded successfully.");
+                    println!("Sender: {}", v.sender.name);
+                    println!("Recipient: {}", v.default_recipient().name());
+                    v
+                }
+                ValidationOutcome::Incomplete {
+                    mut config,
+                    missing,
+                } => {
+                    setup::run_setup(prompter, &mut config, &missing, config_path)?;
+                    match config.validate()? {
+                        ValidationOutcome::Complete(v) => v,
+                        ValidationOutcome::Incomplete { .. } => {
+                            unreachable!("Setup completed but config still incomplete")
+                        }
                     }
                 }
             }
-        }},
+        }
     };
 
     let recipient = select_recipient(
@@ -97,11 +101,7 @@ pub fn run_invoice_flow(
             config_path,
         )?;
 
-        let summary = invoice::summary::build_summary(
-            period,
-            line_items,
-            &validated.defaults,
-        )?;
+        let summary = invoice::summary::build_summary(period, line_items, &validated.defaults)?;
 
         let formatted = invoice::display::format_summary(&summary);
         prompter.message(&formatted);
@@ -109,7 +109,8 @@ pub fn run_invoice_flow(
         // Show current template and offer to change
         prompter.message(&format!(
             "Template: {} ({})",
-            validated.template, validated.template.description()
+            validated.template,
+            validated.template.description()
         ));
 
         let template = if prompter.confirm("Change template?", false)? {
@@ -140,12 +141,16 @@ pub fn run_invoice_flow(
         };
 
         if prompter.confirm("Generate PDF?", true)? {
-            let pdf_bytes = pdf::generate_pdf(&summary, validated, recipient, config_dir, template, validated.locale)?;
-            let output_path = super::common::pdf_output_path(
-                &validated.sender.name,
-                &summary.period,
-                output_dir,
-            );
+            let pdf_bytes = pdf::generate_pdf(
+                &summary,
+                validated,
+                recipient,
+                config_dir,
+                template,
+                validated.locale,
+            )?;
+            let output_path =
+                super::common::pdf_output_path(&validated.sender.name, &summary.period, output_dir);
 
             if output_path.exists()
                 && !prompter.confirm("File already exists. Overwrite?", false)?
@@ -212,11 +217,11 @@ mod tests {
 
     fn flow_responses_no_change() -> Vec<MockResponse> {
         vec![
-            MockResponse::U32(3),    // month
-            MockResponse::U32(2026), // year
-            MockResponse::U32(1),    // select preset
-            MockResponse::F64(10.0), // days
-            MockResponse::F64(800.0), // rate
+            MockResponse::U32(3),         // month
+            MockResponse::U32(2026),      // year
+            MockResponse::U32(1),         // select preset
+            MockResponse::F64(10.0),      // days
+            MockResponse::F64(800.0),     // rate
             MockResponse::Confirm(false), // no more items
             MockResponse::Confirm(false), // don't change template
             MockResponse::Confirm(true),  // generate PDF
@@ -284,7 +289,9 @@ mod tests {
         // Assert
         let messages = prompter.messages.borrow();
         assert!(
-            messages.iter().any(|m| m.contains("callisto") && m.contains("leda") && m.contains("thebe")),
+            messages
+                .iter()
+                .any(|m| m.contains("callisto") && m.contains("leda") && m.contains("thebe")),
             "Should show all template names, got: {messages:?}"
         );
         prompter.assert_exhausted();
@@ -301,7 +308,11 @@ mod tests {
         // Act
         run_invoice_flow(&prompter, &config, &recipient, &config_path, dir.path()).unwrap();
         // Assert
-        assert_eq!(config.template, TemplateKey::Leda, "Config should not be modified");
+        assert_eq!(
+            config.template,
+            TemplateKey::Leda,
+            "Config should not be modified"
+        );
         prompter.assert_exhausted();
     }
 }

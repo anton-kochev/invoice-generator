@@ -96,8 +96,18 @@ mod tests {
             due_date: Date::from_calendar_date(2026, Month::May, 9).unwrap(),
             currency: crate::domain::Currency::Eur,
             line_items: vec![
-                LineItem::new("Software development".into(), 10.0, 800.0, crate::domain::Currency::Eur),
-                LineItem::new("Technical consulting".into(), 5.0, 1000.0, crate::domain::Currency::Eur),
+                LineItem::new(
+                    "Software development".into(),
+                    10.0,
+                    800.0,
+                    crate::domain::Currency::Eur,
+                ),
+                LineItem::new(
+                    "Technical consulting".into(),
+                    5.0,
+                    1000.0,
+                    crate::domain::Currency::Eur,
+                ),
             ],
             subtotal: 13000.0,
             tax_total: 0.0,

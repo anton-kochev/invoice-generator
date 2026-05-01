@@ -1,13 +1,13 @@
 use std::path::Path;
 use std::str::FromStr;
 
+use super::prompter::Prompter;
+use super::prompts::prompt_parsed;
 use crate::config::types::{Config, Defaults, TemplateKey};
 use crate::config::writer::save_config;
 use crate::domain::Currency;
 use crate::error::AppError;
 use crate::locale::Locale;
-use super::prompter::Prompter;
-use super::prompts::prompt_parsed;
 
 /// Collect default invoice values interactively and persist them to disk.
 pub fn collect_defaults(
@@ -82,7 +82,7 @@ mod tests {
         let dir = setup_dir(None);
         let mut config = empty_config();
         let prompter = MockPrompter::new(vec![
-            MockResponse::Text("".into()),  // accept default EUR
+            MockResponse::Text("".into()), // accept default EUR
             MockResponse::U32(9),
             MockResponse::U32(30),
             MockResponse::Text("leda".into()),
@@ -155,8 +155,8 @@ mod tests {
         let dir = setup_dir(None);
         let mut config = empty_config();
         let prompter = MockPrompter::new(vec![
-            MockResponse::Text("CHF".into()),  // rejected
-            MockResponse::Text("EUR".into()),  // accepted
+            MockResponse::Text("CHF".into()), // rejected
+            MockResponse::Text("EUR".into()), // accepted
             MockResponse::U32(9),
             MockResponse::U32(30),
             MockResponse::Text("leda".into()),
@@ -212,7 +212,10 @@ mod tests {
         // Act
         collect_defaults(&prompter, &mut config, &cfg_path(&dir)).unwrap();
         // Assert
-        assert_eq!(config.defaults.as_ref().unwrap().template, TemplateKey::Callisto);
+        assert_eq!(
+            config.defaults.as_ref().unwrap().template,
+            TemplateKey::Callisto
+        );
         prompter.assert_exhausted();
     }
 
@@ -252,7 +255,10 @@ mod tests {
         // Act
         collect_defaults(&prompter, &mut config, &cfg_path(&dir)).unwrap();
         // Assert
-        assert_eq!(config.defaults.as_ref().unwrap().template, TemplateKey::Leda);
+        assert_eq!(
+            config.defaults.as_ref().unwrap().template,
+            TemplateKey::Leda
+        );
         prompter.assert_exhausted();
     }
 
@@ -274,7 +280,9 @@ mod tests {
         // Assert
         let messages = prompter.messages.borrow();
         assert!(
-            messages.iter().any(|m| m.contains("callisto") && m.contains("leda") && m.contains("thebe")),
+            messages
+                .iter()
+                .any(|m| m.contains("callisto") && m.contains("leda") && m.contains("thebe")),
             "Expected available templates in messages, got: {messages:?}"
         );
         prompter.assert_exhausted();
@@ -334,8 +342,8 @@ mod tests {
             MockResponse::U32(9),
             MockResponse::U32(30),
             MockResponse::Text("leda".into()),
-            MockResponse::Text("xx-YY".into()),  // invalid — triggers re-prompt
-            MockResponse::Text("en-US".into()),   // valid on retry
+            MockResponse::Text("xx-YY".into()), // invalid — triggers re-prompt
+            MockResponse::Text("en-US".into()), // valid on retry
         ]);
 
         // Act

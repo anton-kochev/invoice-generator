@@ -38,7 +38,9 @@ pub fn select_preset(
     if choice == max {
         Ok(PresetSelection::CreateNew)
     } else {
-        Ok(PresetSelection::Existing(presets[choice as usize - 1].clone()))
+        Ok(PresetSelection::Existing(
+            presets[choice as usize - 1].clone(),
+        ))
     }
 }
 
@@ -81,7 +83,10 @@ mod tests {
         let all = messages.join("\n");
         assert!(all.contains("[1]"), "Expected [1] in messages, got: {all}");
         assert!(all.contains("[2]"), "Expected [2] in messages, got: {all}");
-        assert!(all.contains("dev"), "Expected 'dev' in messages, got: {all}");
+        assert!(
+            all.contains("dev"),
+            "Expected 'dev' in messages, got: {all}"
+        );
         assert!(
             all.contains("consulting"),
             "Expected 'consulting' in messages, got: {all}"
@@ -111,7 +116,10 @@ mod tests {
         // Assert
         let messages = prompter.messages.borrow();
         let all = messages.join("\n");
-        assert!(all.contains("USD"), "Expected 'USD' in messages, got: {all}");
+        assert!(
+            all.contains("USD"),
+            "Expected 'USD' in messages, got: {all}"
+        );
         assert!(
             all.contains("500.00"),
             "Expected '500.00' in messages, got: {all}"
@@ -336,7 +344,10 @@ mod tests {
         let messages = prompter.messages.borrow();
         let display = messages.iter().find(|m| m.contains("dev")).unwrap();
         assert!(display.contains("USD"), "Expected 'USD' in: {display}");
-        assert!(!display.contains("EUR"), "Should not contain 'EUR' in: {display}");
+        assert!(
+            !display.contains("EUR"),
+            "Should not contain 'EUR' in: {display}"
+        );
     }
 
     #[test]

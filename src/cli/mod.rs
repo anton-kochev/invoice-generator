@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use clap::{Parser, Subcommand};
 
 use crate::config::ConfigError;
-use crate::config::loader::{load_config, LoadResult};
+use crate::config::loader::{LoadResult, load_config};
 use crate::config::validator::{ValidatedConfig, ValidationOutcome};
 use crate::error::AppError;
 
@@ -207,8 +207,8 @@ mod tests {
     fn test_generate_single_item_parses_all_flags() {
         // Arrange
         let args = [
-            "invoice", "generate", "--month", "3", "--year", "2026",
-            "--preset", "pwc", "--days", "10",
+            "invoice", "generate", "--month", "3", "--year", "2026", "--preset", "pwc", "--days",
+            "10",
         ];
 
         // Act
@@ -231,8 +231,7 @@ mod tests {
     fn test_generate_single_item_missing_month_is_error() {
         // Arrange
         let args = [
-            "invoice", "generate", "--year", "2026",
-            "--preset", "pwc", "--days", "10",
+            "invoice", "generate", "--year", "2026", "--preset", "pwc", "--days", "10",
         ];
 
         // Act
@@ -259,8 +258,7 @@ mod tests {
         // Arrange
         let json = r#"[{"preset":"pwc","days":10}]"#;
         let args = [
-            "invoice", "generate", "--month", "3", "--year", "2026",
-            "--items", json,
+            "invoice", "generate", "--month", "3", "--year", "2026", "--items", json,
         ];
 
         // Act
@@ -281,9 +279,8 @@ mod tests {
     fn test_generate_items_and_preset_mutually_exclusive() {
         // Arrange
         let args = [
-            "invoice", "generate", "--month", "3", "--year", "2026",
-            "--preset", "pwc", "--days", "10",
-            "--items", "[{}]",
+            "invoice", "generate", "--month", "3", "--year", "2026", "--preset", "pwc", "--days",
+            "10", "--items", "[{}]",
         ];
 
         // Act
@@ -297,8 +294,8 @@ mod tests {
     fn test_generate_items_and_days_mutually_exclusive() {
         // Arrange
         let args = [
-            "invoice", "generate", "--month", "3", "--year", "2026",
-            "--items", "[{}]", "--days", "5",
+            "invoice", "generate", "--month", "3", "--year", "2026", "--items", "[{}]", "--days",
+            "5",
         ];
 
         // Act
@@ -324,8 +321,8 @@ mod tests {
     fn test_generate_client_flag_parses() {
         // Arrange
         let args = [
-            "invoice", "generate", "--month", "3", "--year", "2026",
-            "--preset", "dev", "--days", "10", "--client", "acme",
+            "invoice", "generate", "--month", "3", "--year", "2026", "--preset", "dev", "--days",
+            "10", "--client", "acme",
         ];
 
         // Act
@@ -344,8 +341,8 @@ mod tests {
     fn test_generate_without_client_flag_defaults_to_none() {
         // Arrange
         let args = [
-            "invoice", "generate", "--month", "3", "--year", "2026",
-            "--preset", "dev", "--days", "10",
+            "invoice", "generate", "--month", "3", "--year", "2026", "--preset", "dev", "--days",
+            "10",
         ];
 
         // Act
@@ -365,7 +362,20 @@ mod tests {
     #[test]
     fn test_generate_template_flag_parses() {
         // Arrange
-        let args = ["invoice", "generate", "--month", "3", "--year", "2026", "--preset", "dev", "--days", "10", "--template", "amalthea"];
+        let args = [
+            "invoice",
+            "generate",
+            "--month",
+            "3",
+            "--year",
+            "2026",
+            "--preset",
+            "dev",
+            "--days",
+            "10",
+            "--template",
+            "amalthea",
+        ];
         // Act
         let cli = Cli::try_parse_from(args).unwrap();
         // Assert
@@ -378,7 +388,10 @@ mod tests {
     #[test]
     fn test_generate_without_template_flag_defaults_to_none() {
         // Arrange
-        let args = ["invoice", "generate", "--month", "3", "--year", "2026", "--preset", "dev", "--days", "10"];
+        let args = [
+            "invoice", "generate", "--month", "3", "--year", "2026", "--preset", "dev", "--days",
+            "10",
+        ];
         // Act
         let cli = Cli::try_parse_from(args).unwrap();
         // Assert
@@ -391,7 +404,10 @@ mod tests {
     #[test]
     fn test_generate_locale_flag_parses() {
         // Arrange
-        let args = ["invoice", "generate", "--month", "3", "--year", "2026", "--preset", "dev", "--days", "10", "--locale", "de-DE"];
+        let args = [
+            "invoice", "generate", "--month", "3", "--year", "2026", "--preset", "dev", "--days",
+            "10", "--locale", "de-DE",
+        ];
         // Act
         let cli = Cli::try_parse_from(args).unwrap();
         // Assert
@@ -404,7 +420,10 @@ mod tests {
     #[test]
     fn test_generate_without_locale_flag_defaults_to_none() {
         // Arrange
-        let args = ["invoice", "generate", "--month", "3", "--year", "2026", "--preset", "dev", "--days", "10"];
+        let args = [
+            "invoice", "generate", "--month", "3", "--year", "2026", "--preset", "dev", "--days",
+            "10",
+        ];
         // Act
         let cli = Cli::try_parse_from(args).unwrap();
         // Assert
@@ -417,7 +436,18 @@ mod tests {
     #[test]
     fn test_generate_template_with_items_mode_parses() {
         // Arrange
-        let args = ["invoice", "generate", "--month", "3", "--year", "2026", "--items", r#"[{"preset":"dev","days":5}]"#, "--template", "thebe"];
+        let args = [
+            "invoice",
+            "generate",
+            "--month",
+            "3",
+            "--year",
+            "2026",
+            "--items",
+            r#"[{"preset":"dev","days":5}]"#,
+            "--template",
+            "thebe",
+        ];
         // Act
         let cli = Cli::try_parse_from(args).unwrap();
         // Assert

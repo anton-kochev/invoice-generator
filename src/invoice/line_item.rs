@@ -93,7 +93,10 @@ pub fn collect_line_item_details(
     ));
 
     if item.tax_rate > 0.0 {
-        prompter.message(&format!("  => tax {:.1}%: {:.2}", item.tax_rate, item.tax_amount));
+        prompter.message(&format!(
+            "  => tax {:.1}%: {:.2}",
+            item.tax_rate, item.tax_amount
+        ));
     }
 
     Ok(item)
@@ -187,10 +190,7 @@ mod tests {
     fn displays_header_with_item_number_and_description() {
         // Arrange
         let preset = make_preset();
-        let prompter = MockPrompter::new(vec![
-            MockResponse::F64(10.0),
-            MockResponse::F64(800.0),
-        ]);
+        let prompter = MockPrompter::new(vec![MockResponse::F64(10.0), MockResponse::F64(800.0)]);
 
         // Act
         let _ = collect_line_item_details(&prompter, &preset, 1, Currency::Eur).unwrap();
@@ -205,10 +205,7 @@ mod tests {
     fn collects_days_and_accepts_default_rate() {
         // Arrange
         let preset = make_preset();
-        let prompter = MockPrompter::new(vec![
-            MockResponse::F64(10.0),
-            MockResponse::F64(800.0),
-        ]);
+        let prompter = MockPrompter::new(vec![MockResponse::F64(10.0), MockResponse::F64(800.0)]);
 
         // Act
         let item = collect_line_item_details(&prompter, &preset, 1, Currency::Eur).unwrap();
@@ -224,10 +221,7 @@ mod tests {
     fn collects_days_and_custom_rate() {
         // Arrange
         let preset = make_preset();
-        let prompter = MockPrompter::new(vec![
-            MockResponse::F64(5.0),
-            MockResponse::F64(1200.0),
-        ]);
+        let prompter = MockPrompter::new(vec![MockResponse::F64(5.0), MockResponse::F64(1200.0)]);
 
         // Act
         let item = collect_line_item_details(&prompter, &preset, 1, Currency::Eur).unwrap();
@@ -243,10 +237,7 @@ mod tests {
     fn fractional_days_accepted() {
         // Arrange
         let preset = make_preset();
-        let prompter = MockPrompter::new(vec![
-            MockResponse::F64(12.34),
-            MockResponse::F64(100.0),
-        ]);
+        let prompter = MockPrompter::new(vec![MockResponse::F64(12.34), MockResponse::F64(100.0)]);
 
         // Act
         let item = collect_line_item_details(&prompter, &preset, 1, Currency::Eur).unwrap();
@@ -259,10 +250,7 @@ mod tests {
     fn displays_computed_amount_summary() {
         // Arrange
         let preset = make_preset();
-        let prompter = MockPrompter::new(vec![
-            MockResponse::F64(10.0),
-            MockResponse::F64(800.0),
-        ]);
+        let prompter = MockPrompter::new(vec![MockResponse::F64(10.0), MockResponse::F64(800.0)]);
 
         // Act
         let _ = collect_line_item_details(&prompter, &preset, 1, Currency::Eur).unwrap();
@@ -276,10 +264,7 @@ mod tests {
     fn uses_preset_description_in_line_item() {
         // Arrange
         let preset = make_preset();
-        let prompter = MockPrompter::new(vec![
-            MockResponse::F64(1.0),
-            MockResponse::F64(100.0),
-        ]);
+        let prompter = MockPrompter::new(vec![MockResponse::F64(1.0), MockResponse::F64(100.0)]);
 
         // Act
         let item = collect_line_item_details(&prompter, &preset, 1, Currency::Eur).unwrap();
@@ -292,10 +277,7 @@ mod tests {
     fn item_number_displayed_correctly() {
         // Arrange
         let preset = make_preset();
-        let prompter = MockPrompter::new(vec![
-            MockResponse::F64(1.0),
-            MockResponse::F64(100.0),
-        ]);
+        let prompter = MockPrompter::new(vec![MockResponse::F64(1.0), MockResponse::F64(100.0)]);
 
         // Act
         let _ = collect_line_item_details(&prompter, &preset, 3, Currency::Eur).unwrap();
@@ -313,14 +295,15 @@ mod tests {
         let dir = setup_test_dir();
         let presets = make_presets();
         let prompter = MockPrompter::new(vec![
-            MockResponse::U32(1),          // select preset #1
-            MockResponse::F64(10.0),       // days
-            MockResponse::F64(800.0),      // rate
-            MockResponse::Confirm(false),  // add another? no
+            MockResponse::U32(1),         // select preset #1
+            MockResponse::F64(10.0),      // days
+            MockResponse::F64(800.0),     // rate
+            MockResponse::Confirm(false), // add another? no
         ]);
 
         // Act
-        let items = collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
+        let items =
+            collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
 
         // Assert
         assert_eq!(items.len(), 1);
@@ -334,18 +317,19 @@ mod tests {
         let dir = setup_test_dir();
         let presets = make_presets();
         let prompter = MockPrompter::new(vec![
-            MockResponse::U32(1),          // select preset #1
-            MockResponse::F64(10.0),       // days
-            MockResponse::F64(800.0),      // rate
-            MockResponse::Confirm(true),   // add another? yes
-            MockResponse::U32(2),          // select preset #2
-            MockResponse::F64(5.0),        // days
-            MockResponse::F64(1000.0),     // rate
-            MockResponse::Confirm(false),  // add another? no
+            MockResponse::U32(1),         // select preset #1
+            MockResponse::F64(10.0),      // days
+            MockResponse::F64(800.0),     // rate
+            MockResponse::Confirm(true),  // add another? yes
+            MockResponse::U32(2),         // select preset #2
+            MockResponse::F64(5.0),       // days
+            MockResponse::F64(1000.0),    // rate
+            MockResponse::Confirm(false), // add another? no
         ]);
 
         // Act
-        let items = collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
+        let items =
+            collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
 
         // Assert
         assert_eq!(items.len(), 2);
@@ -360,13 +344,23 @@ mod tests {
         let dir = setup_test_dir();
         let presets = make_presets();
         let prompter = MockPrompter::new(vec![
-            MockResponse::U32(1), MockResponse::F64(1.0), MockResponse::F64(100.0), MockResponse::Confirm(true),
-            MockResponse::U32(1), MockResponse::F64(2.0), MockResponse::F64(200.0), MockResponse::Confirm(true),
-            MockResponse::U32(1), MockResponse::F64(3.0), MockResponse::F64(300.0), MockResponse::Confirm(false),
+            MockResponse::U32(1),
+            MockResponse::F64(1.0),
+            MockResponse::F64(100.0),
+            MockResponse::Confirm(true),
+            MockResponse::U32(1),
+            MockResponse::F64(2.0),
+            MockResponse::F64(200.0),
+            MockResponse::Confirm(true),
+            MockResponse::U32(1),
+            MockResponse::F64(3.0),
+            MockResponse::F64(300.0),
+            MockResponse::Confirm(false),
         ]);
 
         // Act
-        let items = collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
+        let items =
+            collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
 
         // Assert
         assert_eq!(items.len(), 3);
@@ -382,18 +376,31 @@ mod tests {
         let dir = setup_test_dir();
         let presets = make_presets();
         let prompter = MockPrompter::new(vec![
-            MockResponse::U32(1), MockResponse::F64(10.0), MockResponse::F64(800.0), MockResponse::Confirm(true),
-            MockResponse::U32(1), MockResponse::F64(5.0), MockResponse::F64(800.0), MockResponse::Confirm(false),
+            MockResponse::U32(1),
+            MockResponse::F64(10.0),
+            MockResponse::F64(800.0),
+            MockResponse::Confirm(true),
+            MockResponse::U32(1),
+            MockResponse::F64(5.0),
+            MockResponse::F64(800.0),
+            MockResponse::Confirm(false),
         ]);
 
         // Act
-        let _ = collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
+        let _ =
+            collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
 
         // Assert
         let messages = prompter.messages.borrow();
         let all = messages.join("\n");
-        assert!(all.contains("Line item #1"), "Expected 'Line item #1' in messages");
-        assert!(all.contains("Line item #2"), "Expected 'Line item #2' in messages");
+        assert!(
+            all.contains("Line item #1"),
+            "Expected 'Line item #1' in messages"
+        );
+        assert!(
+            all.contains("Line item #2"),
+            "Expected 'Line item #2' in messages"
+        );
     }
 
     #[test]
@@ -402,12 +409,19 @@ mod tests {
         let dir = setup_test_dir();
         let presets = make_presets();
         let prompter = MockPrompter::new(vec![
-            MockResponse::U32(1), MockResponse::F64(10.0), MockResponse::F64(800.0), MockResponse::Confirm(true),
-            MockResponse::U32(2), MockResponse::F64(5.0), MockResponse::F64(1000.0), MockResponse::Confirm(false),
+            MockResponse::U32(1),
+            MockResponse::F64(10.0),
+            MockResponse::F64(800.0),
+            MockResponse::Confirm(true),
+            MockResponse::U32(2),
+            MockResponse::F64(5.0),
+            MockResponse::F64(1000.0),
+            MockResponse::Confirm(false),
         ]);
 
         // Act
-        let items = collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
+        let items =
+            collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
 
         // Assert
         assert_eq!(items[0].description, "Software development");
@@ -420,17 +434,18 @@ mod tests {
         let dir = setup_test_dir();
         let presets = make_presets(); // has "dev" and "consulting"
         let prompter = MockPrompter::new(vec![
-            MockResponse::U32(3),                      // select "Create new" (2 presets + 1)
-            MockResponse::Text("design".into()),       // key
-            MockResponse::Text("Design work".into()),  // description
-            MockResponse::F64(500.0),                  // rate
-            MockResponse::F64(5.0),                    // days worked
-            MockResponse::F64(500.0),                  // rate (accept default)
-            MockResponse::Confirm(false),              // add another? no
+            MockResponse::U32(3),                     // select "Create new" (2 presets + 1)
+            MockResponse::Text("design".into()),      // key
+            MockResponse::Text("Design work".into()), // description
+            MockResponse::F64(500.0),                 // rate
+            MockResponse::F64(5.0),                   // days worked
+            MockResponse::F64(500.0),                 // rate (accept default)
+            MockResponse::Confirm(false),             // add another? no
         ]);
 
         // Act
-        let items = collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
+        let items =
+            collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
 
         // Assert
         assert_eq!(items.len(), 1);
@@ -452,22 +467,23 @@ mod tests {
         let presets = make_presets(); // "dev", "consulting"
         let prompter = MockPrompter::new(vec![
             // Item 1: create new preset "design"
-            MockResponse::U32(3),                      // Create new
+            MockResponse::U32(3), // Create new
             MockResponse::Text("design".into()),
             MockResponse::Text("Design work".into()),
             MockResponse::F64(500.0),
-            MockResponse::F64(5.0),                    // days
-            MockResponse::F64(500.0),                  // rate
-            MockResponse::Confirm(true),               // add another? yes
+            MockResponse::F64(5.0),      // days
+            MockResponse::F64(500.0),    // rate
+            MockResponse::Confirm(true), // add another? yes
             // Item 2: select "design" which is now preset #3 in the list
-            MockResponse::U32(3),                      // select preset #3 (design)
-            MockResponse::F64(2.0),                    // days
-            MockResponse::F64(500.0),                  // rate
-            MockResponse::Confirm(false),              // add another? no
+            MockResponse::U32(3),         // select preset #3 (design)
+            MockResponse::F64(2.0),       // days
+            MockResponse::F64(500.0),     // rate
+            MockResponse::Confirm(false), // add another? no
         ]);
 
         // Act
-        let items = collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
+        let items =
+            collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
 
         // Assert
         assert_eq!(items.len(), 2);
@@ -483,22 +499,23 @@ mod tests {
         let presets = make_presets(); // "dev" (800), "consulting" (1000)
         let prompter = MockPrompter::new(vec![
             // Item 1: create new preset "ops"
-            MockResponse::U32(3),                      // Create new
+            MockResponse::U32(3), // Create new
             MockResponse::Text("ops".into()),
             MockResponse::Text("Ops work".into()),
             MockResponse::F64(300.0),
-            MockResponse::F64(10.0),                   // days
-            MockResponse::F64(300.0),                  // rate
-            MockResponse::Confirm(true),               // add another? yes
+            MockResponse::F64(10.0),     // days
+            MockResponse::F64(300.0),    // rate
+            MockResponse::Confirm(true), // add another? yes
             // Item 2: select existing "dev" (preset #1)
             MockResponse::U32(1),
-            MockResponse::F64(5.0),                    // days
-            MockResponse::F64(800.0),                  // rate
-            MockResponse::Confirm(false),              // no more
+            MockResponse::F64(5.0),       // days
+            MockResponse::F64(800.0),     // rate
+            MockResponse::Confirm(false), // no more
         ]);
 
         // Act
-        let items = collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
+        let items =
+            collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
 
         // Assert
         assert_eq!(items.len(), 2);
@@ -515,7 +532,7 @@ mod tests {
         let dir = setup_test_dir();
         let presets = make_presets();
         let prompter = MockPrompter::new(vec![
-            MockResponse::U32(3),                       // Create new
+            MockResponse::U32(3), // Create new
             MockResponse::Text("design".into()),
             MockResponse::Text("Design work".into()),
             MockResponse::F64(500.0),
@@ -528,7 +545,7 @@ mod tests {
         collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
 
         // Assert — verify preset was persisted to disk
-        use crate::config::loader::{load_config, LoadResult};
+        use crate::config::loader::{LoadResult, load_config};
         let config = match load_config(&cfg_path(&dir)).unwrap() {
             LoadResult::Loaded(c) => *c,
             LoadResult::NotFound => panic!("Config file should exist"),
@@ -557,13 +574,16 @@ mod tests {
         collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
 
         // Assert — original "dev" preset still present
-        use crate::config::loader::{load_config, LoadResult};
+        use crate::config::loader::{LoadResult, load_config};
         let config = match load_config(&cfg_path(&dir)).unwrap() {
             LoadResult::Loaded(c) => *c,
             LoadResult::NotFound => panic!("Config file should exist"),
         };
         let presets_on_disk = config.presets.unwrap();
-        assert!(presets_on_disk.iter().any(|p| p.key.as_str() == "dev"), "Original preset should still exist");
+        assert!(
+            presets_on_disk.iter().any(|p| p.key.as_str() == "dev"),
+            "Original preset should still exist"
+        );
         prompter.assert_exhausted();
     }
 
@@ -573,12 +593,19 @@ mod tests {
         let dir = setup_test_dir();
         let presets = make_presets();
         let prompter = MockPrompter::new(vec![
-            MockResponse::U32(1), MockResponse::F64(12.5), MockResponse::F64(800.0), MockResponse::Confirm(true),
-            MockResponse::U32(2), MockResponse::F64(3.0), MockResponse::F64(1500.0), MockResponse::Confirm(false),
+            MockResponse::U32(1),
+            MockResponse::F64(12.5),
+            MockResponse::F64(800.0),
+            MockResponse::Confirm(true),
+            MockResponse::U32(2),
+            MockResponse::F64(3.0),
+            MockResponse::F64(1500.0),
+            MockResponse::Confirm(false),
         ]);
 
         // Act
-        let items = collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
+        let items =
+            collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
 
         // Assert
         assert!((items[0].amount - 10000.0).abs() < f64::EPSILON);
@@ -595,10 +622,7 @@ mod tests {
             currency: Some(Currency::Uah),
             tax_rate: None,
         };
-        let prompter = MockPrompter::new(vec![
-            MockResponse::F64(10.0),
-            MockResponse::F64(800.0),
-        ]);
+        let prompter = MockPrompter::new(vec![MockResponse::F64(10.0), MockResponse::F64(800.0)]);
 
         // Act
         let item = collect_line_item_details(&prompter, &preset, 1, Currency::Uah).unwrap();
@@ -620,10 +644,7 @@ mod tests {
             currency: None,
             tax_rate: None,
         };
-        let prompter = MockPrompter::new(vec![
-            MockResponse::F64(10.0),
-            MockResponse::F64(800.0),
-        ]);
+        let prompter = MockPrompter::new(vec![MockResponse::F64(10.0), MockResponse::F64(800.0)]);
 
         // Act
         let item = collect_line_item_details(&prompter, &preset, 1, Currency::Eur).unwrap();
@@ -644,10 +665,7 @@ mod tests {
             currency: None,
             tax_rate: Some(0.0),
         };
-        let prompter = MockPrompter::new(vec![
-            MockResponse::F64(10.0),
-            MockResponse::F64(800.0),
-        ]);
+        let prompter = MockPrompter::new(vec![MockResponse::F64(10.0), MockResponse::F64(800.0)]);
 
         // Act
         let item = collect_line_item_details(&prompter, &preset, 1, Currency::Eur).unwrap();
@@ -752,7 +770,10 @@ mod tests {
         // Assert
         let messages = prompter.messages.borrow();
         let all = messages.join("\n");
-        assert!(all.contains("tax 21.0%: 1680.00"), "Expected tax message in: {all}");
+        assert!(
+            all.contains("tax 21.0%: 1680.00"),
+            "Expected tax message in: {all}"
+        );
     }
 
     // --- collect_all_line_items with tax tests (Story 9.2) ---
@@ -769,15 +790,16 @@ mod tests {
             tax_rate: Some(21.0),
         }];
         let prompter = MockPrompter::new(vec![
-            MockResponse::U32(1),          // select preset #1
-            MockResponse::F64(10.0),       // days
-            MockResponse::F64(800.0),      // rate
-            MockResponse::F64(21.0),       // tax rate
-            MockResponse::Confirm(false),  // add another? no
+            MockResponse::U32(1),         // select preset #1
+            MockResponse::F64(10.0),      // days
+            MockResponse::F64(800.0),     // rate
+            MockResponse::F64(21.0),      // tax rate
+            MockResponse::Confirm(false), // add another? no
         ]);
 
         // Act
-        let items = collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
+        let items =
+            collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
 
         // Assert
         assert_eq!(items.len(), 1);
@@ -806,19 +828,20 @@ mod tests {
             },
         ];
         let prompter = MockPrompter::new(vec![
-            MockResponse::U32(1),          // select preset #1 (dev, taxed)
-            MockResponse::F64(10.0),       // days
-            MockResponse::F64(800.0),      // rate
-            MockResponse::F64(21.0),       // tax rate
-            MockResponse::Confirm(true),   // add another? yes
-            MockResponse::U32(2),          // select preset #2 (consulting, no tax)
-            MockResponse::F64(5.0),        // days
-            MockResponse::F64(1000.0),     // rate
-            MockResponse::Confirm(false),  // add another? no
+            MockResponse::U32(1),         // select preset #1 (dev, taxed)
+            MockResponse::F64(10.0),      // days
+            MockResponse::F64(800.0),     // rate
+            MockResponse::F64(21.0),      // tax rate
+            MockResponse::Confirm(true),  // add another? yes
+            MockResponse::U32(2),         // select preset #2 (consulting, no tax)
+            MockResponse::F64(5.0),       // days
+            MockResponse::F64(1000.0),    // rate
+            MockResponse::Confirm(false), // add another? no
         ]);
 
         // Act
-        let items = collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
+        let items =
+            collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
 
         // Assert
         assert_eq!(items.len(), 2);
@@ -837,10 +860,7 @@ mod tests {
             currency: None,
             tax_rate: None,
         };
-        let prompter = MockPrompter::new(vec![
-            MockResponse::F64(10.0),
-            MockResponse::F64(800.0),
-        ]);
+        let prompter = MockPrompter::new(vec![MockResponse::F64(10.0), MockResponse::F64(800.0)]);
 
         // Act
         let item = collect_line_item_details(&prompter, &preset, 1, Currency::Eur).unwrap();

@@ -24,7 +24,10 @@ fn next_month(period: &InvoicePeriod) -> (i32, Month) {
 
 /// Compute the invoice date: `invoice_date_day` of the month after the billed period.
 /// Clamps the day if it exceeds the month's length (e.g., day=31 in a 30-day month).
-fn compute_invoice_date(period: &InvoicePeriod, invoice_date_day: u32) -> Result<Date, InvoiceError> {
+fn compute_invoice_date(
+    period: &InvoicePeriod,
+    invoice_date_day: u32,
+) -> Result<Date, InvoiceError> {
     let (year, month) = next_month(period);
     let day = invoice_date_day as u8;
     match Date::from_calendar_date(year, month, day) {

@@ -102,10 +102,7 @@ mod tests {
     #[test]
     fn collect_displays_header() {
         // Arrange
-        let prompter = MockPrompter::new(vec![
-            MockResponse::U32(3),
-            MockResponse::U32(2026),
-        ]);
+        let prompter = MockPrompter::new(vec![MockResponse::U32(3), MockResponse::U32(2026)]);
 
         // Act
         collect_invoice_period(&prompter, 4, 2026).unwrap();
@@ -122,10 +119,7 @@ mod tests {
     #[test]
     fn collect_accepts_default_values() {
         // Arrange
-        let prompter = MockPrompter::new(vec![
-            MockResponse::U32(3),
-            MockResponse::U32(2026),
-        ]);
+        let prompter = MockPrompter::new(vec![MockResponse::U32(3), MockResponse::U32(2026)]);
 
         // Act
         let period = collect_invoice_period(&prompter, 4, 2026).unwrap();
@@ -139,10 +133,7 @@ mod tests {
     #[test]
     fn collect_accepts_custom_values() {
         // Arrange
-        let prompter = MockPrompter::new(vec![
-            MockResponse::U32(7),
-            MockResponse::U32(2024),
-        ]);
+        let prompter = MockPrompter::new(vec![MockResponse::U32(7), MockResponse::U32(2024)]);
 
         // Act
         let period = collect_invoice_period(&prompter, 4, 2026).unwrap();
@@ -156,10 +147,7 @@ mod tests {
     #[test]
     fn collect_january_defaults() {
         // Arrange
-        let prompter = MockPrompter::new(vec![
-            MockResponse::U32(12),
-            MockResponse::U32(2025),
-        ]);
+        let prompter = MockPrompter::new(vec![MockResponse::U32(12), MockResponse::U32(2025)]);
 
         // Act
         let period = collect_invoice_period(&prompter, 1, 2026).unwrap();
@@ -187,8 +175,13 @@ mod tests {
         // Assert
         assert_eq!(period.month(), 6);
         let messages = prompter.messages.borrow();
-        let error_msg = messages.iter().find(|m| m.contains("1") && m.contains("12"));
-        assert!(error_msg.is_some(), "Expected error mentioning 1 and 12, got: {messages:?}");
+        let error_msg = messages
+            .iter()
+            .find(|m| m.contains("1") && m.contains("12"));
+        assert!(
+            error_msg.is_some(),
+            "Expected error mentioning 1 and 12, got: {messages:?}"
+        );
         prompter.assert_exhausted();
     }
 
@@ -224,8 +217,13 @@ mod tests {
         // Assert
         assert_eq!(period.year(), 2000);
         let messages = prompter.messages.borrow();
-        let error_msg = messages.iter().find(|m| m.contains("2000") && m.contains("2099"));
-        assert!(error_msg.is_some(), "Expected error mentioning 2000 and 2099, got: {messages:?}");
+        let error_msg = messages
+            .iter()
+            .find(|m| m.contains("2000") && m.contains("2099"));
+        assert!(
+            error_msg.is_some(),
+            "Expected error mentioning 2000 and 2099, got: {messages:?}"
+        );
         prompter.assert_exhausted();
     }
 

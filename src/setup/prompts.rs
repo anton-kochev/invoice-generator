@@ -111,7 +111,9 @@ mod tests {
         assert_eq!(result, 7);
         let messages = prompter.messages.borrow();
         assert!(
-            messages.iter().any(|m| m.contains("Please enter a number between 1 and 12")),
+            messages
+                .iter()
+                .any(|m| m.contains("Please enter a number between 1 and 12")),
             "Expected range message, got: {messages:?}"
         );
         prompter.assert_exhausted();
@@ -161,7 +163,10 @@ mod tests {
         // Assert
         assert_eq!(result, 6);
         let messages = prompter.messages.borrow();
-        let count = messages.iter().filter(|m| m.contains("Please enter a number between 1 and 12")).count();
+        let count = messages
+            .iter()
+            .filter(|m| m.contains("Please enter a number between 1 and 12"))
+            .count();
         assert_eq!(count, 2, "Expected 2 error messages, got {count}");
         prompter.assert_exhausted();
     }
@@ -267,7 +272,11 @@ mod tests {
             &prompter,
             |p| p.required_text("Pick:"),
             |s: &String| {
-                if s == "c" { Ok(()) } else { Err(format!("not c: {s}")) }
+                if s == "c" {
+                    Ok(())
+                } else {
+                    Err(format!("not c: {s}"))
+                }
             },
         )
         .unwrap();

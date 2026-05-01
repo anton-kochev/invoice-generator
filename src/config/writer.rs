@@ -40,7 +40,7 @@ pub fn save_config(path: &Path, config: &Config) -> Result<(), ConfigError> {
 /// Returns the removed preset on success.
 /// Checks the last-preset guard BEFORE key lookup.
 pub fn remove_preset(path: &Path, key: &str) -> Result<Preset, ConfigError> {
-    use super::loader::{load_config, LoadResult};
+    use super::loader::{LoadResult, load_config};
 
     let config = match load_config(path)? {
         LoadResult::Loaded(config) => *config,
@@ -76,7 +76,7 @@ pub fn remove_preset(path: &Path, key: &str) -> Result<Preset, ConfigError> {
 /// Loads the existing config, pushes the new preset, and saves it back.
 /// Returns an error if no config file exists yet.
 pub fn append_preset(path: &Path, preset: Preset) -> Result<(), ConfigError> {
-    use super::loader::{load_config, LoadResult};
+    use super::loader::{LoadResult, load_config};
 
     let config = match load_config(path)? {
         LoadResult::Loaded(config) => *config,
@@ -122,8 +122,12 @@ fn ensure_recipients_v2(config: &mut Config) -> Result<(), ConfigError> {
 /// Append a recipient to the config file at `path`.
 ///
 /// If `set_default` is true, also sets `default_recipient` to the new recipient's key.
-pub fn append_recipient(path: &Path, recipient: Recipient, set_default: bool) -> Result<(), ConfigError> {
-    use super::loader::{load_config, LoadResult};
+pub fn append_recipient(
+    path: &Path,
+    recipient: Recipient,
+    set_default: bool,
+) -> Result<(), ConfigError> {
+    use super::loader::{LoadResult, load_config};
 
     let config = match load_config(path)? {
         LoadResult::Loaded(config) => *config,
@@ -154,7 +158,7 @@ pub fn append_recipient(path: &Path, recipient: Recipient, set_default: bool) ->
 /// Returns the removed recipient on success.
 /// If the removed recipient was the default, clears `default_recipient` (caller handles reassignment).
 pub fn remove_recipient(path: &Path, key: &str) -> Result<Recipient, ConfigError> {
-    use super::loader::{load_config, LoadResult};
+    use super::loader::{LoadResult, load_config};
 
     let config = match load_config(path)? {
         LoadResult::Loaded(config) => *config,
@@ -205,7 +209,7 @@ pub fn remove_recipient(path: &Path, key: &str) -> Result<Recipient, ConfigError
 ///
 /// Verifies the key exists in the recipients list before updating.
 pub fn set_default_recipient(path: &Path, key: &str) -> Result<(), ConfigError> {
-    use super::loader::{load_config, LoadResult};
+    use super::loader::{LoadResult, load_config};
 
     let config = match load_config(path)? {
         LoadResult::Loaded(config) => *config,
@@ -244,7 +248,7 @@ pub fn set_default_recipient(path: &Path, key: &str) -> Result<(), ConfigError> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::loader::{load_config, LoadResult};
+    use crate::config::loader::{LoadResult, load_config};
     use crate::config::types::*;
     use std::path::PathBuf;
     use tempfile::TempDir;
@@ -260,7 +264,10 @@ mod tests {
     fn synthetic_sender() -> Sender {
         Sender {
             name: "Alice Smith".to_string(),
-            address: vec!["42 Elm Street".to_string(), "Springfield, IL 62704".to_string()],
+            address: vec![
+                "42 Elm Street".to_string(),
+                "Springfield, IL 62704".to_string(),
+            ],
             email: "alice@example.com".to_string(),
         }
     }
@@ -269,7 +276,10 @@ mod tests {
         Recipient {
             key: Some(crate::domain::RecipientKey::try_new("bob-corp").unwrap()),
             name: "Bob Corp".to_string(),
-            address: vec!["99 Oak Lane".to_string(), "Shelbyville, IL 62565".to_string()],
+            address: vec![
+                "99 Oak Lane".to_string(),
+                "Shelbyville, IL 62565".to_string(),
+            ],
             company_id: Some("BC-98765".to_string()),
             vat_number: Some("CZ12345678".to_string()),
         }
@@ -289,7 +299,7 @@ mod tests {
             description: "Development Services".to_string(),
             default_rate: 100.0,
             currency: None,
-        tax_rate: None,
+            tax_rate: None,
         }]
     }
 
@@ -376,7 +386,10 @@ mod tests {
         assert!(loaded.defaults.is_none());
 
         let raw = std::fs::read_to_string(cfg_path(&dir)).unwrap();
-        assert!(!raw.contains("null"), "YAML output should not contain 'null'");
+        assert!(
+            !raw.contains("null"),
+            "YAML output should not contain 'null'"
+        );
     }
 
     // ── Cycle 4: test_save_config_overwrites_existing ──
@@ -460,7 +473,7 @@ mod tests {
             description: "Design work".to_string(),
             default_rate: 80.0,
             currency: None,
-        tax_rate: None,
+            tax_rate: None,
         };
 
         // Act
@@ -491,7 +504,7 @@ mod tests {
                 description: "QA work".to_string(),
                 default_rate: 60.0,
                 currency: None,
-            tax_rate: None,
+                tax_rate: None,
             },
         )
         .unwrap();
@@ -524,7 +537,7 @@ mod tests {
                 description: "Operations".to_string(),
                 default_rate: 90.0,
                 currency: None,
-            tax_rate: None,
+                tax_rate: None,
             },
         )
         .unwrap();
@@ -551,7 +564,7 @@ mod tests {
                 description: "X".to_string(),
                 default_rate: 50.0,
                 currency: None,
-            tax_rate: None,
+                tax_rate: None,
             },
         );
 
@@ -573,7 +586,7 @@ mod tests {
             description: "Design work".to_string(),
             default_rate: 80.0,
             currency: None,
-        tax_rate: None,
+            tax_rate: None,
         });
         config.presets = Some(presets);
         save_config(&cfg_path(&dir), &config).unwrap();
@@ -600,7 +613,7 @@ mod tests {
             description: "Design work".to_string(),
             default_rate: 80.0,
             currency: None,
-        tax_rate: None,
+            tax_rate: None,
         });
         config.presets = Some(presets);
         save_config(&cfg_path(&dir), &config).unwrap();
@@ -636,7 +649,7 @@ mod tests {
             description: "Design work".to_string(),
             default_rate: 80.0,
             currency: None,
-        tax_rate: None,
+            tax_rate: None,
         });
         config.presets = Some(presets);
         save_config(&cfg_path(&dir), &config).unwrap();
@@ -675,21 +688,21 @@ mod tests {
                     description: "Development".to_string(),
                     default_rate: 100.0,
                     currency: None,
-                tax_rate: None,
+                    tax_rate: None,
                 },
                 Preset {
                     key: crate::domain::PresetKey::try_new("design").unwrap(),
                     description: "Design".to_string(),
                     default_rate: 80.0,
                     currency: None,
-                tax_rate: None,
+                    tax_rate: None,
                 },
                 Preset {
                     key: crate::domain::PresetKey::try_new("qa").unwrap(),
                     description: "QA".to_string(),
                     default_rate: 60.0,
                     currency: None,
-                tax_rate: None,
+                    tax_rate: None,
                 },
             ]),
             ..complete_config()
@@ -773,7 +786,10 @@ mod tests {
         let raw = std::fs::read_to_string(cfg_path(&dir)).unwrap();
 
         // Assert
-        assert!(!raw.contains("null"), "YAML output should not contain 'null'");
+        assert!(
+            !raw.contains("null"),
+            "YAML output should not contain 'null'"
+        );
     }
 
     // ── v2 Config Helpers ──
@@ -836,14 +852,14 @@ mod tests {
                     description: "Development".to_string(),
                     default_rate: 100.0,
                     currency: None,
-                tax_rate: None,
+                    tax_rate: None,
                 },
                 Preset {
                     key: crate::domain::PresetKey::try_new("design").unwrap(),
                     description: "Design".to_string(),
                     default_rate: 80.0,
                     currency: None,
-                tax_rate: None,
+                    tax_rate: None,
                 },
             ]),
             ..complete_config()
@@ -884,10 +900,7 @@ mod tests {
         let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let recipients = loaded.recipients.unwrap();
         assert_eq!(recipients.len(), 1);
-        assert_eq!(
-            recipients[0].key.as_ref().map(|k| k.as_str()),
-            Some("acme")
-        );
+        assert_eq!(recipients[0].key.as_ref().map(|k| k.as_str()), Some("acme"));
         assert_eq!(
             loaded.default_recipient.as_ref().map(|k| k.as_str()),
             Some("acme")
@@ -1011,10 +1024,7 @@ mod tests {
         let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let recipients = loaded.recipients.unwrap();
         assert_eq!(recipients.len(), 1);
-        assert_eq!(
-            recipients[0].key.as_ref().map(|k| k.as_str()),
-            Some("acme")
-        );
+        assert_eq!(recipients[0].key.as_ref().map(|k| k.as_str()), Some("acme"));
         assert_eq!(
             loaded.default_recipient.as_ref().map(|k| k.as_str()),
             Some("acme")
@@ -1142,9 +1152,18 @@ mod tests {
         let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let recipients = loaded.recipients.unwrap();
         assert_eq!(recipients.len(), 2);
-        assert_eq!(recipients[0].key, Some(crate::domain::RecipientKey::try_new("client-corp").unwrap()));
-        assert_eq!(recipients[1].key, Some(crate::domain::RecipientKey::try_new("macrosoft").unwrap()));
-        assert_eq!(loaded.default_recipient, Some(crate::domain::RecipientKey::try_new("client-corp").unwrap()));
+        assert_eq!(
+            recipients[0].key,
+            Some(crate::domain::RecipientKey::try_new("client-corp").unwrap())
+        );
+        assert_eq!(
+            recipients[1].key,
+            Some(crate::domain::RecipientKey::try_new("macrosoft").unwrap())
+        );
+        assert_eq!(
+            loaded.default_recipient,
+            Some(crate::domain::RecipientKey::try_new("client-corp").unwrap())
+        );
     }
 
     #[test]
@@ -1152,7 +1171,8 @@ mod tests {
         // Arrange
         let dir = TempDir::new().unwrap();
         let mut config = v1_config_with_recipient();
-        config.recipient.as_mut().unwrap().key = Some(crate::domain::RecipientKey::try_new("cc").unwrap());
+        config.recipient.as_mut().unwrap().key =
+            Some(crate::domain::RecipientKey::try_new("cc").unwrap());
         save_config(&cfg_path(&dir), &config).unwrap();
 
         // Act
@@ -1161,8 +1181,14 @@ mod tests {
         // Assert
         let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let recipients = loaded.recipients.unwrap();
-        assert_eq!(recipients[0].key, Some(crate::domain::RecipientKey::try_new("cc").unwrap()));
-        assert_eq!(loaded.default_recipient, Some(crate::domain::RecipientKey::try_new("cc").unwrap()));
+        assert_eq!(
+            recipients[0].key,
+            Some(crate::domain::RecipientKey::try_new("cc").unwrap())
+        );
+        assert_eq!(
+            loaded.default_recipient,
+            Some(crate::domain::RecipientKey::try_new("cc").unwrap())
+        );
     }
 
     #[test]
@@ -1178,7 +1204,10 @@ mod tests {
         let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let recipients = loaded.recipients.unwrap();
         assert_eq!(recipients.len(), 2);
-        assert_eq!(loaded.default_recipient, Some(crate::domain::RecipientKey::try_new("macrosoft").unwrap()));
+        assert_eq!(
+            loaded.default_recipient,
+            Some(crate::domain::RecipientKey::try_new("macrosoft").unwrap())
+        );
     }
 
     #[test]
@@ -1192,7 +1221,10 @@ mod tests {
 
         // Assert
         let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
-        assert!(loaded.recipient.is_none(), "v1 recipient field should be cleared after migration");
+        assert!(
+            loaded.recipient.is_none(),
+            "v1 recipient field should be cleared after migration"
+        );
     }
 
     #[test]
@@ -1283,7 +1315,10 @@ mod tests {
         let after_bytes = std::fs::read(&path).unwrap();
         // Restore permissions before any potential panic so TempDir cleans up.
         std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
-        assert!(result.is_err(), "Expected save to fail with read-only parent");
+        assert!(
+            result.is_err(),
+            "Expected save to fail with read-only parent"
+        );
         assert_eq!(
             after_bytes, original_bytes,
             "Original config must be byte-identical after failed save"

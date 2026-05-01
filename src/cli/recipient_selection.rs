@@ -43,12 +43,7 @@ pub fn select_recipient(
     }
 
     let max = recipients.len() as u32;
-    let choice = prompt_u32_in_range(
-        prompter,
-        "Select recipient number:",
-        1..=max,
-        default_index,
-    )?;
+    let choice = prompt_u32_in_range(prompter, "Select recipient number:", 1..=max, default_index)?;
 
     Ok(recipients[choice as usize - 1].clone())
 }

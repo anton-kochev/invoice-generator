@@ -162,8 +162,8 @@ mod tests {
             tax_rate: None,
         }];
         let prompter = MockPrompter::new(vec![
-            MockResponse::Text("Dev".into()),  // rejected: uppercase
-            MockResponse::Text("ops".into()),  // accepted
+            MockResponse::Text("Dev".into()), // rejected: uppercase
+            MockResponse::Text("ops".into()), // accepted
             MockResponse::Text("Ops services".into()),
             MockResponse::F64(800.0),
         ]);

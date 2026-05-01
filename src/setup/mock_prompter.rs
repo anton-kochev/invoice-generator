@@ -1,8 +1,8 @@
 use std::cell::RefCell;
 use std::collections::VecDeque;
 
-use crate::error::AppError;
 use super::prompter::Prompter;
+use crate::error::AppError;
 
 /// A canned response for [`MockPrompter`].
 #[derive(Debug)]
@@ -128,9 +128,7 @@ mod tests {
     #[test]
     fn test_mock_prompter_pops_text_response() {
         // Arrange
-        let prompter = MockPrompter::new(vec![
-            MockResponse::Text("hello".into()),
-        ]);
+        let prompter = MockPrompter::new(vec![MockResponse::Text("hello".into())]);
 
         // Act
         let result = prompter.required_text("Name:").unwrap();
@@ -143,9 +141,7 @@ mod tests {
     #[test]
     fn test_mock_prompter_pops_confirm_response() {
         // Arrange
-        let prompter = MockPrompter::new(vec![
-            MockResponse::Confirm(true),
-        ]);
+        let prompter = MockPrompter::new(vec![MockResponse::Confirm(true)]);
 
         // Act
         let result = prompter.confirm("Continue?", false).unwrap();
@@ -184,9 +180,7 @@ mod tests {
     #[should_panic(expected = "unconsumed responses")]
     fn test_mock_prompter_assert_exhausted_panics_when_remaining() {
         // Arrange
-        let prompter = MockPrompter::new(vec![
-            MockResponse::Text("unused".into()),
-        ]);
+        let prompter = MockPrompter::new(vec![MockResponse::Text("unused".into())]);
 
         // Act & Assert
         prompter.assert_exhausted(); // should panic
@@ -198,7 +192,9 @@ mod tests {
         let prompter = MockPrompter::new(vec![MockResponse::F64(21.0)]);
 
         // Act
-        let result = prompter.nonneg_f64_with_default("Tax rate (%):", 21.0).unwrap();
+        let result = prompter
+            .nonneg_f64_with_default("Tax rate (%):", 21.0)
+            .unwrap();
 
         // Assert
         assert!((result - 21.0).abs() < f64::EPSILON);
@@ -211,7 +207,9 @@ mod tests {
         let prompter = MockPrompter::new(vec![MockResponse::F64(0.0)]);
 
         // Act
-        let result = prompter.nonneg_f64_with_default("Tax rate (%):", 21.0).unwrap();
+        let result = prompter
+            .nonneg_f64_with_default("Tax rate (%):", 21.0)
+            .unwrap();
 
         // Assert
         assert!((result - 0.0).abs() < f64::EPSILON);

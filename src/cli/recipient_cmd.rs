@@ -81,7 +81,10 @@ pub fn format_recipient_table(recipients: &[ValidatedRecipient], default_key: &s
         let cid = r.company_id().unwrap_or("-");
         out.push_str(&format!(
             "{:<key_w$}  {:<name_w$}  {:<addr_w$}  {:<cid_w$}\n",
-            display_keys[i], r.name(), addr, cid,
+            display_keys[i],
+            r.name(),
+            addr,
+            cid,
         ));
     }
 
@@ -109,7 +112,7 @@ pub fn handle_recipient_add(
     config_path: &Path,
     writer: &mut dyn Write,
 ) -> Result<(), AppError> {
-    use crate::config::loader::{load_config, LoadResult};
+    use crate::config::loader::{LoadResult, load_config};
     use crate::config::writer::append_recipient;
 
     // Load config to check for duplicate keys
@@ -174,7 +177,7 @@ pub fn handle_recipient_delete(
     key: &str,
     writer: &mut dyn Write,
 ) -> Result<(), AppError> {
-    use crate::config::loader::{load_config, LoadResult};
+    use crate::config::loader::{LoadResult, load_config};
     use crate::config::writer::{remove_recipient, set_default_recipient};
 
     // Load config to get recipient details for confirmation
@@ -240,8 +243,7 @@ pub fn handle_recipient_delete(
                 ));
             }
             let max = remaining.len() as u32;
-            let choice =
-                prompt_u32_in_range(prompter, "Select recipient number:", 1..=max, 1)?;
+            let choice = prompt_u32_in_range(prompter, "Select recipient number:", 1..=max, 1)?;
             let new_key = remaining[choice as usize - 1]
                 .key
                 .as_ref()
@@ -263,7 +265,7 @@ pub fn handle_recipient_delete(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::loader::{load_config, LoadResult};
+    use crate::config::loader::{LoadResult, load_config};
     use crate::setup::mock_prompter::{MockPrompter, MockResponse};
     use crate::setup::test_helpers::*;
 
@@ -279,10 +281,7 @@ mod tests {
         assert!(output.contains("Key"), "Missing 'Key' header");
         assert!(output.contains("Name"), "Missing 'Name' header");
         assert!(output.contains("Address"), "Missing 'Address' header");
-        assert!(
-            output.contains("Company ID"),
-            "Missing 'Company ID' header"
-        );
+        assert!(output.contains("Company ID"), "Missing 'Company ID' header");
     }
 
     #[test]
@@ -405,11 +404,17 @@ mod tests {
         };
         let recipients = loaded.recipients.unwrap();
         assert_eq!(recipients.len(), 2);
-        assert_eq!(recipients[1].key, Some(RecipientKey::try_new("newcorp").unwrap()));
+        assert_eq!(
+            recipients[1].key,
+            Some(RecipientKey::try_new("newcorp").unwrap())
+        );
         assert_eq!(recipients[1].name, "New Corp LLC");
         assert_eq!(recipients[1].company_id, Some("NC-123".into()));
         assert_eq!(recipients[1].vat_number, Some("VAT999".into()));
-        assert_eq!(loaded.default_recipient, Some(RecipientKey::try_new("newcorp").unwrap()));
+        assert_eq!(
+            loaded.default_recipient,
+            Some(RecipientKey::try_new("newcorp").unwrap())
+        );
         let output = String::from_utf8(buf).unwrap();
         assert!(output.contains("added"), "Expected 'added' in output");
         prompter.assert_exhausted();
@@ -441,7 +446,10 @@ mod tests {
         let recipients = loaded.recipients.unwrap();
         assert_eq!(recipients[1].company_id, None);
         assert_eq!(recipients[1].vat_number, None);
-        assert_eq!(loaded.default_recipient, Some(RecipientKey::try_new("acme").unwrap()));
+        assert_eq!(
+            loaded.default_recipient,
+            Some(RecipientKey::try_new("acme").unwrap())
+        );
         prompter.assert_exhausted();
     }
 
@@ -471,7 +479,10 @@ mod tests {
         };
         let recipients = loaded.recipients.unwrap();
         assert_eq!(recipients.len(), 2);
-        assert_eq!(recipients[1].key, Some(RecipientKey::try_new("acme2").unwrap()));
+        assert_eq!(
+            recipients[1].key,
+            Some(RecipientKey::try_new("acme2").unwrap())
+        );
         let messages = prompter.messages.borrow();
         let all = messages.join("\n");
         assert!(
@@ -520,7 +531,10 @@ mod tests {
         let result = handle_recipient_add(&prompter, &cfg_path(&dir), &mut buf);
 
         // Assert
-        assert!(matches!(result, Err(AppError::Config(ConfigError::NotFound))));
+        assert!(matches!(
+            result,
+            Err(AppError::Config(ConfigError::NotFound))
+        ));
         prompter.assert_exhausted();
     }
 
@@ -545,7 +559,10 @@ mod tests {
         };
         let recipients = loaded.recipients.unwrap();
         assert_eq!(recipients.len(), 1);
-        assert_eq!(recipients[0].key, Some(RecipientKey::try_new("acme").unwrap()));
+        assert_eq!(
+            recipients[0].key,
+            Some(RecipientKey::try_new("acme").unwrap())
+        );
         let output = String::from_utf8(buf).unwrap();
         assert!(output.contains("deleted"), "Expected 'deleted' in output");
         prompter.assert_exhausted();
@@ -587,7 +604,10 @@ mod tests {
         let result = handle_recipient_delete(&prompter, &cfg_path(&dir), "nope", &mut buf);
 
         // Assert
-        assert!(matches!(result, Err(AppError::Config(ConfigError::RecipientNotFound { .. }))));
+        assert!(matches!(
+            result,
+            Err(AppError::Config(ConfigError::RecipientNotFound { .. }))
+        ));
         prompter.assert_exhausted();
     }
 
@@ -603,7 +623,10 @@ mod tests {
         let result = handle_recipient_delete(&prompter, &cfg_path(&dir), "acme", &mut buf);
 
         // Assert
-        assert!(matches!(result, Err(AppError::Config(ConfigError::LastRecipient))));
+        assert!(matches!(
+            result,
+            Err(AppError::Config(ConfigError::LastRecipient))
+        ));
         prompter.assert_exhausted();
     }
 
@@ -624,7 +647,10 @@ mod tests {
             LoadResult::Loaded(c) => *c,
             _ => panic!("Expected Loaded"),
         };
-        assert_eq!(loaded.default_recipient, Some(RecipientKey::try_new("globex").unwrap()));
+        assert_eq!(
+            loaded.default_recipient,
+            Some(RecipientKey::try_new("globex").unwrap())
+        );
         assert_eq!(loaded.recipients.unwrap().len(), 1);
         prompter.assert_exhausted();
     }
@@ -643,10 +669,7 @@ mod tests {
         });
         config.recipients = Some(recipients);
         let dir = setup_dir(Some(&config));
-        let prompter = MockPrompter::new(vec![
-            MockResponse::Confirm(true),
-            MockResponse::U32(2),
-        ]);
+        let prompter = MockPrompter::new(vec![MockResponse::Confirm(true), MockResponse::U32(2)]);
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
@@ -658,7 +681,10 @@ mod tests {
             LoadResult::Loaded(c) => *c,
             _ => panic!("Expected Loaded"),
         };
-        assert_eq!(loaded.default_recipient, Some(RecipientKey::try_new("initech").unwrap()));
+        assert_eq!(
+            loaded.default_recipient,
+            Some(RecipientKey::try_new("initech").unwrap())
+        );
         assert_eq!(loaded.recipients.unwrap().len(), 2);
         prompter.assert_exhausted();
     }
@@ -677,8 +703,16 @@ mod tests {
         // Assert
         let prompts = prompter.prompts.borrow();
         assert_eq!(prompts.len(), 1);
-        assert!(prompts[0].contains("globex"), "Expected 'globex' in prompt: {}", prompts[0]);
-        assert!(prompts[0].contains("Globex Inc"), "Expected 'Globex Inc' in prompt: {}", prompts[0]);
+        assert!(
+            prompts[0].contains("globex"),
+            "Expected 'globex' in prompt: {}",
+            prompts[0]
+        );
+        assert!(
+            prompts[0].contains("Globex Inc"),
+            "Expected 'Globex Inc' in prompt: {}",
+            prompts[0]
+        );
     }
 
     #[test]
@@ -692,7 +726,10 @@ mod tests {
         let result = handle_recipient_delete(&prompter, &cfg_path(&dir), "acme", &mut buf);
 
         // Assert
-        assert!(matches!(result, Err(AppError::Config(ConfigError::NotFound))));
+        assert!(matches!(
+            result,
+            Err(AppError::Config(ConfigError::NotFound))
+        ));
         prompter.assert_exhausted();
     }
 }

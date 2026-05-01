@@ -23,10 +23,7 @@ impl InvoiceWorld {
     pub fn new(template_source: &str, json_data: Vec<u8>, logo: Option<(String, Vec<u8>)>) -> Self {
         let fonts = FontSearcher::new().search();
 
-        let source_content = format!(
-            "#let data = json(\"data.json\")\n\n{}",
-            template_source
-        );
+        let source_content = format!("#let data = json(\"data.json\")\n\n{}", template_source);
 
         let main_id = FileId::new(None, VirtualPath::new("main.typ"));
         let data_file_id = FileId::new(None, VirtualPath::new("data.json"));

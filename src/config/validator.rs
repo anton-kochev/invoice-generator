@@ -89,9 +89,9 @@ impl ValidatedRecipient {
     /// responsible for filling in derived keys before invoking `from_partial`.
     fn from_partial(r: Recipient) -> Self {
         Self {
-            key: r
-                .key
-                .expect("validator must populate Recipient.key before constructing ValidatedRecipient"),
+            key: r.key.expect(
+                "validator must populate Recipient.key before constructing ValidatedRecipient",
+            ),
             name: r.name,
             address: r.address,
             company_id: r.company_id,
@@ -138,7 +138,13 @@ impl ValidatedRecipient {
         company_id: Option<String>,
         vat_number: Option<String>,
     ) -> Self {
-        Self { key, name, address, company_id, vat_number }
+        Self {
+            key,
+            name,
+            address,
+            company_id,
+            vat_number,
+        }
     }
 }
 
@@ -298,7 +304,9 @@ fn validate_recipient_invariants(
     match default_key {
         Some(dk) => {
             if !list.iter().any(|r| r.key.as_ref() == Some(dk)) {
-                return Err(ConfigError::InvalidDefaultRecipient(dk.as_str().to_string()));
+                return Err(ConfigError::InvalidDefaultRecipient(
+                    dk.as_str().to_string(),
+                ));
             }
         }
         None => return Err(ConfigError::MissingDefaultRecipient),
@@ -481,7 +489,10 @@ mod tests {
                 assert_eq!(v.default_recipient().name, "Bob Corp");
                 assert_eq!(v.recipients.len(), 1);
                 assert_eq!(v.default_recipient_key().as_str(), "bob-corp");
-                assert_eq!(v.default_recipient().key, RecipientKey::try_new("bob-corp").unwrap());
+                assert_eq!(
+                    v.default_recipient().key,
+                    RecipientKey::try_new("bob-corp").unwrap()
+                );
                 assert_eq!(v.payment.len(), 1);
                 assert_eq!(v.presets.len(), 1);
                 assert_eq!(v.defaults.currency, crate::domain::Currency::Eur);
@@ -558,7 +569,10 @@ mod tests {
         // Assert
         match result {
             ValidationOutcome::Incomplete { missing, .. } => {
-                assert_eq!(missing, vec![ConfigSection::Payment, ConfigSection::Presets]);
+                assert_eq!(
+                    missing,
+                    vec![ConfigSection::Payment, ConfigSection::Presets]
+                );
             }
             ValidationOutcome::Complete(_) => panic!("Expected Incomplete"),
         }
@@ -629,7 +643,10 @@ mod tests {
                 assert_eq!(v.recipients.len(), 1);
                 assert_eq!(v.default_recipient_key().as_str(), "bob-corp");
                 assert_eq!(v.default_recipient().name, "Bob Corp");
-                assert_eq!(v.default_recipient().key, RecipientKey::try_new("bob-corp").unwrap());
+                assert_eq!(
+                    v.default_recipient().key,
+                    RecipientKey::try_new("bob-corp").unwrap()
+                );
             }
             ValidationOutcome::Incomplete { .. } => panic!("Expected Complete"),
         }
@@ -748,7 +765,10 @@ mod tests {
         let result = config.validate();
 
         // Assert
-        assert!(matches!(result, Err(ConfigError::InvalidDefaultRecipient(_))));
+        assert!(matches!(
+            result,
+            Err(ConfigError::InvalidDefaultRecipient(_))
+        ));
     }
 
     #[test]
@@ -932,9 +952,16 @@ mod tests {
         // Assert
         match result {
             ValidationOutcome::Complete(v) => {
-                assert_eq!(v.recipients.len(), 1, "v1 config should normalize to single-element recipients list");
+                assert_eq!(
+                    v.recipients.len(),
+                    1,
+                    "v1 config should normalize to single-element recipients list"
+                );
                 assert_eq!(v.default_recipient().name, "Bob Corp");
-                assert!(!v.default_recipient_key().as_str().is_empty(), "default key should be auto-derived");
+                assert!(
+                    !v.default_recipient_key().as_str().is_empty(),
+                    "default key should be auto-derived"
+                );
             }
             ValidationOutcome::Incomplete { .. } => panic!("Expected Complete for v1 config"),
         }

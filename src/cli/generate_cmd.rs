@@ -15,9 +15,9 @@ use crate::pdf::generate_pdf;
 
 use crate::invoice::currency::effective_currency;
 
+use super::GenerateArgs;
 use super::common::pdf_output_path;
 use super::load_validated_config;
-use super::GenerateArgs;
 
 /// A single item entry from the `--items` JSON array.
 #[derive(Debug, serde::Deserialize)]
@@ -30,9 +30,8 @@ struct ItemSpec {
 
 /// Validate month/year into an `InvoicePeriod`.
 fn validate_period(month: u32, year: u32) -> Result<InvoicePeriod, InvoiceError> {
-    InvoicePeriod::new(month, year).ok_or_else(|| {
-        InvoiceError::InvalidDate(format!("month={month}, year={year}"))
-    })
+    InvoicePeriod::new(month, year)
+        .ok_or_else(|| InvoiceError::InvalidDate(format!("month={month}, year={year}")))
 }
 
 /// Validate that days is positive and finite.
@@ -70,7 +69,11 @@ fn parse_items(json: &str) -> Result<Vec<ItemSpec>, InvoiceError> {
 }
 
 /// Resolve CLI arguments into concrete `LineItem`s using the config's presets.
-fn resolve_line_items(args: &GenerateArgs, presets: &[Preset], default_currency: Currency) -> Result<Vec<LineItem>, AppError> {
+fn resolve_line_items(
+    args: &GenerateArgs,
+    presets: &[Preset],
+    default_currency: Currency,
+) -> Result<Vec<LineItem>, AppError> {
     if let Some(ref json) = args.items {
         // Multi-item mode: --items JSON
         let specs = parse_items(json)?;
@@ -82,7 +85,13 @@ fn resolve_line_items(args: &GenerateArgs, presets: &[Preset], default_currency:
                 let currency = effective_currency(preset, default_currency);
                 let tax_rate = spec.tax_rate.or(preset.tax_rate).unwrap_or(0.0);
                 let item = if tax_rate > 0.0 {
-                    LineItem::with_tax(preset.description.clone(), spec.days, rate, currency, tax_rate)
+                    LineItem::with_tax(
+                        preset.description.clone(),
+                        spec.days,
+                        rate,
+                        currency,
+                        tax_rate,
+                    )
                 } else {
                     LineItem::new(preset.description.clone(), spec.days, rate, currency)
                 };
@@ -91,16 +100,30 @@ fn resolve_line_items(args: &GenerateArgs, presets: &[Preset], default_currency:
             .collect()
     } else {
         // Single-item mode: --preset + --days
-        let key = args.preset.as_deref().expect("clap enforces preset or items");
+        let key = args
+            .preset
+            .as_deref()
+            .expect("clap enforces preset or items");
         let days = args.days.expect("clap enforces days with preset");
         validate_days(days)?;
         let preset = find_preset(key, presets)?;
         let currency = effective_currency(preset, default_currency);
         let tax_rate = preset.tax_rate.unwrap_or(0.0);
         let item = if tax_rate > 0.0 {
-            LineItem::with_tax(preset.description.clone(), days, preset.default_rate, currency, tax_rate)
+            LineItem::with_tax(
+                preset.description.clone(),
+                days,
+                preset.default_rate,
+                currency,
+                tax_rate,
+            )
         } else {
-            LineItem::new(preset.description.clone(), days, preset.default_rate, currency)
+            LineItem::new(
+                preset.description.clone(),
+                days,
+                preset.default_rate,
+                currency,
+            )
         };
         Ok(vec![item])
     }
@@ -165,7 +188,9 @@ pub fn handle_generate(
     };
     let summary = build_summary(period, line_items, &validated.defaults)?;
     let config_dir = config_path.parent().unwrap_or_else(|| Path::new("."));
-    let pdf_bytes = generate_pdf(&summary, &validated, recipient, config_dir, template, locale)?;
+    let pdf_bytes = generate_pdf(
+        &summary, &validated, recipient, config_dir, template, locale,
+    )?;
     let output_path = pdf_output_path(&validated.sender.name, &period, output_dir);
     std::fs::write(&output_path, &pdf_bytes).map_err(crate::pdf::PdfError::Write)?;
     writeln!(writer, "PDF saved: {}", output_path.display())
@@ -377,7 +402,10 @@ mod tests {
         let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
-        assert!(matches!(result, Err(AppError::Config(ConfigError::NotFound))));
+        assert!(matches!(
+            result,
+            Err(AppError::Config(ConfigError::NotFound))
+        ));
     }
 
     #[test]
@@ -392,7 +420,10 @@ mod tests {
         let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
-        assert!(matches!(result, Err(AppError::Config(ConfigError::PresetNotFound(_)))));
+        assert!(matches!(
+            result,
+            Err(AppError::Config(ConfigError::PresetNotFound(_)))
+        ));
     }
 
     #[test]
@@ -408,11 +439,17 @@ mod tests {
 
         // Assert
         let output = String::from_utf8(buf).unwrap();
-        assert!(output.contains("PDF saved:"), "Expected 'PDF saved:' in: {output}");
+        assert!(
+            output.contains("PDF saved:"),
+            "Expected 'PDF saved:' in: {output}"
+        );
         let pdf_path = dir.path().join("Invoice_Alice_Smith_Mar2026.pdf");
         assert!(pdf_path.exists(), "PDF file should exist");
         let bytes = std::fs::read(&pdf_path).unwrap();
-        assert!(bytes.starts_with(b"%PDF"), "File should start with %PDF header");
+        assert!(
+            bytes.starts_with(b"%PDF"),
+            "File should start with %PDF header"
+        );
     }
 
     #[test]
@@ -430,7 +467,10 @@ mod tests {
 
         // Assert
         let bytes = std::fs::read(&pdf_path).unwrap();
-        assert!(bytes.starts_with(b"%PDF"), "File should be overwritten with actual PDF");
+        assert!(
+            bytes.starts_with(b"%PDF"),
+            "File should be overwritten with actual PDF"
+        );
         assert_ne!(bytes, b"old content");
     }
 
@@ -610,7 +650,10 @@ mod tests {
         let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
-        assert!(matches!(result, Err(AppError::Config(ConfigError::RecipientNotFound { .. }))));
+        assert!(matches!(
+            result,
+            Err(AppError::Config(ConfigError::RecipientNotFound { .. }))
+        ));
     }
 
     // ── Story 11.1: v1 backwards compatibility verification ──
@@ -627,14 +670,19 @@ mod tests {
         let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
-        assert!(result.is_ok(), "v1 config should work without --client flag: {result:?}");
+        assert!(
+            result.is_ok(),
+            "v1 config should work without --client flag: {result:?}"
+        );
         let output = String::from_utf8(buf).unwrap();
         assert!(output.contains("PDF saved:"));
     }
 
     // ── Phase 9: Currency wiring tests ──
 
-    fn config_with_currency_presets(entries: &[(&str, f64, Option<Currency>)]) -> crate::config::types::Config {
+    fn config_with_currency_presets(
+        entries: &[(&str, f64, Option<Currency>)],
+    ) -> crate::config::types::Config {
         use crate::config::types::{Config, Preset};
         use crate::domain::PresetKey;
         let presets: Vec<Preset> = entries
@@ -673,7 +721,10 @@ mod tests {
     #[test]
     fn test_handle_generate_items_mixed_currency_returns_error() {
         // Arrange
-        let config = config_with_currency_presets(&[("alpha", 800.0, Some(Currency::Eur)), ("beta", 500.0, Some(Currency::Usd))]);
+        let config = config_with_currency_presets(&[
+            ("alpha", 800.0, Some(Currency::Eur)),
+            ("beta", 500.0, Some(Currency::Usd)),
+        ]);
         let dir = setup_dir(Some(&config));
         let json = r#"[{"preset":"alpha","days":10},{"preset":"beta","days":5}]"#;
         let args = generate_items_args(3, 2026, json);
@@ -683,10 +734,15 @@ mod tests {
         let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
-        assert!(matches!(result, Err(AppError::Invoice(InvoiceError::MixedCurrency { .. }))));
+        assert!(matches!(
+            result,
+            Err(AppError::Invoice(InvoiceError::MixedCurrency { .. }))
+        ));
     }
 
-    fn config_with_tax_presets(entries: &[(&str, f64, Option<f64>)]) -> crate::config::types::Config {
+    fn config_with_tax_presets(
+        entries: &[(&str, f64, Option<f64>)],
+    ) -> crate::config::types::Config {
         use crate::config::types::{Config, Preset};
         use crate::domain::PresetKey;
         let presets: Vec<Preset> = entries
@@ -806,7 +862,10 @@ mod tests {
         let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
-        assert!(matches!(result, Err(AppError::Invoice(InvoiceError::InvalidTaxRate(_)))));
+        assert!(matches!(
+            result,
+            Err(AppError::Invoice(InvoiceError::InvalidTaxRate(_)))
+        ));
     }
 
     #[test]
@@ -829,7 +888,10 @@ mod tests {
     #[test]
     fn test_handle_generate_items_same_override_currency_succeeds() {
         // Arrange
-        let config = config_with_currency_presets(&[("alpha", 800.0, Some(Currency::Usd)), ("beta", 500.0, Some(Currency::Usd))]);
+        let config = config_with_currency_presets(&[
+            ("alpha", 800.0, Some(Currency::Usd)),
+            ("beta", 500.0, Some(Currency::Usd)),
+        ]);
         let dir = setup_dir(Some(&config));
         let json = r#"[{"preset":"alpha","days":10},{"preset":"beta","days":5}]"#;
         let args = generate_items_args(3, 2026, json);
@@ -890,7 +952,10 @@ mod tests {
         let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
-        assert!(matches!(result, Err(AppError::Invoice(InvoiceError::InvalidTemplateKey { .. }))));
+        assert!(matches!(
+            result,
+            Err(AppError::Invoice(InvoiceError::InvalidTemplateKey { .. }))
+        ));
     }
 
     // ── Story 13.3: --locale flag handler tests ──
@@ -912,7 +977,10 @@ mod tests {
         let pdf_path = dir.path().join("Invoice_Alice_Smith_Mar2026.pdf");
         let bytes = std::fs::read(&pdf_path).unwrap();
         assert!(!bytes.is_empty(), "PDF should be non-empty");
-        assert!(bytes.starts_with(b"%PDF"), "File should start with %PDF header");
+        assert!(
+            bytes.starts_with(b"%PDF"),
+            "File should start with %PDF header"
+        );
     }
 
     #[test]
@@ -945,7 +1013,10 @@ mod tests {
         let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert — should succeed (falls back to en-US), not error
-        assert!(result.is_ok(), "Unsupported locale should fall back, not error: {result:?}");
+        assert!(
+            result.is_ok(),
+            "Unsupported locale should fall back, not error: {result:?}"
+        );
         let output = String::from_utf8(buf).unwrap();
         assert!(output.contains("PDF saved:"));
     }
@@ -985,7 +1056,10 @@ mod tests {
         match result {
             Err(AppError::Invoice(InvoiceError::InvalidTemplateKey { key, available })) => {
                 assert_eq!(key, "xyz");
-                assert!(available.contains(&"leda".to_string()), "Expected 'leda' in available: {available:?}");
+                assert!(
+                    available.contains(&"leda".to_string()),
+                    "Expected 'leda' in available: {available:?}"
+                );
             }
             other => panic!("Expected InvalidTemplateKey, got {other:?}"),
         }

@@ -3,7 +3,7 @@ use std::path::Path;
 
 use crate::cli::CliError;
 use crate::config::ConfigError;
-use crate::config::loader::{load_config, LoadResult};
+use crate::config::loader::{LoadResult, load_config};
 use crate::config::types::Preset;
 use crate::config::validator::ValidatedConfig;
 use crate::config::writer::remove_preset;
@@ -155,8 +155,14 @@ mod tests {
 
         // Assert
         assert!(output.contains("Key"), "Missing 'Key' header");
-        assert!(output.contains("Description"), "Missing 'Description' header");
-        assert!(output.contains("Default Rate"), "Missing 'Default Rate' header");
+        assert!(
+            output.contains("Description"),
+            "Missing 'Description' header"
+        );
+        assert!(
+            output.contains("Default Rate"),
+            "Missing 'Default Rate' header"
+        );
         assert!(output.contains("Currency"), "Missing 'Currency' header");
     }
 
@@ -250,7 +256,7 @@ mod tests {
     // ── Handler tests ──
 
     use crate::config::ConfigError;
-    use crate::config::loader::{load_config, LoadResult};
+    use crate::config::loader::{LoadResult, load_config};
     use crate::config::validator::ValidationOutcome;
     use crate::error::AppError;
     use crate::setup::mock_prompter::{MockPrompter, MockResponse};
@@ -291,7 +297,10 @@ mod tests {
         let result = crate::cli::load_validated_config(&cfg_path(&dir));
 
         // Assert
-        assert!(matches!(result, Err(AppError::Config(ConfigError::NotFound))));
+        assert!(matches!(
+            result,
+            Err(AppError::Config(ConfigError::NotFound))
+        ));
     }
 
     #[test]
@@ -353,7 +362,10 @@ mod tests {
         let result = handle_preset_delete(&prompter, &cfg_path(&dir), "nope", &mut buf);
 
         // Assert
-        assert!(matches!(result, Err(AppError::Config(ConfigError::PresetNotFound(_)))));
+        assert!(matches!(
+            result,
+            Err(AppError::Config(ConfigError::PresetNotFound(_)))
+        ));
         prompter.assert_exhausted();
     }
 
@@ -369,7 +381,10 @@ mod tests {
         let result = handle_preset_delete(&prompter, &cfg_path(&dir), "dev", &mut buf);
 
         // Assert
-        assert!(matches!(result, Err(AppError::Config(ConfigError::LastPreset))));
+        assert!(matches!(
+            result,
+            Err(AppError::Config(ConfigError::LastPreset))
+        ));
         prompter.assert_exhausted();
     }
 
@@ -410,7 +425,10 @@ mod tests {
         let result = handle_preset_delete(&prompter, &cfg_path(&dir), "dev", &mut buf);
 
         // Assert
-        assert!(matches!(result, Err(AppError::Config(ConfigError::NotFound))));
+        assert!(matches!(
+            result,
+            Err(AppError::Config(ConfigError::NotFound))
+        ));
         prompter.assert_exhausted();
     }
 
@@ -435,7 +453,10 @@ mod tests {
         // Should NOT show the default EUR for this preset
         let data_lines: Vec<&str> = table.lines().skip(2).collect(); // skip header + separator
         let dev_line = data_lines.iter().find(|l| l.contains("dev")).unwrap();
-        assert!(dev_line.contains("UAH"), "Dev row should show UAH: {dev_line}");
+        assert!(
+            dev_line.contains("UAH"),
+            "Dev row should show UAH: {dev_line}"
+        );
     }
 
     #[test]
@@ -455,7 +476,10 @@ mod tests {
         // Assert
         let data_lines: Vec<&str> = table.lines().skip(2).collect();
         let dev_line = data_lines.iter().find(|l| l.contains("dev")).unwrap();
-        assert!(dev_line.contains("EUR"), "Dev row should show EUR: {dev_line}");
+        assert!(
+            dev_line.contains("EUR"),
+            "Dev row should show EUR: {dev_line}"
+        );
     }
 
     #[test]
@@ -485,7 +509,10 @@ mod tests {
         let data_lines: Vec<&str> = table.lines().skip(2).collect();
         let dev_line = data_lines.iter().find(|l| l.contains("dev")).unwrap();
         let qa_line = data_lines.iter().find(|l| l.contains("qa")).unwrap();
-        assert!(dev_line.contains("USD"), "Dev row should show USD: {dev_line}");
+        assert!(
+            dev_line.contains("USD"),
+            "Dev row should show USD: {dev_line}"
+        );
         assert!(qa_line.contains("EUR"), "QA row should show EUR: {qa_line}");
     }
 }

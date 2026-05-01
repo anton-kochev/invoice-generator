@@ -27,10 +27,7 @@ pub enum InvoiceError {
 
     /// Line items have conflicting currencies — first conflict reported.
     #[error("mixed currencies in line items: {first} and {second}")]
-    MixedCurrency {
-        first: Currency,
-        second: Currency,
-    },
+    MixedCurrency { first: Currency, second: Currency },
 
     /// Failed to parse `--items` JSON.
     ///
@@ -45,17 +42,11 @@ pub enum InvoiceError {
 
     /// Unknown template key.
     #[error("unknown template: \"{key}\". Available: {}", available.join(", "))]
-    InvalidTemplateKey {
-        key: String,
-        available: Vec<String>,
-    },
+    InvalidTemplateKey { key: String, available: Vec<String> },
 
     /// Unknown locale code.
     #[error("unknown locale: \"{key}\". Available: {}", available.join(", "))]
-    InvalidLocale {
-        key: String,
-        available: Vec<String>,
-    },
+    InvalidLocale { key: String, available: Vec<String> },
 }
 
 #[cfg(test)]

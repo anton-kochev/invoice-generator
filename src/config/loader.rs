@@ -433,7 +433,10 @@ defaults:
         match result {
             LoadResult::Loaded(config) => {
                 let defaults = config.defaults.unwrap();
-                assert_eq!(defaults.template, crate::config::types::TemplateKey::Callisto);
+                assert_eq!(
+                    defaults.template,
+                    crate::config::types::TemplateKey::Callisto
+                );
                 assert_eq!(defaults.locale, crate::locale::Locale::DeDe);
             }
             LoadResult::NotFound => panic!("Expected Loaded"),

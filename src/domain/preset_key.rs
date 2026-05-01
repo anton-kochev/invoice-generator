@@ -7,7 +7,7 @@
 
 use std::fmt;
 
-use super::recipient_key::{slugify, validate_key, KeyError};
+use super::recipient_key::{KeyError, slugify, validate_key};
 
 /// A validated preset slug.
 ///

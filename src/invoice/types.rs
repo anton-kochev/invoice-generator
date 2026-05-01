@@ -44,9 +44,18 @@ impl InvoicePeriod {
     /// Three-letter month abbreviation (e.g., "Mar").
     pub fn month_abbrev(&self) -> &'static str {
         match self.month {
-            1 => "Jan", 2 => "Feb", 3 => "Mar", 4 => "Apr",
-            5 => "May", 6 => "Jun", 7 => "Jul", 8 => "Aug",
-            9 => "Sep", 10 => "Oct", 11 => "Nov", 12 => "Dec",
+            1 => "Jan",
+            2 => "Feb",
+            3 => "Mar",
+            4 => "Apr",
+            5 => "May",
+            6 => "Jun",
+            7 => "Jul",
+            8 => "Aug",
+            9 => "Sep",
+            10 => "Oct",
+            11 => "Nov",
+            12 => "Dec",
             _ => unreachable!("InvoicePeriod month is always 1..=12"),
         }
     }
@@ -99,7 +108,13 @@ impl LineItem {
 
     /// Create a `LineItem` with a tax rate applied.
     /// Computes `tax_amount = amount * tax_rate / 100`, rounded to 2dp.
-    pub fn with_tax(description: String, days: f64, rate: f64, currency: Currency, tax_rate: f64) -> Self {
+    pub fn with_tax(
+        description: String,
+        days: f64,
+        rate: f64,
+        currency: Currency,
+        tax_rate: f64,
+    ) -> Self {
         let amount = round_half_up_2dp(days * rate);
         let tax_amount = round_half_up_2dp(amount * tax_rate / 100.0);
         Self {
@@ -369,9 +384,18 @@ mod tests {
     fn month_abbrev_all_months() {
         // Arrange & Act & Assert
         let abbrevs = [
-            (1, "Jan"), (2, "Feb"), (3, "Mar"), (4, "Apr"),
-            (5, "May"), (6, "Jun"), (7, "Jul"), (8, "Aug"),
-            (9, "Sep"), (10, "Oct"), (11, "Nov"), (12, "Dec"),
+            (1, "Jan"),
+            (2, "Feb"),
+            (3, "Mar"),
+            (4, "Apr"),
+            (5, "May"),
+            (6, "Jun"),
+            (7, "Jul"),
+            (8, "Aug"),
+            (9, "Sep"),
+            (10, "Oct"),
+            (11, "Nov"),
+            (12, "Dec"),
         ];
         for (month, expected) in abbrevs {
             let period = InvoicePeriod::new(month, 2026).unwrap();

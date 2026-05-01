@@ -100,7 +100,9 @@ mod tests {
 
     impl MockEnv {
         fn empty() -> Self {
-            Self { entries: Vec::new() }
+            Self {
+                entries: Vec::new(),
+            }
         }
 
         fn with(key: &str, value: &str) -> Self {

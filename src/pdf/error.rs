@@ -68,6 +68,9 @@ mod tests {
 
         // Assert
         let msg = format!("{err}");
-        assert!(msg.starts_with("write:"), "Expected 'write:' prefix in: {msg}");
+        assert!(
+            msg.starts_with("write:"),
+            "Expected 'write:' prefix in: {msg}"
+        );
     }
 }

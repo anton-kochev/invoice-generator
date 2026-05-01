@@ -33,10 +33,8 @@ fn main() {
 }
 
 fn run(cli: Cli) -> Result<(), error::AppError> {
-    let config_path = config::path::resolve_config_path(
-        cli.config.as_deref(),
-        &config::path::RealEnv,
-    )?;
+    let config_path =
+        config::path::resolve_config_path(cli.config.as_deref(), &config::path::RealEnv)?;
     config::path::ensure_parent_dir(&config_path)?;
     // The output directory is consumed by the PDF subsystem only, so a failure
     // here is a PDF-write IO failure rather than a config-IO failure.
@@ -45,43 +43,40 @@ fn run(cli: Cli) -> Result<(), error::AppError> {
 
     match cli.command {
         None => cli::interactive::run_interactive(&prompter, &config_path, &output_dir),
-        Some(Command::Generate(args)) => {
-            cli::generate_cmd::handle_generate(&args, &config_path, &output_dir, &mut std::io::stdout())
-        }
+        Some(Command::Generate(args)) => cli::generate_cmd::handle_generate(
+            &args,
+            &config_path,
+            &output_dir,
+            &mut std::io::stdout(),
+        ),
         Some(Command::Preset { action }) => match action {
             PresetAction::List => {
                 let validated = cli::load_validated_config(&config_path)?;
                 cli::preset_cmd::handle_preset_list(&validated, &mut std::io::stdout())
             }
-            PresetAction::Delete { key } => {
-                cli::preset_cmd::handle_preset_delete(
-                    &prompter,
-                    &config_path,
-                    &key,
-                    &mut std::io::stdout(),
-                )
-            }
+            PresetAction::Delete { key } => cli::preset_cmd::handle_preset_delete(
+                &prompter,
+                &config_path,
+                &key,
+                &mut std::io::stdout(),
+            ),
         },
         Some(Command::Recipient { action }) => match action {
             RecipientAction::List => {
                 let validated = cli::load_validated_config(&config_path)?;
                 cli::recipient_cmd::handle_recipient_list(&validated, &mut std::io::stdout())
             }
-            RecipientAction::Add => {
-                cli::recipient_cmd::handle_recipient_add(
-                    &prompter,
-                    &config_path,
-                    &mut std::io::stdout(),
-                )
-            }
-            RecipientAction::Delete { key } => {
-                cli::recipient_cmd::handle_recipient_delete(
-                    &prompter,
-                    &config_path,
-                    &key,
-                    &mut std::io::stdout(),
-                )
-            }
+            RecipientAction::Add => cli::recipient_cmd::handle_recipient_add(
+                &prompter,
+                &config_path,
+                &mut std::io::stdout(),
+            ),
+            RecipientAction::Delete { key } => cli::recipient_cmd::handle_recipient_delete(
+                &prompter,
+                &config_path,
+                &key,
+                &mut std::io::stdout(),
+            ),
         },
     }
 }

@@ -1,11 +1,11 @@
 use std::path::Path;
 
+use super::prompter::Prompter;
+use super::prompts::prompt_parsed;
 use crate::config::types::{Config, Recipient};
 use crate::config::writer::save_config;
 use crate::domain::RecipientKey;
 use crate::error::AppError;
-use super::prompter::Prompter;
-use super::prompts::prompt_parsed;
 
 /// Collect recipient information interactively and persist it to disk.
 ///

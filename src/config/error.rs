@@ -53,10 +53,7 @@ pub enum ConfigError {
 
     /// Requested recipient key does not exist.
     #[error("unknown recipient: \"{key}\". Available: {}", available.join(", "))]
-    RecipientNotFound {
-        key: String,
-        available: Vec<String>,
-    },
+    RecipientNotFound { key: String, available: Vec<String> },
 
     /// Requested preset key does not exist.
     #[error("unknown preset: \"{0}\"")]

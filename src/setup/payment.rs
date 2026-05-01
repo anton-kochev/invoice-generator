@@ -1,11 +1,11 @@
 use std::path::Path;
 
+use super::prompter::Prompter;
+use super::prompts::{prompt_parsed, prompt_until_valid};
 use crate::config::types::{Config, PaymentMethod};
 use crate::config::writer::save_config;
 use crate::domain::Iban;
 use crate::error::AppError;
-use super::prompter::Prompter;
-use super::prompts::{prompt_parsed, prompt_until_valid};
 
 /// Collect payment methods interactively and persist them to disk.
 pub fn collect_payment(
@@ -120,9 +120,15 @@ mod tests {
         let mut config = empty_config();
         let prompter = MockPrompter::new(vec![
             MockResponse::U32(3),
-            MockResponse::Text("A".into()), MockResponse::Text(VALID_DE_IBAN.into()), MockResponse::Text("BIC1".into()),
-            MockResponse::Text("B".into()), MockResponse::Text(VALID_GB_IBAN.into()), MockResponse::Text("BIC2".into()),
-            MockResponse::Text("C".into()), MockResponse::Text(VALID_UA_IBAN.into()), MockResponse::Text("BIC3".into()),
+            MockResponse::Text("A".into()),
+            MockResponse::Text(VALID_DE_IBAN.into()),
+            MockResponse::Text("BIC1".into()),
+            MockResponse::Text("B".into()),
+            MockResponse::Text(VALID_GB_IBAN.into()),
+            MockResponse::Text("BIC2".into()),
+            MockResponse::Text("C".into()),
+            MockResponse::Text(VALID_UA_IBAN.into()),
+            MockResponse::Text("BIC3".into()),
         ]);
 
         // Act
@@ -165,8 +171,12 @@ mod tests {
         let mut config = empty_config();
         let prompter = MockPrompter::new(vec![
             MockResponse::U32(2),
-            MockResponse::Text("A".into()), MockResponse::Text(VALID_DE_IBAN.into()), MockResponse::Text("B".into()),
-            MockResponse::Text("C".into()), MockResponse::Text(VALID_GB_IBAN.into()), MockResponse::Text("D".into()),
+            MockResponse::Text("A".into()),
+            MockResponse::Text(VALID_DE_IBAN.into()),
+            MockResponse::Text("B".into()),
+            MockResponse::Text("C".into()),
+            MockResponse::Text(VALID_GB_IBAN.into()),
+            MockResponse::Text("D".into()),
         ]);
 
         // Act
@@ -174,8 +184,14 @@ mod tests {
 
         // Assert
         let messages = prompter.messages.borrow();
-        assert!(messages.iter().any(|m| m.contains("#1")), "Expected '#1' in messages: {messages:?}");
-        assert!(messages.iter().any(|m| m.contains("#2")), "Expected '#2' in messages: {messages:?}");
+        assert!(
+            messages.iter().any(|m| m.contains("#1")),
+            "Expected '#1' in messages: {messages:?}"
+        );
+        assert!(
+            messages.iter().any(|m| m.contains("#2")),
+            "Expected '#2' in messages: {messages:?}"
+        );
         prompter.assert_exhausted();
     }
 

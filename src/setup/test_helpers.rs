@@ -2,11 +2,11 @@ use std::path::PathBuf;
 
 use tempfile::TempDir;
 
+use super::mock_prompter::MockResponse;
 use crate::config::ConfigError;
 use crate::config::loader::LoadResult;
 use crate::config::types::*;
 use crate::config::writer::save_config;
-use super::mock_prompter::MockResponse;
 
 // ── Synthetic Data Factories ──
 
@@ -164,7 +164,10 @@ pub fn v2_config_two_recipients() -> Config {
     Config {
         sender: Some(synthetic_sender()),
         recipient: None,
-        recipients: Some(vec![synthetic_recipient_acme(), synthetic_recipient_globex()]),
+        recipients: Some(vec![
+            synthetic_recipient_acme(),
+            synthetic_recipient_globex(),
+        ]),
         default_recipient: Some(crate::domain::RecipientKey::try_new("acme").unwrap()),
         payment: Some(synthetic_payment()),
         presets: Some(synthetic_presets()),
