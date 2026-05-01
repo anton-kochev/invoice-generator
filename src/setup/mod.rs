@@ -1,3 +1,4 @@
+pub mod branding;
 pub mod defaults;
 pub mod payment;
 pub mod presets;
@@ -55,6 +56,18 @@ pub fn run_setup(
     // but we still prompt during setup if not already set.
     if config.defaults.is_none() {
         defaults::collect_defaults(prompter, config, config_path)?;
+    }
+
+    // Branding is fully optional (no validation impact). Prompt only when the
+    // user hasn't already set a custom footer — empty/whitespace input leaves
+    // it unset so the template default applies.
+    if config
+        .branding
+        .as_ref()
+        .and_then(|b| b.footer_text.as_deref())
+        .is_none()
+    {
+        branding::collect_branding(prompter, config, config_path)?;
     }
 
     // Display summary
@@ -147,6 +160,8 @@ mod tests {
             MockResponse::U32(30),
             MockResponse::Text("leda".into()),  // template
             MockResponse::Text("en-US".into()), // locale
+            // Branding (decline custom footer)
+            MockResponse::OptionalText(None),
         ]);
 
         // Act
@@ -206,6 +221,48 @@ mod tests {
         assert!(config.defaults.is_some());
         let defaults = config.defaults.unwrap();
         assert_eq!(defaults.currency, crate::domain::Currency::Eur);
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_run_setup_skips_branding_when_footer_already_set() {
+        // Arrange — config is complete except for presets, and branding.footer_text
+        // is already set. The queue contains only the responses needed for presets;
+        // if the dispatcher wrongly prompts for branding, it will pop a missing
+        // OptionalText and panic.
+        let mut config = Config {
+            sender: Some(synthetic_sender()),
+            recipient: Some(synthetic_recipient()),
+            payment: Some(synthetic_payment()),
+            defaults: Some(synthetic_defaults()),
+            branding: Some(crate::config::types::Branding {
+                footer_text: Some("Pre-existing footer".into()),
+                ..crate::config::types::Branding::default()
+            }),
+            ..Config::default()
+        };
+        let dir = setup_dir(Some(&config));
+        let missing = vec![ConfigSection::Presets];
+        let prompter = MockPrompter::new(vec![
+            // Presets (1 preset, decline more)
+            MockResponse::Text("dev".into()),
+            MockResponse::Text("Development Services".into()),
+            MockResponse::F64(100.0),
+            MockResponse::Confirm(false),
+            // Intentionally NO branding response — must be skipped.
+        ]);
+
+        // Act
+        run_setup(&prompter, &mut config, &missing, &cfg_path(&dir)).unwrap();
+
+        // Assert — footer text preserved and queue fully drained (no extra pops).
+        assert_eq!(
+            config
+                .branding
+                .as_ref()
+                .and_then(|b| b.footer_text.as_deref()),
+            Some("Pre-existing footer")
+        );
         prompter.assert_exhausted();
     }
 }

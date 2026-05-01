@@ -215,7 +215,7 @@ pub fn unwrap_loaded(result: Result<LoadResult, ConfigError>) -> Config {
 // ── Mock Response Queues ──
 
 /// Full mock response queue for a complete setup run.
-/// Sender + Recipient + Payment(1) + Presets(1) + Defaults
+/// Sender + Recipient + Payment(1) + Presets(1) + Defaults + Branding
 pub fn full_setup_responses() -> Vec<MockResponse> {
     vec![
         // Sender
@@ -245,6 +245,8 @@ pub fn full_setup_responses() -> Vec<MockResponse> {
         MockResponse::U32(30),
         MockResponse::Text("leda".into()),  // template
         MockResponse::Text("en-US".into()), // locale
+        // Branding (decline custom footer)
+        MockResponse::OptionalText(None),
     ]
 }
 
@@ -274,5 +276,7 @@ pub fn resume_from_recipient_responses() -> Vec<MockResponse> {
         MockResponse::U32(30),
         MockResponse::Text("leda".into()),  // template
         MockResponse::Text("en-US".into()), // locale
+        // Branding (decline custom footer)
+        MockResponse::OptionalText(None),
     ]
 }
