@@ -238,6 +238,88 @@ pub enum ValidationOutcome {
     },
 }
 
+/// Outcome of recipient normalization: collapse v1 + v2 inputs to a single
+/// `(list, default_key)` pair, signaling whether the section is fully missing.
+enum RecipientsNormalized {
+    /// A non-empty recipient list and (optionally) a default-recipient key.
+    /// The list is guaranteed non-empty; every recipient's `key` is `Some`.
+    Present(Vec<Recipient>, Option<RecipientKey>),
+    /// No recipients configured (or an empty v2 list). Caller should push
+    /// [`ConfigSection::Recipient`] onto its `missing` accumulator.
+    Missing,
+}
+
+/// Normalize the v1 (`recipient`) + v2 (`recipients` + `default_recipient`)
+/// inputs to a single canonical pair.
+///
+/// v2 wins when both are present. v1 inputs without a key get one derived
+/// from the recipient name; if that derivation fails, returns
+/// [`ConfigError::InvalidDefaultRecipient`].
+fn normalize_recipients(
+    v1: Option<Recipient>,
+    v2: Option<Vec<Recipient>>,
+    default_key: Option<RecipientKey>,
+) -> Result<RecipientsNormalized, ConfigError> {
+    match (v1, v2, default_key) {
+        (_, Some(list), dk) if !list.is_empty() => Ok(RecipientsNormalized::Present(list, dk)),
+        (_, Some(_), _) => Ok(RecipientsNormalized::Missing), // empty v2 list
+        (Some(mut r), None, _) => {
+            let key = match r.key.clone() {
+                Some(k) => k,
+                None => RecipientKey::from_name(&r.name)
+                    .map_err(|e| ConfigError::InvalidDefaultRecipient(e.to_string()))?,
+            };
+            r.key = Some(key.clone());
+            Ok(RecipientsNormalized::Present(vec![r], Some(key)))
+        }
+        (None, None, _) => Ok(RecipientsNormalized::Missing),
+    }
+}
+
+/// Verify recipient-list invariants: every recipient has a key, no duplicate
+/// keys, and the `default_key` (when present) references one of them.
+///
+/// Pure check — does not mutate inputs. The `default_key` is required: a
+/// non-empty recipient list with `None` default is reported as
+/// [`ConfigError::MissingDefaultRecipient`].
+fn validate_recipient_invariants(
+    list: &[Recipient],
+    default_key: Option<&RecipientKey>,
+) -> Result<(), ConfigError> {
+    let mut seen = std::collections::HashSet::new();
+    for r in list {
+        let k = r.key.as_ref().ok_or_else(|| {
+            ConfigError::InvalidDefaultRecipient("recipient has missing key".into())
+        })?;
+        if !seen.insert(k.clone()) {
+            return Err(ConfigError::DuplicateRecipientKey(k.as_str().to_string()));
+        }
+    }
+    match default_key {
+        Some(dk) => {
+            if !list.iter().any(|r| r.key.as_ref() == Some(dk)) {
+                return Err(ConfigError::InvalidDefaultRecipient(dk.as_str().to_string()));
+            }
+        }
+        None => return Err(ConfigError::MissingDefaultRecipient),
+    }
+    Ok(())
+}
+
+/// Fold an optional [`Branding`] into a fully resolved [`ValidatedBranding`],
+/// substituting defaults for absent fields.
+fn resolve_branding(branding: Option<Branding>) -> ValidatedBranding {
+    match branding {
+        Some(b) => ValidatedBranding {
+            logo: b.logo,
+            accent_color: b.accent_color.unwrap_or_else(default_accent_color),
+            font: b.font,
+            footer_text: b.footer_text,
+        },
+        None => ValidatedBranding::default(),
+    }
+}
+
 impl Config {
     /// Validate that all required sections are present.
     ///
@@ -248,138 +330,48 @@ impl Config {
     /// Returns `Err(ConfigError)` for hard errors like duplicate keys or invalid
     /// default recipient references.
     pub fn validate(self) -> Result<ValidationOutcome, ConfigError> {
+        let Config {
+            sender,
+            recipient,
+            recipients: v2_recipients,
+            default_recipient,
+            payment,
+            presets,
+            defaults,
+            branding,
+        } = self;
+
+        // Order matters: `missing` is asserted on by tests in the exact sequence
+        // Sender → Recipient → Payment → Presets.
         let mut missing = Vec::new();
-
-        let sender = self.sender;
-        let payment = self.payment;
-        let presets = self.presets;
-        let defaults = self.defaults;
-        let branding = self.branding;
-
         if sender.is_none() {
             missing.push(ConfigSection::Sender);
         }
 
-        // Normalize recipients: v2 (recipients list) takes precedence over v1 (single recipient).
+        // Normalize v1/v2 recipient inputs and validate invariants on the
+        // resulting list. Hard errors short-circuit; a missing section is
+        // recorded for the partial-config path.
         let (recipients, default_key) =
-            match (self.recipient, self.recipients, self.default_recipient) {
-                (_, Some(list), dk) if !list.is_empty() => (Some(list), dk),
-                (_, Some(_), _) => {
-                    // Empty list — treat as missing
-                    missing.push(ConfigSection::Recipient);
-                    (None, None)
+            match normalize_recipients(recipient, v2_recipients, default_recipient)? {
+                RecipientsNormalized::Present(list, dk) => {
+                    validate_recipient_invariants(&list, dk.as_ref())?;
+                    (Some(list), dk)
                 }
-                (Some(mut r), None, _) => {
-                    let key = match r.key.clone() {
-                        Some(k) => k,
-                        None => match RecipientKey::from_name(&r.name) {
-                            Ok(k) => k,
-                            Err(e) => {
-                                return Err(ConfigError::InvalidDefaultRecipient(e.to_string()));
-                            }
-                        },
-                    };
-                    r.key = Some(key.clone());
-                    (Some(vec![r]), Some(key))
-                }
-                (None, None, _) => {
+                RecipientsNormalized::Missing => {
                     missing.push(ConfigSection::Recipient);
                     (None, None)
                 }
             };
 
-        // Validate recipient keys if recipients present.
-        if let Some(ref list) = recipients {
-            // Every recipient must have a key.
-            for r in list {
-                if r.key.is_none() {
-                    return Err(ConfigError::InvalidDefaultRecipient(
-                        "recipient has missing key".into(),
-                    ));
-                }
-            }
-            // Check for duplicate keys
-            let mut seen = std::collections::HashSet::new();
-            for r in list {
-                let k = r.key.as_ref().unwrap();
-                if !seen.insert(k.clone()) {
-                    return Err(ConfigError::DuplicateRecipientKey(k.as_str().to_string()));
-                }
-            }
-            // Validate default_recipient references a valid key
-            match &default_key {
-                Some(dk) => {
-                    if !list.iter().any(|r| r.key.as_ref() == Some(dk)) {
-                        return Err(ConfigError::InvalidDefaultRecipient(dk.as_str().to_string()));
-                    }
-                }
-                None => {
-                    return Err(ConfigError::MissingDefaultRecipient);
-                }
-            }
+        if payment.as_ref().is_none_or(|v| v.is_empty()) {
+            missing.push(ConfigSection::Payment);
+        }
+        if presets.as_ref().is_none_or(|v| v.is_empty()) {
+            missing.push(ConfigSection::Presets);
         }
 
-        match &payment {
-            Some(v) if !v.is_empty() => {}
-            _ => missing.push(ConfigSection::Payment),
-        }
-        match &presets {
-            Some(v) if !v.is_empty() => {}
-            _ => missing.push(ConfigSection::Presets),
-        }
-
-        if missing.is_empty() {
-            let recipients_vec = recipients.unwrap();
-            let dk = default_key.unwrap();
-
-            // Locate the default recipient's index before consuming the vec,
-            // so the resulting NonEmpty + idx pair is invariant-by-construction.
-            let default_idx = recipients_vec
-                .iter()
-                .position(|r| r.key.as_ref() == Some(&dk))
-                .expect("default key validated against recipients above");
-
-            // Tighten Recipient (Option<RecipientKey>) → ValidatedRecipient
-            // (RecipientKey). Validator already enforced `key.is_some()` above.
-            let validated_recipients: Vec<ValidatedRecipient> = recipients_vec
-                .into_iter()
-                .map(ValidatedRecipient::from_partial)
-                .collect();
-            let recipients_ne = NonEmpty::try_from_vec(validated_recipients)
-                .expect("recipients non-empty checked above");
-
-            // Both `payment` and `presets` are guaranteed non-empty by the
-            // missing-section check above; lift them into `NonEmpty` to encode
-            // that statically.
-            let payment_ne = NonEmpty::try_from_vec(payment.unwrap())
-                .expect("payment non-empty checked above");
-            let presets_ne = NonEmpty::try_from_vec(presets.unwrap())
-                .expect("presets non-empty checked above");
-
-            let resolved_defaults = defaults.unwrap_or_default();
-            let template = resolved_defaults.template;
-            let locale = resolved_defaults.locale;
-            Ok(ValidationOutcome::Complete(ValidatedConfig {
-                sender: sender.unwrap(),
-                recipients: recipients_ne,
-                default_recipient_idx: default_idx,
-                payment: payment_ne,
-                presets: presets_ne,
-                defaults: resolved_defaults,
-                branding: match branding {
-                    Some(b) => ValidatedBranding {
-                        logo: b.logo,
-                        accent_color: b.accent_color.unwrap_or_else(default_accent_color),
-                        font: b.font,
-                        footer_text: b.footer_text,
-                    },
-                    None => ValidatedBranding::default(),
-                },
-                template,
-                locale,
-            }))
-        } else {
-            Ok(ValidationOutcome::Incomplete {
+        if !missing.is_empty() {
+            return Ok(ValidationOutcome::Incomplete {
                 config: Config {
                     sender,
                     recipient: None, // already consumed by normalization
@@ -391,8 +383,51 @@ impl Config {
                     branding,
                 },
                 missing,
-            })
+            });
         }
+
+        // All sections present. Assemble the validated config.
+        let recipients_vec = recipients.expect("recipients present when no missing sections");
+        let dk = default_key.expect("default key validated above");
+
+        // Locate the default recipient's index before consuming the vec, so
+        // the resulting NonEmpty + idx pair is invariant-by-construction.
+        let default_recipient_idx = recipients_vec
+            .iter()
+            .position(|r| r.key.as_ref() == Some(&dk))
+            .expect("default key validated against recipients above");
+
+        // Tighten Recipient (Option<RecipientKey>) → ValidatedRecipient.
+        // Validator already enforced `key.is_some()` for every recipient.
+        let validated_recipients: Vec<ValidatedRecipient> = recipients_vec
+            .into_iter()
+            .map(ValidatedRecipient::from_partial)
+            .collect();
+        let recipients_ne = NonEmpty::try_from_vec(validated_recipients)
+            .expect("recipients non-empty checked above");
+
+        // `payment` and `presets` are guaranteed non-empty by the missing-section
+        // check above; lift them into `NonEmpty` to encode that statically.
+        let payment_ne = NonEmpty::try_from_vec(payment.expect("payment present"))
+            .expect("payment non-empty checked above");
+        let presets_ne = NonEmpty::try_from_vec(presets.expect("presets present"))
+            .expect("presets non-empty checked above");
+
+        let resolved_defaults = defaults.unwrap_or_default();
+        let template = resolved_defaults.template;
+        let locale = resolved_defaults.locale;
+
+        Ok(ValidationOutcome::Complete(ValidatedConfig {
+            sender: sender.expect("sender present when no missing sections"),
+            recipients: recipients_ne,
+            default_recipient_idx,
+            payment: payment_ne,
+            presets: presets_ne,
+            defaults: resolved_defaults,
+            branding: resolve_branding(branding),
+            template,
+            locale,
+        }))
     }
 }
 
