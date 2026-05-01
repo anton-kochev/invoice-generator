@@ -39,6 +39,10 @@ pub enum InvoiceError {
     #[error("failed to parse --items JSON: {0}")]
     ItemsParse(#[from] serde_json::Error),
 
+    /// `--items` parsed successfully but contained no entries.
+    #[error("--items array must not be empty")]
+    EmptyItems,
+
     /// Unknown template key.
     #[error("unknown template: \"{key}\". Available: {}", available.join(", "))]
     InvalidTemplateKey {

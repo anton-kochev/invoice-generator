@@ -1,9 +1,12 @@
 pub mod common;
+pub mod error;
 pub mod generate_cmd;
 pub mod interactive;
 pub mod preset_cmd;
 pub mod recipient_cmd;
 pub mod recipient_selection;
+
+pub use error::CliError;
 
 use std::path::{Path, PathBuf};
 

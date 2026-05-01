@@ -1,6 +1,7 @@
 use std::io::Write;
 use std::path::Path;
 
+use crate::cli::CliError;
 use crate::config::ConfigError;
 use crate::config::types::Recipient;
 use crate::config::validator::ValidatedConfig;
@@ -98,7 +99,7 @@ pub fn handle_recipient_list(
     );
     writer
         .write_all(table.as_bytes())
-        .map_err(crate::pdf::PdfError::Write)?;
+        .map_err(CliError::OutputWrite)?;
     Ok(())
 }
 
@@ -162,7 +163,7 @@ pub fn handle_recipient_add(
         key_for_msg.as_str(),
         config_path.display()
     )
-    .map_err(crate::pdf::PdfError::Write)?;
+    .map_err(CliError::OutputWrite)?;
     Ok(())
 }
 
@@ -255,7 +256,7 @@ pub fn handle_recipient_delete(
         "✓ Recipient \"{key}\" deleted from {}",
         config_path.display()
     )
-    .map_err(crate::pdf::PdfError::Write)?;
+    .map_err(CliError::OutputWrite)?;
     Ok(())
 }
 

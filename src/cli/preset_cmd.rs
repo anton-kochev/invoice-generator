@@ -1,6 +1,7 @@
 use std::io::Write;
 use std::path::Path;
 
+use crate::cli::CliError;
 use crate::config::ConfigError;
 use crate::config::loader::{load_config, LoadResult};
 use crate::config::types::Preset;
@@ -82,7 +83,7 @@ pub fn handle_preset_list(
     let table = format_preset_table(&validated.presets, validated.defaults.currency);
     writer
         .write_all(table.as_bytes())
-        .map_err(crate::pdf::PdfError::Write)?;
+        .map_err(CliError::OutputWrite)?;
     Ok(())
 }
 
@@ -125,7 +126,7 @@ pub fn handle_preset_delete(
         key,
         config_path.display()
     )
-    .map_err(crate::pdf::PdfError::Write)?;
+    .map_err(CliError::OutputWrite)?;
     Ok(())
 }
 

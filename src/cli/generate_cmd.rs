@@ -52,25 +52,18 @@ fn find_preset<'a>(key: &str, presets: &'a [Preset]) -> Result<&'a Preset, Confi
 }
 
 /// Parse the `--items` JSON string into validated `ItemSpec` entries.
-fn parse_items(json: &str) -> Result<Vec<ItemSpec>, AppError> {
-    use serde::de::Error as _;
-    // serde_json::Error → InvoiceError::ItemsParse via #[from]; then → AppError via #[from].
-    let items: Vec<ItemSpec> =
-        serde_json::from_str(json).map_err(InvoiceError::from)?;
+fn parse_items(json: &str) -> Result<Vec<ItemSpec>, InvoiceError> {
+    // serde_json::Error → InvoiceError::ItemsParse via #[from].
+    let items: Vec<ItemSpec> = serde_json::from_str(json)?;
     if items.is_empty() {
-        // Build a synthetic serde_json::Error so the empty-array case keeps
-        // surfacing as `InvoiceError::ItemsParse` (matching pre-refactor tests).
-        return Err(InvoiceError::ItemsParse(serde_json::Error::custom(
-            "items array must not be empty",
-        ))
-        .into());
+        return Err(InvoiceError::EmptyItems);
     }
     for item in &items {
         validate_days(item.days)?;
         if let Some(tr) = item.tax_rate
             && tr < 0.0
         {
-            return Err(InvoiceError::InvalidTaxRate(format!("{tr}")).into());
+            return Err(InvoiceError::InvalidTaxRate(format!("{tr}")));
         }
     }
     Ok(items)
@@ -243,7 +236,7 @@ mod tests {
         let result = parse_items(json);
 
         // Assert
-        assert!(matches!(result, Err(AppError::Invoice(InvoiceError::ItemsParse(_)))));
+        assert!(matches!(result, Err(InvoiceError::ItemsParse(_))));
     }
 
     #[test]
@@ -255,7 +248,7 @@ mod tests {
         let result = parse_items(json);
 
         // Assert
-        assert!(matches!(result, Err(AppError::Invoice(InvoiceError::ItemsParse(_)))));
+        assert!(matches!(result, Err(InvoiceError::ItemsParse(_))));
     }
 
     #[test]
@@ -292,7 +285,7 @@ mod tests {
         let result = parse_items(json);
 
         // Assert
-        assert!(matches!(result, Err(AppError::Invoice(InvoiceError::ItemsParse(_)))));
+        assert!(matches!(result, Err(InvoiceError::EmptyItems)));
     }
 
     #[test]
@@ -304,7 +297,7 @@ mod tests {
         let result = parse_items(json);
 
         // Assert
-        assert!(matches!(result, Err(AppError::Invoice(InvoiceError::InvalidDays(_)))));
+        assert!(matches!(result, Err(InvoiceError::InvalidDays(_))));
     }
 
     // ── Phase 3: Validation tests (pure) ──
@@ -747,7 +740,7 @@ mod tests {
         let result = parse_items(json);
 
         // Assert
-        assert!(matches!(result, Err(AppError::Invoice(InvoiceError::InvalidTaxRate(_)))));
+        assert!(matches!(result, Err(InvoiceError::InvalidTaxRate(_))));
     }
 
     #[test]

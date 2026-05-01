@@ -11,6 +11,7 @@
 
 use thiserror::Error;
 
+use crate::cli::CliError;
 use crate::config::ConfigError;
 use crate::invoice::InvoiceError;
 use crate::pdf::PdfError;
@@ -18,6 +19,10 @@ use crate::pdf::PdfError;
 /// Application-level errors for the invoice generator.
 #[derive(Debug, Error)]
 pub enum AppError {
+    /// An error originating from the CLI subsystem (stdout writes, etc.).
+    #[error("cli error: {0}")]
+    Cli(#[from] CliError),
+
     /// An error originating from the config subsystem.
     #[error("config error: {0}")]
     Config(#[from] ConfigError),
