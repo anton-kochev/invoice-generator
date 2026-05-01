@@ -49,7 +49,9 @@
     #for method in data.payment {
       block(below: 10pt)[
         #set text(size: 9pt)
-        *#method.label* \
+        #if "label" in method [
+          *#method.label* \
+        ]
         IBAN: #method.iban \
         BIC: #method.bic_swift
       ]

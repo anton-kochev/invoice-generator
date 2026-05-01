@@ -139,7 +139,7 @@ defaults:
 
                 let payment = config.payment.unwrap();
                 assert_eq!(payment.len(), 1);
-                assert_eq!(payment[0].label, "SEPA Transfer");
+                assert_eq!(payment[0].label.as_deref(), Some("SEPA Transfer"));
                 assert_eq!(payment[0].bic_swift, "COBADEFFXXX");
 
                 let presets = config.presets.unwrap();

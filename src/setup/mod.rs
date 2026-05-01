@@ -132,7 +132,8 @@ mod tests {
         let prompter = MockPrompter::new(vec![
             // Payment (1 method)
             MockResponse::U32(1),
-            MockResponse::Text("SEPA".into()),
+            MockResponse::Text("sepa".into()),
+            MockResponse::OptionalText(Some("SEPA".into())),
             MockResponse::Text("DE89370400440532013000".into()),
             MockResponse::Text("BIC".into()),
             // Presets (1 preset)

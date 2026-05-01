@@ -2,7 +2,7 @@ use std::fmt;
 
 use super::error::ConfigError;
 use super::types::*;
-use crate::domain::{HexColor, NonEmpty, RecipientKey};
+use crate::domain::{HexColor, Iban, NonEmpty, PaymentMethodKey, RecipientKey};
 use crate::locale::Locale;
 
 const DEFAULT_ACCENT_COLOR: &str = "#2c3e50";
@@ -148,6 +148,89 @@ impl ValidatedRecipient {
     }
 }
 
+/// A payment method with all post-validation invariants encoded in the type.
+///
+/// Compared to the raw [`PaymentMethod`], `key` is non-`Option`: the validator
+/// either supplies a key derived from the label (legacy v1 configs) or
+/// asserts the user-provided one is well-formed. `label` remains optional,
+/// since it is purely for display.
+///
+/// Fields are `pub(super)` so only the [`crate::config`] module can construct
+/// instances directly. External callers — including tests in other modules —
+/// must go through [`ValidatedPaymentMethod::from_validated_parts`] (test-only)
+/// or obtain instances by validating a [`Config`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct ValidatedPaymentMethod {
+    pub(super) key: PaymentMethodKey,
+    pub(super) label: Option<String>,
+    pub(super) iban: Iban,
+    pub(super) bic_swift: String,
+}
+
+impl ValidatedPaymentMethod {
+    /// Convert from a raw [`PaymentMethod`] whose `key` is known to be `Some`.
+    ///
+    /// Panics if `key` is `None`. Only the validator should call this — it is
+    /// responsible for filling in derived keys before invoking `from_partial`.
+    fn from_partial(p: PaymentMethod) -> Self {
+        Self {
+            key: p.key.expect(
+                "validator must populate PaymentMethod.key before constructing ValidatedPaymentMethod",
+            ),
+            label: p.label,
+            iban: p.iban,
+            bic_swift: p.bic_swift,
+        }
+    }
+
+    /// Borrow the payment method's key.
+    ///
+    /// Currently used only by tests; kept on the public surface for symmetry
+    /// with [`ValidatedRecipient::key`] and so future `payment list|delete`
+    /// CLI subcommands can reach the slug without needing a friend-module
+    /// accessor.
+    #[allow(dead_code)]
+    pub fn key(&self) -> &PaymentMethodKey {
+        &self.key
+    }
+
+    /// Borrow the payment method's display label, if present.
+    pub fn label(&self) -> Option<&str> {
+        self.label.as_deref()
+    }
+
+    /// Borrow the payment method's IBAN.
+    pub fn iban(&self) -> &Iban {
+        &self.iban
+    }
+
+    /// Borrow the payment method's BIC/SWIFT code.
+    pub fn bic_swift(&self) -> &str {
+        &self.bic_swift
+    }
+
+    /// Test-only constructor that bypasses the normal validator path.
+    ///
+    /// Used by test fixtures in other modules that need to assemble a
+    /// [`ValidatedPaymentMethod`] without round-tripping through
+    /// [`Config::validate`]. Production code paths construct via
+    /// [`ValidatedPaymentMethod::from_partial`] inside the validator.
+    #[cfg(test)]
+    pub(crate) fn from_validated_parts(
+        key: PaymentMethodKey,
+        label: Option<String>,
+        iban: Iban,
+        bic_swift: String,
+    ) -> Self {
+        Self {
+            key,
+            label,
+            iban,
+            bic_swift,
+        }
+    }
+}
+
 /// A fully validated configuration with all required sections present.
 ///
 /// Invariants encoded in the type system (post-validation):
@@ -155,7 +238,7 @@ impl ValidatedRecipient {
 /// - The default-recipient index is in-bounds for `recipients` (encapsulated
 ///   as a private field; use [`default_recipient`](Self::default_recipient)
 ///   to dereference safely).
-/// - `payment` has at least one entry.
+/// - `payment` has at least one entry, every entry has a non-`Option` key.
 /// - `presets` has at least one entry.
 /// - Every recipient's key is `Some` (encoded as a non-`Option` field on
 ///   [`ValidatedRecipient`]).
@@ -171,7 +254,7 @@ pub struct ValidatedConfig {
     /// [`default_recipient_key`](Self::default_recipient_key).
     default_recipient_idx: usize,
     /// Guaranteed non-empty.
-    pub payment: NonEmpty<PaymentMethod>,
+    pub payment: NonEmpty<ValidatedPaymentMethod>,
     /// Guaranteed non-empty.
     pub presets: NonEmpty<Preset>,
     pub defaults: Defaults,
@@ -206,7 +289,7 @@ impl ValidatedConfig {
         sender: Sender,
         recipients: NonEmpty<ValidatedRecipient>,
         default_recipient_idx: usize,
-        payment: NonEmpty<PaymentMethod>,
+        payment: NonEmpty<ValidatedPaymentMethod>,
         presets: NonEmpty<Preset>,
         defaults: Defaults,
         branding: ValidatedBranding,
@@ -314,6 +397,58 @@ fn validate_recipient_invariants(
     Ok(())
 }
 
+/// Phase A of the payment pipeline: fill in missing keys (deriving from
+/// `label` when needed) and verify uniqueness across the resulting set.
+///
+/// Each entry must have at least one of `key` or `label`; explicit `key`
+/// always wins over a `label`-derived one. Derivation runs *before* the
+/// uniqueness check, so two entries — one with `key="sepa"` and another with
+/// `label="SEPA"` — are correctly detected as a collision.
+///
+/// Returns the input vec with every entry's `key` populated, or a
+/// [`ConfigError::InvalidPaymentMethod`] / [`ConfigError::DuplicatePaymentKey`]
+/// if validation fails.
+fn normalize_payment_methods(
+    methods: Vec<PaymentMethod>,
+) -> Result<Vec<PaymentMethod>, ConfigError> {
+    let mut normalized = Vec::with_capacity(methods.len());
+    for mut p in methods {
+        if p.key.is_none() {
+            let derived = match p.label.as_deref() {
+                Some(label) => PaymentMethodKey::from_name(label).map_err(|e| {
+                    ConfigError::InvalidPaymentMethod(format!(
+                        "could not derive key from label \"{label}\": {e}"
+                    ))
+                })?,
+                None => {
+                    return Err(ConfigError::InvalidPaymentMethod(
+                        "payment method requires a `key` or `label`".into(),
+                    ));
+                }
+            };
+            p.key = Some(derived);
+        }
+        normalized.push(p);
+    }
+
+    // Uniqueness check happens after derivation so derived and explicit keys
+    // collide on the same set.
+    let mut seen = std::collections::HashSet::new();
+    for p in &normalized {
+        let k = p
+            .key
+            .as_ref()
+            .expect("key populated by normalization step above");
+        if !seen.insert(k.clone()) {
+            return Err(ConfigError::DuplicatePaymentKey {
+                key: k.as_str().to_string(),
+            });
+        }
+    }
+
+    Ok(normalized)
+}
+
 /// Fold an optional [`Branding`] into a fully resolved [`ValidatedBranding`],
 /// substituting defaults for absent fields.
 fn resolve_branding(branding: Option<Branding>) -> ValidatedBranding {
@@ -414,10 +549,20 @@ impl Config {
         let recipients_ne = NonEmpty::try_from_vec(validated_recipients)
             .expect("recipients non-empty checked above");
 
+        // Normalize payment methods: derive missing keys from labels, then
+        // verify uniqueness. Hard errors (missing key+label, slugify failure,
+        // duplicate key) bubble up — `Incomplete` is reserved for sections
+        // that are entirely absent.
+        let normalized_payment = normalize_payment_methods(payment.expect("payment present"))?;
+
         // `payment` and `presets` are guaranteed non-empty by the missing-section
         // check above; lift them into `NonEmpty` to encode that statically.
-        let payment_ne = NonEmpty::try_from_vec(payment.expect("payment present"))
-            .expect("payment non-empty checked above");
+        let validated_payment: Vec<ValidatedPaymentMethod> = normalized_payment
+            .into_iter()
+            .map(ValidatedPaymentMethod::from_partial)
+            .collect();
+        let payment_ne =
+            NonEmpty::try_from_vec(validated_payment).expect("payment non-empty checked above");
         let presets_ne = NonEmpty::try_from_vec(presets.expect("presets present"))
             .expect("presets non-empty checked above");
 
@@ -1025,6 +1170,153 @@ mod tests {
         }
     }
 
+    // ── PaymentMethod validation: key/label split ──
+
+    #[test]
+    fn test_validate_payment_v1_label_only_derives_key_from_label() {
+        // Arrange — legacy v1 shape: label only, no key.
+        let mut config = make_complete_config();
+        config.payment = Some(vec![make_payment_label_only(
+            "SEPA Transfer",
+            "DE89370400440532013000",
+        )]);
+
+        // Act
+        let result = config.validate().unwrap();
+
+        // Assert
+        match result {
+            ValidationOutcome::Complete(v) => {
+                let p = &v.payment[0];
+                assert_eq!(p.key().as_str(), "sepa-transfer");
+                assert_eq!(p.label(), Some("SEPA Transfer"));
+            }
+            ValidationOutcome::Incomplete { .. } => panic!("Expected Complete"),
+        }
+    }
+
+    #[test]
+    fn test_validate_payment_explicit_key_takes_precedence_over_label() {
+        // Arrange — both present: explicit key wins, label preserved.
+        let mut config = make_complete_config();
+        config.payment = Some(vec![PaymentMethod {
+            key: Some(PaymentMethodKey::try_new("custom-key").unwrap()),
+            label: Some("SEPA Transfer".into()),
+            iban: crate::domain::Iban::try_new("DE89370400440532013000").unwrap(),
+            bic_swift: "BIC".into(),
+        }]);
+
+        // Act
+        let result = config.validate().unwrap();
+
+        // Assert
+        match result {
+            ValidationOutcome::Complete(v) => {
+                let p = &v.payment[0];
+                assert_eq!(p.key().as_str(), "custom-key");
+                assert_eq!(p.label(), Some("SEPA Transfer"));
+            }
+            ValidationOutcome::Incomplete { .. } => panic!("Expected Complete"),
+        }
+    }
+
+    #[test]
+    fn test_validate_payment_no_key_no_label_returns_error() {
+        // Arrange
+        let mut config = make_complete_config();
+        config.payment = Some(vec![PaymentMethod {
+            key: None,
+            label: None,
+            iban: crate::domain::Iban::try_new("DE89370400440532013000").unwrap(),
+            bic_swift: "BIC".into(),
+        }]);
+
+        // Act
+        let result = config.validate();
+
+        // Assert
+        assert!(matches!(result, Err(ConfigError::InvalidPaymentMethod(_))));
+    }
+
+    #[test]
+    fn test_validate_payment_label_that_slugifies_to_empty_returns_error() {
+        // Arrange — `!!!` has no alphanumerics → slugify yields empty.
+        let mut config = make_complete_config();
+        config.payment = Some(vec![make_payment_label_only(
+            "!!!",
+            "DE89370400440532013000",
+        )]);
+
+        // Act
+        let result = config.validate();
+
+        // Assert
+        assert!(matches!(result, Err(ConfigError::InvalidPaymentMethod(_))));
+    }
+
+    #[test]
+    fn test_validate_duplicate_payment_keys_returns_error() {
+        // Arrange — two methods with the same explicit key.
+        let mut config = make_complete_config();
+        config.payment = Some(vec![
+            make_payment_key_only("sepa", "DE89370400440532013000"),
+            make_payment_key_only("sepa", "GB82WEST12345698765432"),
+        ]);
+
+        // Act
+        let result = config.validate();
+
+        // Assert
+        assert!(matches!(
+            result,
+            Err(ConfigError::DuplicatePaymentKey { .. })
+        ));
+    }
+
+    #[test]
+    fn test_validate_duplicate_keys_one_explicit_one_derived() {
+        // Arrange — method A has explicit key="sepa-transfer"; method B has
+        // label="SEPA Transfer" which slugifies to "sepa-transfer". Both end
+        // up with the same key.
+        //
+        // CRITICAL: this test catches the bug where uniqueness is checked
+        // before derivation — the wrong order would let this slip through.
+        let mut config = make_complete_config();
+        config.payment = Some(vec![
+            make_payment_key_only("sepa-transfer", "DE89370400440532013000"),
+            make_payment_label_only("SEPA Transfer", "GB82WEST12345698765432"),
+        ]);
+
+        // Act
+        let result = config.validate();
+
+        // Assert
+        assert!(matches!(
+            result,
+            Err(ConfigError::DuplicatePaymentKey { .. })
+        ));
+    }
+
+    #[test]
+    fn test_validated_config_payment_is_non_empty() {
+        // Arrange — confirms the NonEmpty<ValidatedPaymentMethod> invariant
+        // survives the refactor.
+        let config = make_complete_config();
+
+        // Act
+        let result = config.validate().unwrap();
+
+        // Assert
+        match result {
+            ValidationOutcome::Complete(v) => {
+                assert!(!v.payment.is_empty());
+                // `v.payment[0]` is `ValidatedPaymentMethod`, not `PaymentMethod`.
+                let _: &ValidatedPaymentMethod = &v.payment[0];
+            }
+            ValidationOutcome::Incomplete { .. } => panic!("Expected Complete"),
+        }
+    }
+
     // ── Helpers ──
 
     fn make_sender() -> Sender {
@@ -1057,10 +1349,29 @@ mod tests {
 
     fn make_payment() -> Vec<PaymentMethod> {
         vec![PaymentMethod {
-            label: "SEPA".into(),
+            key: None,
+            label: Some("SEPA".into()),
             iban: crate::domain::Iban::try_new("DE89370400440532013000").unwrap(),
             bic_swift: "BIC".into(),
         }]
+    }
+
+    fn make_payment_label_only(label: &str, iban: &str) -> PaymentMethod {
+        PaymentMethod {
+            key: None,
+            label: Some(label.into()),
+            iban: crate::domain::Iban::try_new(iban).unwrap(),
+            bic_swift: "BIC".into(),
+        }
+    }
+
+    fn make_payment_key_only(key: &str, iban: &str) -> PaymentMethod {
+        PaymentMethod {
+            key: Some(PaymentMethodKey::try_new(key).unwrap()),
+            label: None,
+            iban: crate::domain::Iban::try_new(iban).unwrap(),
+            bic_swift: "BIC".into(),
+        }
     }
 
     fn make_presets() -> Vec<Preset> {

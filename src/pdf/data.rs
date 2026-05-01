@@ -62,10 +62,17 @@ pub struct LineItemData {
 /// Payment method details for the template.
 ///
 /// `iban` is rendered as the canonical grouped form (`GB82 WEST 1234 5698 7654 32`)
-/// for human readability in the PDF.
+/// for human readability in the PDF. `label` is optional: when absent, the
+/// Typst template renders only IBAN/BIC with no header, eliminating the bug
+/// where config-internal slugs (e.g. `mono-eur-sepa`) used to leak into the
+/// PDF as bold headers.
+///
+/// Note: the payment-method `key` is intentionally NOT exposed to the template.
+/// The Typst layer never sees the slug — it is purely an internal identifier.
 #[derive(Debug, Serialize)]
 pub struct PaymentData<'a> {
-    pub label: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<&'a str>,
     pub iban: String,
     pub bic_swift: &'a str,
 }
@@ -144,9 +151,13 @@ impl<'a> InvoiceData<'a> {
                 .payment
                 .iter()
                 .map(|p| PaymentData {
-                    label: &p.label,
-                    iban: p.iban.to_string(),
-                    bic_swift: &p.bic_swift,
+                    // Defensive `.filter(non-empty)` guards against a
+                    // hand-edited YAML where someone sets `label: ""` —
+                    // without this the template would still render an empty
+                    // bold header artifact.
+                    label: p.label().filter(|s| !s.is_empty()),
+                    iban: p.iban().to_string(),
+                    bic_swift: p.bic_swift(),
                 })
                 .collect(),
             branding: BrandingData {
@@ -169,7 +180,7 @@ impl<'a> InvoiceData<'a> {
 mod tests {
     use super::*;
     use crate::config::types::*;
-    use crate::config::validator::ValidatedBranding;
+    use crate::config::validator::{ValidatedBranding, ValidatedPaymentMethod};
     use crate::invoice::types::*;
     use time::{Date, Month};
 
@@ -216,11 +227,14 @@ mod tests {
             },
             crate::domain::NonEmpty::try_from_vec(vec![recipient]).unwrap(),
             0,
-            crate::domain::NonEmpty::try_from_vec(vec![PaymentMethod {
-                label: "Primary Bank Account".into(),
-                iban: crate::domain::Iban::try_new("DE89 3704 0044 0532 0130 00").unwrap(),
-                bic_swift: "COBADEFFXXX".into(),
-            }])
+            crate::domain::NonEmpty::try_from_vec(vec![
+                ValidatedPaymentMethod::from_validated_parts(
+                    crate::domain::PaymentMethodKey::try_new("primary").unwrap(),
+                    Some("Primary Bank Account".into()),
+                    crate::domain::Iban::try_new("DE89 3704 0044 0532 0130 00").unwrap(),
+                    "COBADEFFXXX".into(),
+                ),
+            ])
             .unwrap(),
             crate::domain::NonEmpty::try_from_vec(vec![Preset {
                 key: crate::domain::PresetKey::try_new("dev").unwrap(),
@@ -308,6 +322,268 @@ mod tests {
         assert_eq!(payments.len(), 1);
         assert_eq!(payments[0]["label"], "Primary Bank Account");
         assert_eq!(payments[0]["iban"], "DE89 3704 0044 0532 0130 00");
+    }
+
+    /// Build a [`ValidatedConfig`] with a single payment method whose label
+    /// matches the provided `label` argument. Used by the label-presence
+    /// tests below.
+    fn config_with_payment_label(label: Option<String>) -> ValidatedConfig {
+        let recipient = ValidatedRecipient::from_validated_parts(
+            crate::domain::RecipientKey::try_new("acme-corp").unwrap(),
+            "Acme Corp".into(),
+            vec!["456 Oak Ave".into()],
+            None,
+            None,
+        );
+        ValidatedConfig::from_validated_parts(
+            Sender {
+                name: "Jane Doe".into(),
+                address: vec!["123 Main St".into()],
+                email: "jane@example.com".into(),
+            },
+            crate::domain::NonEmpty::try_from_vec(vec![recipient]).unwrap(),
+            0,
+            crate::domain::NonEmpty::try_from_vec(vec![
+                ValidatedPaymentMethod::from_validated_parts(
+                    crate::domain::PaymentMethodKey::try_new("mono-eur-sepa").unwrap(),
+                    label,
+                    crate::domain::Iban::try_new("DE89370400440532013000").unwrap(),
+                    "COBADEFFXXX".into(),
+                ),
+            ])
+            .unwrap(),
+            crate::domain::NonEmpty::try_from_vec(vec![Preset {
+                key: crate::domain::PresetKey::try_new("dev").unwrap(),
+                description: "Software development".into(),
+                default_rate: 800.0,
+                currency: None,
+                tax_rate: None,
+            }])
+            .unwrap(),
+            Defaults::default(),
+            ValidatedBranding::default(),
+            TemplateKey::Leda,
+            crate::locale::Locale::EnUs,
+        )
+    }
+
+    #[test]
+    fn payment_method_with_label_includes_label_in_json() {
+        // Arrange
+        let summary = make_summary();
+        let config = config_with_payment_label(Some("SEPA Transfer".into()));
+
+        // Act
+        let data = InvoiceData::from_parts(
+            &summary,
+            &config,
+            config.default_recipient(),
+            None,
+            Locale::EnUs,
+        );
+        let json = serde_json::to_value(&data).unwrap();
+
+        // Assert
+        assert_eq!(json["payment"][0]["label"], "SEPA Transfer");
+    }
+
+    #[test]
+    fn payment_method_without_label_omits_label_from_json() {
+        // Arrange — load-bearing for the bug fix: `"label" in method` in the
+        // Typst templates depends on the field being absent (not null/empty)
+        // when no label is configured.
+        let summary = make_summary();
+        let config = config_with_payment_label(None);
+
+        // Act
+        let data = InvoiceData::from_parts(
+            &summary,
+            &config,
+            config.default_recipient(),
+            None,
+            Locale::EnUs,
+        );
+        let json = serde_json::to_value(&data).unwrap();
+
+        // Assert
+        assert!(
+            json["payment"][0].get("label").is_none(),
+            "expected `label` to be absent from JSON when no label set, got {:?}",
+            json["payment"][0]
+        );
+    }
+
+    #[test]
+    fn payment_method_empty_label_treated_as_absent() {
+        // Arrange — defensive: even if a hand-edited YAML produces an empty
+        // string label, the data layer filters it out so the Typst template
+        // does not render a stray bold artifact.
+        let summary = make_summary();
+        let config = config_with_payment_label(Some(String::new()));
+
+        // Act
+        let data = InvoiceData::from_parts(
+            &summary,
+            &config,
+            config.default_recipient(),
+            None,
+            Locale::EnUs,
+        );
+        let json = serde_json::to_value(&data).unwrap();
+
+        // Assert
+        assert!(
+            json["payment"][0].get("label").is_none(),
+            "expected empty label to be omitted from JSON, got {:?}",
+            json["payment"][0]
+        );
+    }
+
+    #[test]
+    fn payment_method_key_not_serialized_in_invoice_data() {
+        // Arrange — the key is internal; the Typst layer must never see it.
+        let summary = make_summary();
+        let config = config_with_payment_label(Some("SEPA Transfer".into()));
+
+        // Act
+        let data = InvoiceData::from_parts(
+            &summary,
+            &config,
+            config.default_recipient(),
+            None,
+            Locale::EnUs,
+        );
+        let json = serde_json::to_value(&data).unwrap();
+
+        // Assert
+        assert!(
+            json["payment"][0].get("key").is_none(),
+            "expected `key` to be absent from JSON, got {:?}",
+            json["payment"][0]
+        );
+    }
+
+    #[test]
+    fn payment_method_iban_and_bic_always_present() {
+        // Arrange — regression guard: even when label is absent, IBAN and
+        // BIC must still appear in the JSON.
+        let summary = make_summary();
+        let config = config_with_payment_label(None);
+
+        // Act
+        let data = InvoiceData::from_parts(
+            &summary,
+            &config,
+            config.default_recipient(),
+            None,
+            Locale::EnUs,
+        );
+        let json = serde_json::to_value(&data).unwrap();
+
+        // Assert
+        assert!(json["payment"][0].get("iban").is_some());
+        assert!(json["payment"][0].get("bic_swift").is_some());
+    }
+
+    // ── End-to-end YAML → ValidatedConfig → JSON integration tests ──
+
+    /// Build a complete config YAML with the given payment block.
+    fn build_full_yaml(payment_block: &str) -> String {
+        format!(
+            "sender:\n  \
+             name: Alice\n  \
+             address:\n    - 123 St\n  \
+             email: alice@example.com\n\
+             recipients:\n\
+             - key: bob\n  \
+             name: Bob Corp\n  \
+             address:\n    - 456 Ave\n\
+             default_recipient: bob\n\
+             payment:\n{payment_block}\
+             presets:\n\
+             - key: dev\n  \
+             description: Development\n  \
+             default_rate: 100.0\n"
+        )
+    }
+
+    #[test]
+    fn test_v1_yaml_with_label_only_renders_with_label_present_in_json() {
+        // Arrange — legacy v1 migration safety net: a config that contains
+        // only `label` (no `key`) on its payment method must validate (key
+        // gets auto-derived) and the rendered JSON must still include the
+        // label so the template renders the bold header.
+        let yaml = build_full_yaml(
+            "- label: SEPA Transfer\n  iban: DE89370400440532013000\n  bic_swift: COBADEFFXXX\n",
+        );
+        let config: Config = serde_yaml::from_str(&yaml).unwrap();
+        let validated = match config.validate().unwrap() {
+            crate::config::validator::ValidationOutcome::Complete(v) => v,
+            crate::config::validator::ValidationOutcome::Incomplete { missing, .. } => {
+                panic!("Expected Complete, missing: {missing:?}")
+            }
+        };
+
+        // Act
+        let summary = make_summary();
+        let data = InvoiceData::from_parts(
+            &summary,
+            &validated,
+            validated.default_recipient(),
+            None,
+            Locale::EnUs,
+        );
+        let json = serde_json::to_value(&data).unwrap();
+
+        // Assert
+        assert_eq!(json["payment"][0]["label"], "SEPA Transfer");
+        assert!(
+            json["payment"][0].get("key").is_none(),
+            "key must never be exposed to the JSON layer"
+        );
+    }
+
+    #[test]
+    fn test_v2_yaml_key_only_renders_without_label_field_in_json() {
+        // Arrange — Anton's migrated config shape. The payment block has
+        // `key` but no `label`; the rendered JSON must omit the `label` field
+        // entirely so the Typst `"label" in method` check evaluates to false
+        // and no leaked-key header appears in the PDF.
+        let yaml = build_full_yaml(
+            "- key: mono-eur-sepa\n  iban: DE89370400440532013000\n  bic_swift: COBADEFFXXX\n",
+        );
+        let config: Config = serde_yaml::from_str(&yaml).unwrap();
+        let validated = match config.validate().unwrap() {
+            crate::config::validator::ValidationOutcome::Complete(v) => v,
+            crate::config::validator::ValidationOutcome::Incomplete { missing, .. } => {
+                panic!("Expected Complete, missing: {missing:?}")
+            }
+        };
+
+        // Act
+        let summary = make_summary();
+        let data = InvoiceData::from_parts(
+            &summary,
+            &validated,
+            validated.default_recipient(),
+            None,
+            Locale::EnUs,
+        );
+        let json = serde_json::to_value(&data).unwrap();
+
+        // Assert
+        assert!(
+            json["payment"][0].get("label").is_none(),
+            "expected no `label` in JSON for key-only config, got {:?}",
+            json["payment"][0]
+        );
+        assert!(
+            json["payment"][0].get("key").is_none(),
+            "key must never be exposed to the JSON layer"
+        );
+        // IBAN / BIC still rendered.
+        assert_eq!(json["payment"][0]["iban"], "DE89 3704 0044 0532 0130 00");
+        assert_eq!(json["payment"][0]["bic_swift"], "COBADEFFXXX");
     }
 
     fn make_summary_with_tax() -> InvoiceSummary {

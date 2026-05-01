@@ -189,7 +189,9 @@
   ..for method in data.payment {
     ([
       #set text(size: 8pt)
-      *#method.label* \
+      #if "label" in method [
+        *#method.label* \
+      ]
       IBAN — #method.iban \
       BIC — #method.bic_swift
     ],)

@@ -174,7 +174,7 @@ pub fn run_invoice_flow(
 mod tests {
     use super::*;
     use crate::config::types::*;
-    use crate::config::validator::ValidatedBranding;
+    use crate::config::validator::{ValidatedBranding, ValidatedPaymentMethod};
     use crate::domain::NonEmpty;
     use crate::setup::mock_prompter::{MockPrompter, MockResponse};
 
@@ -194,11 +194,12 @@ mod tests {
             },
             NonEmpty::try_from_vec(vec![recipient]).unwrap(),
             0,
-            NonEmpty::try_from_vec(vec![PaymentMethod {
-                label: "SEPA".into(),
-                iban: crate::domain::Iban::try_new("DE89370400440532013000").unwrap(),
-                bic_swift: "TESTBIC".into(),
-            }])
+            NonEmpty::try_from_vec(vec![ValidatedPaymentMethod::from_validated_parts(
+                crate::domain::PaymentMethodKey::try_new("sepa").unwrap(),
+                Some("SEPA".into()),
+                crate::domain::Iban::try_new("DE89370400440532013000").unwrap(),
+                "TESTBIC".into(),
+            )])
             .unwrap(),
             NonEmpty::try_from_vec(vec![Preset {
                 key: crate::domain::PresetKey::try_new("dev").unwrap(),

@@ -4,7 +4,7 @@ use super::prompter::Prompter;
 use super::prompts::{prompt_parsed, prompt_until_valid};
 use crate::config::types::{Config, PaymentMethod};
 use crate::config::writer::save_config;
-use crate::domain::Iban;
+use crate::domain::{Iban, PaymentMethodKey};
 use crate::error::AppError;
 
 /// Collect payment methods interactively and persist them to disk.
@@ -30,7 +30,13 @@ pub fn collect_payment(
     let mut methods = Vec::with_capacity(count as usize);
     for i in 1..=count {
         prompter.message(&format!("\nPayment method #{i}:"));
-        let label = prompter.required_text("Label:")?;
+        let key = prompt_parsed(
+            prompter,
+            |p| p.required_text("Key (slug, e.g. mono-eur-sepa):"),
+            |raw: String| PaymentMethodKey::try_new(raw).map_err(|e| e.to_string()),
+        )?;
+        let label =
+            prompter.optional_text("Display label (shown on invoice — leave empty to skip):")?;
         let iban = prompt_parsed(
             prompter,
             |p| p.required_text("IBAN:"),
@@ -38,6 +44,7 @@ pub fn collect_payment(
         )?;
         let bic_swift = prompter.required_text("BIC/SWIFT:")?;
         methods.push(PaymentMethod {
+            key: Some(key),
             label,
             iban,
             bic_swift,
@@ -70,7 +77,8 @@ mod tests {
         let mut config = empty_config();
         let prompter = MockPrompter::new(vec![
             MockResponse::U32(1),
-            MockResponse::Text("SEPA Transfer".into()),
+            MockResponse::Text("sepa-transfer".into()),
+            MockResponse::OptionalText(Some("SEPA Transfer".into())),
             MockResponse::Text(VALID_DE_IBAN.into()),
             MockResponse::Text("COBADEFFXXX".into()),
         ]);
@@ -81,7 +89,11 @@ mod tests {
         // Assert
         let payment = config.payment.as_ref().unwrap();
         assert_eq!(payment.len(), 1);
-        assert_eq!(payment[0].label, "SEPA Transfer");
+        assert_eq!(
+            payment[0].key.as_ref().map(|k| k.as_str()),
+            Some("sepa-transfer")
+        );
+        assert_eq!(payment[0].label.as_deref(), Some("SEPA Transfer"));
         assert_eq!(payment[0].iban.as_str(), VALID_DE_IBAN);
         assert_eq!(payment[0].bic_swift, "COBADEFFXXX");
         prompter.assert_exhausted();
@@ -94,10 +106,12 @@ mod tests {
         let mut config = empty_config();
         let prompter = MockPrompter::new(vec![
             MockResponse::U32(2),
-            MockResponse::Text("SEPA".into()),
+            MockResponse::Text("sepa".into()),
+            MockResponse::OptionalText(Some("SEPA".into())),
             MockResponse::Text(VALID_DE_IBAN.into()),
             MockResponse::Text("BIC1".into()),
-            MockResponse::Text("Wire".into()),
+            MockResponse::Text("wire".into()),
+            MockResponse::OptionalText(Some("Wire".into())),
             MockResponse::Text(VALID_GB_IBAN.into()),
             MockResponse::Text("BIC2".into()),
         ]);
@@ -108,8 +122,8 @@ mod tests {
         // Assert
         let payment = config.payment.unwrap();
         assert_eq!(payment.len(), 2);
-        assert_eq!(payment[0].label, "SEPA");
-        assert_eq!(payment[1].label, "Wire");
+        assert_eq!(payment[0].label.as_deref(), Some("SEPA"));
+        assert_eq!(payment[1].label.as_deref(), Some("Wire"));
         prompter.assert_exhausted();
     }
 
@@ -120,13 +134,16 @@ mod tests {
         let mut config = empty_config();
         let prompter = MockPrompter::new(vec![
             MockResponse::U32(3),
-            MockResponse::Text("A".into()),
+            MockResponse::Text("a".into()),
+            MockResponse::OptionalText(Some("A".into())),
             MockResponse::Text(VALID_DE_IBAN.into()),
             MockResponse::Text("BIC1".into()),
-            MockResponse::Text("B".into()),
+            MockResponse::Text("b".into()),
+            MockResponse::OptionalText(Some("B".into())),
             MockResponse::Text(VALID_GB_IBAN.into()),
             MockResponse::Text("BIC2".into()),
-            MockResponse::Text("C".into()),
+            MockResponse::Text("c".into()),
+            MockResponse::OptionalText(Some("C".into())),
             MockResponse::Text(VALID_UA_IBAN.into()),
             MockResponse::Text("BIC3".into()),
         ]);
@@ -137,7 +154,7 @@ mod tests {
         // Assert
         let payment = config.payment.unwrap();
         assert_eq!(payment.len(), 3);
-        assert_eq!(payment[2].label, "C");
+        assert_eq!(payment[2].label.as_deref(), Some("C"));
         prompter.assert_exhausted();
     }
 
@@ -148,7 +165,8 @@ mod tests {
         let mut config = empty_config();
         let prompter = MockPrompter::new(vec![
             MockResponse::U32(1),
-            MockResponse::Text("SEPA".into()),
+            MockResponse::Text("sepa".into()),
+            MockResponse::OptionalText(Some("SEPA".into())),
             MockResponse::Text(VALID_DE_IBAN.into()),
             MockResponse::Text("BIC".into()),
         ]);
@@ -160,7 +178,7 @@ mod tests {
         let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         let payment = loaded.payment.unwrap();
         assert_eq!(payment.len(), 1);
-        assert_eq!(payment[0].label, "SEPA");
+        assert_eq!(payment[0].label.as_deref(), Some("SEPA"));
         prompter.assert_exhausted();
     }
 
@@ -171,10 +189,12 @@ mod tests {
         let mut config = empty_config();
         let prompter = MockPrompter::new(vec![
             MockResponse::U32(2),
-            MockResponse::Text("A".into()),
+            MockResponse::Text("a".into()),
+            MockResponse::OptionalText(Some("A".into())),
             MockResponse::Text(VALID_DE_IBAN.into()),
             MockResponse::Text("B".into()),
-            MockResponse::Text("C".into()),
+            MockResponse::Text("c".into()),
+            MockResponse::OptionalText(Some("C".into())),
             MockResponse::Text(VALID_GB_IBAN.into()),
             MockResponse::Text("D".into()),
         ]);
@@ -202,7 +222,8 @@ mod tests {
         let mut config = empty_config();
         let prompter = MockPrompter::new(vec![
             MockResponse::U32(1),
-            MockResponse::Text("SEPA".into()),
+            MockResponse::Text("sepa".into()),
+            MockResponse::OptionalText(Some("SEPA".into())),
             MockResponse::Text("GB00WEST12345698765432".into()), // bad checksum
             MockResponse::Text(VALID_DE_IBAN.into()),
             MockResponse::Text("BIC".into()),
@@ -218,6 +239,79 @@ mod tests {
         assert!(
             messages.iter().any(|m| m.contains("checksum")),
             "Expected re-prompt with checksum error, got: {messages:?}"
+        );
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_collect_payment_blank_label_records_none() {
+        // Arrange — user accepts the prompt for label with a blank line.
+        let dir = setup_dir(None);
+        let mut config = empty_config();
+        let prompter = MockPrompter::new(vec![
+            MockResponse::U32(1),
+            MockResponse::Text("sepa".into()),
+            MockResponse::OptionalText(None),
+            MockResponse::Text(VALID_DE_IBAN.into()),
+            MockResponse::Text("BIC".into()),
+        ]);
+
+        // Act
+        collect_payment(&prompter, &mut config, &cfg_path(&dir)).unwrap();
+
+        // Assert
+        let payment = config.payment.unwrap();
+        assert!(payment[0].label.is_none());
+        assert_eq!(payment[0].key.as_ref().map(|k| k.as_str()), Some("sepa"));
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_collect_payment_with_label_records_some() {
+        // Arrange — symmetric: user provides a non-empty label.
+        let dir = setup_dir(None);
+        let mut config = empty_config();
+        let prompter = MockPrompter::new(vec![
+            MockResponse::U32(1),
+            MockResponse::Text("sepa".into()),
+            MockResponse::OptionalText(Some("SEPA EUR".into())),
+            MockResponse::Text(VALID_DE_IBAN.into()),
+            MockResponse::Text("BIC".into()),
+        ]);
+
+        // Act
+        collect_payment(&prompter, &mut config, &cfg_path(&dir)).unwrap();
+
+        // Assert
+        let payment = config.payment.unwrap();
+        assert_eq!(payment[0].label.as_deref(), Some("SEPA EUR"));
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_collect_payment_invalid_key_reprompts() {
+        // Arrange — first key is uppercase (rejected), second is valid.
+        let dir = setup_dir(None);
+        let mut config = empty_config();
+        let prompter = MockPrompter::new(vec![
+            MockResponse::U32(1),
+            MockResponse::Text("SEPA".into()), // rejected: uppercase
+            MockResponse::Text("sepa".into()), // accepted
+            MockResponse::OptionalText(None),
+            MockResponse::Text(VALID_DE_IBAN.into()),
+            MockResponse::Text("BIC".into()),
+        ]);
+
+        // Act
+        collect_payment(&prompter, &mut config, &cfg_path(&dir)).unwrap();
+
+        // Assert
+        let payment = config.payment.unwrap();
+        assert_eq!(payment[0].key.as_ref().map(|k| k.as_str()), Some("sepa"));
+        let messages = prompter.messages.borrow();
+        assert!(
+            messages.iter().any(|m| m.contains("invalid characters")),
+            "Expected re-prompt with invalid-character error, got: {messages:?}"
         );
         prompter.assert_exhausted();
     }

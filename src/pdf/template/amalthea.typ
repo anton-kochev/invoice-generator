@@ -164,7 +164,9 @@
     gutter: 1cm,
     ..for method in data.payment {
       ([
-        *#method.label* \
+        #if "label" in method [
+          *#method.label* \
+        ]
         IBAN: #method.iban \
         BIC/SWIFT: #method.bic_swift
       ],)

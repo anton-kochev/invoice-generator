@@ -100,7 +100,7 @@ pub fn generate_pdf(
 mod tests {
     use super::*;
     use crate::config::types::*;
-    use crate::config::validator::ValidatedBranding;
+    use crate::config::validator::{ValidatedBranding, ValidatedPaymentMethod};
     use crate::invoice::types::*;
     use time::{Date, Month};
 
@@ -147,11 +147,14 @@ mod tests {
             },
             crate::domain::NonEmpty::try_from_vec(vec![recipient]).unwrap(),
             0,
-            crate::domain::NonEmpty::try_from_vec(vec![PaymentMethod {
-                label: "Primary Bank Account".into(),
-                iban: crate::domain::Iban::try_new("DE89 3704 0044 0532 0130 00").unwrap(),
-                bic_swift: "COBADEFFXXX".into(),
-            }])
+            crate::domain::NonEmpty::try_from_vec(vec![
+                ValidatedPaymentMethod::from_validated_parts(
+                    crate::domain::PaymentMethodKey::try_new("primary").unwrap(),
+                    Some("Primary Bank Account".into()),
+                    crate::domain::Iban::try_new("DE89 3704 0044 0532 0130 00").unwrap(),
+                    "COBADEFFXXX".into(),
+                ),
+            ])
             .unwrap(),
             crate::domain::NonEmpty::try_from_vec(vec![Preset {
                 key: crate::domain::PresetKey::try_new("dev").unwrap(),
@@ -420,11 +423,14 @@ mod tests {
             },
             crate::domain::NonEmpty::try_from_vec(vec![recipient]).unwrap(),
             0,
-            crate::domain::NonEmpty::try_from_vec(vec![PaymentMethod {
-                label: "Primary Bank Account".into(),
-                iban: crate::domain::Iban::try_new("DE89 3704 0044 0532 0130 00").unwrap(),
-                bic_swift: "COBADEFFXXX".into(),
-            }])
+            crate::domain::NonEmpty::try_from_vec(vec![
+                ValidatedPaymentMethod::from_validated_parts(
+                    crate::domain::PaymentMethodKey::try_new("primary").unwrap(),
+                    Some("Primary Bank Account".into()),
+                    crate::domain::Iban::try_new("DE89 3704 0044 0532 0130 00").unwrap(),
+                    "COBADEFFXXX".into(),
+                ),
+            ])
             .unwrap(),
             crate::domain::NonEmpty::try_from_vec(vec![Preset {
                 key: crate::domain::PresetKey::try_new("dev").unwrap(),
@@ -649,6 +655,74 @@ mod tests {
             assert!(
                 result.is_ok(),
                 "Template {key} should succeed with empty footer"
+            );
+        }
+    }
+
+    /// Build a [`ValidatedConfig`] whose payment method has `label: None`.
+    /// Used to verify the conditional `#if "label" in method` branch in every
+    /// template renders correctly when the label is absent.
+    fn make_config_payment_no_label() -> ValidatedConfig {
+        let recipient = ValidatedRecipient::from_validated_parts(
+            crate::domain::RecipientKey::try_new("acme-corp").unwrap(),
+            "Acme Corp".into(),
+            vec!["456 Oak Ave".into(), "Berlin, Germany".into()],
+            None,
+            None,
+        );
+        ValidatedConfig::from_validated_parts(
+            Sender {
+                name: "Jane Doe".into(),
+                address: vec!["123 Main St".into(), "Vienna, Austria".into()],
+                email: "jane@example.com".into(),
+            },
+            crate::domain::NonEmpty::try_from_vec(vec![recipient]).unwrap(),
+            0,
+            crate::domain::NonEmpty::try_from_vec(vec![
+                ValidatedPaymentMethod::from_validated_parts(
+                    crate::domain::PaymentMethodKey::try_new("mono-eur-sepa").unwrap(),
+                    None, // ← absent label: this is the bug-fix scenario
+                    crate::domain::Iban::try_new("DE89 3704 0044 0532 0130 00").unwrap(),
+                    "COBADEFFXXX".into(),
+                ),
+            ])
+            .unwrap(),
+            crate::domain::NonEmpty::try_from_vec(vec![Preset {
+                key: crate::domain::PresetKey::try_new("dev").unwrap(),
+                description: "Software development".into(),
+                default_rate: 800.0,
+                currency: None,
+                tax_rate: None,
+            }])
+            .unwrap(),
+            Defaults::default(),
+            ValidatedBranding::default(),
+            TemplateKey::Leda,
+            crate::locale::Locale::EnUs,
+        )
+    }
+
+    #[test]
+    fn test_generate_pdf_all_templates_render_without_label() {
+        // Arrange — load-bearing smoke test for the bug fix: every template
+        // must compile when `label` is absent from the payment dict.
+        let summary = make_summary();
+        let config = make_config_payment_no_label();
+
+        // Act & Assert
+        for key in TemplateKey::ALL {
+            let result = generate_pdf(
+                &summary,
+                &config,
+                config.default_recipient(),
+                Path::new("."),
+                key,
+                crate::locale::Locale::EnUs,
+            );
+            assert!(
+                result.is_ok(),
+                "Template {key} should compile when payment method has no label, got: {:?}",
+                result.err()
             );
         }
     }

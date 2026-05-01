@@ -43,6 +43,15 @@ pub enum ConfigError {
     #[error("duplicate recipient key: \"{0}\"")]
     DuplicateRecipientKey(String),
 
+    /// A payment method is invalid: missing both `key` and `label`, or its
+    /// `label` slugifies to nothing, or some other key-derivation failure.
+    #[error("invalid payment method: {0}")]
+    InvalidPaymentMethod(String),
+
+    /// Two payment methods share the same effective key (after derivation).
+    #[error("duplicate payment method key: \"{key}\"")]
+    DuplicatePaymentKey { key: String },
+
     /// Cannot delete the last remaining recipient.
     #[error("cannot delete \u{2014} at least one recipient must exist.")]
     LastRecipient,

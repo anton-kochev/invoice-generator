@@ -30,7 +30,8 @@ pub fn synthetic_recipient() -> Recipient {
 
 pub fn synthetic_payment() -> Vec<PaymentMethod> {
     vec![PaymentMethod {
-        label: "SEPA Transfer".into(),
+        key: Some(crate::domain::PaymentMethodKey::try_new("sepa-transfer").unwrap()),
+        label: Some("SEPA Transfer".into()),
         iban: crate::domain::Iban::try_new("DE89370400440532013000")
             .expect("synthetic IBAN must be valid"),
         bic_swift: "COBADEFFXXX".into(),
@@ -229,7 +230,8 @@ pub fn full_setup_responses() -> Vec<MockResponse> {
         MockResponse::OptionalText(None),
         // Payment (1 method)
         MockResponse::U32(1),
-        MockResponse::Text("SEPA Transfer".into()),
+        MockResponse::Text("sepa-transfer".into()),
+        MockResponse::OptionalText(Some("SEPA Transfer".into())),
         MockResponse::Text("DE89370400440532013000".into()),
         MockResponse::Text("COBADEFFXXX".into()),
         // Presets (1 preset, decline more)
@@ -257,7 +259,8 @@ pub fn resume_from_recipient_responses() -> Vec<MockResponse> {
         MockResponse::OptionalText(None),
         // Payment
         MockResponse::U32(1),
-        MockResponse::Text("SEPA".into()),
+        MockResponse::Text("sepa".into()),
+        MockResponse::OptionalText(Some("SEPA".into())),
         MockResponse::Text("DE89370400440532013000".into()),
         MockResponse::Text("BIC".into()),
         // Presets

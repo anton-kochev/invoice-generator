@@ -175,7 +175,7 @@
 #set text(size: 9pt, fill: rgb("#555555"))
 #for method in data.payment {
   block(below: 6pt)[
-    *#method.label* · IBAN #method.iban · BIC #method.bic_swift
+    #if "label" in method [*#method.label* · ]IBAN #method.iban · BIC #method.bic_swift
   ]
 }
 

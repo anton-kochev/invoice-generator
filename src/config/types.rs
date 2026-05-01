@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-use crate::domain::{Currency, HexColor, Iban, PresetKey, RecipientKey};
+use crate::domain::{Currency, HexColor, Iban, PaymentMethodKey, PresetKey, RecipientKey};
 use crate::invoice::InvoiceError;
 use crate::locale::Locale;
 
@@ -142,9 +142,21 @@ pub struct Recipient {
 }
 
 /// A payment method shown on the invoice.
+///
+/// Both `key` and `label` are `Option` at the raw-deserialize level so that v1
+/// configs (label-only) and v2 configs (key + optional label) both parse
+/// successfully. The validator enforces the "at least one of key/label" rule
+/// and auto-derives `key` from `label` when missing.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PaymentMethod {
-    pub label: String,
+    /// Validated slug. Optional in raw config (v1 configs lack it),
+    /// auto-derived from `label` during validation when missing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<PaymentMethodKey>,
+    /// Display label rendered on the invoice. Optional — when absent, the
+    /// payment block on the PDF shows only IBAN/BIC with no header.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
     /// Validated IBAN (mod-97 checksum verified at deserialize-time).
     pub iban: Iban,
     #[serde(alias = "bic")]
@@ -839,5 +851,145 @@ mod tests {
         assert!(!yaml.contains("accent_color"));
         assert!(!yaml.contains("font"));
         assert!(!yaml.contains("footer_text"));
+    }
+
+    // ── PaymentMethod: key/label split ──
+
+    #[test]
+    fn v1_payment_yaml_with_label_only_deserializes_with_key_none() {
+        // Arrange — legacy v1 config: label only, no key.
+        let yaml = "label: SEPA Transfer\niban: DE89370400440532013000\nbic_swift: COBADEFFXXX\n";
+
+        // Act
+        let p: PaymentMethod = serde_yaml::from_str(yaml).unwrap();
+
+        // Assert
+        assert!(p.key.is_none());
+        assert_eq!(p.label.as_deref(), Some("SEPA Transfer"));
+    }
+
+    #[test]
+    fn v2_payment_yaml_with_key_and_label_deserializes() {
+        // Arrange
+        let yaml = "key: mono-eur-sepa\nlabel: SEPA Transfer\niban: DE89370400440532013000\nbic_swift: COBADEFFXXX\n";
+
+        // Act
+        let p: PaymentMethod = serde_yaml::from_str(yaml).unwrap();
+
+        // Assert
+        assert_eq!(
+            p.key,
+            Some(PaymentMethodKey::try_new("mono-eur-sepa").unwrap())
+        );
+        assert_eq!(p.label.as_deref(), Some("SEPA Transfer"));
+    }
+
+    #[test]
+    fn v2_payment_yaml_with_key_only_deserializes() {
+        // Arrange — anton's migrated config shape: key only, no label.
+        let yaml = "key: mono-eur-sepa\niban: DE89370400440532013000\nbic_swift: COBADEFFXXX\n";
+
+        // Act
+        let p: PaymentMethod = serde_yaml::from_str(yaml).unwrap();
+
+        // Assert
+        assert_eq!(
+            p.key,
+            Some(PaymentMethodKey::try_new("mono-eur-sepa").unwrap())
+        );
+        assert!(p.label.is_none());
+    }
+
+    #[test]
+    fn payment_yaml_with_neither_key_nor_label_deserializes_at_type_level() {
+        // Arrange — both key and label absent. The type-level deserialization
+        // accepts this; the validator is responsible for rejecting it.
+        let yaml = "iban: DE89370400440532013000\nbic_swift: COBADEFFXXX\n";
+
+        // Act
+        let p: PaymentMethod = serde_yaml::from_str(yaml).unwrap();
+
+        // Assert
+        assert!(p.key.is_none());
+        assert!(p.label.is_none());
+    }
+
+    #[test]
+    fn payment_method_label_none_omitted_from_yaml() {
+        // Arrange
+        let p = PaymentMethod {
+            key: Some(PaymentMethodKey::try_new("mono-eur-sepa").unwrap()),
+            label: None,
+            iban: Iban::try_new("DE89370400440532013000").unwrap(),
+            bic_swift: "COBADEFFXXX".into(),
+        };
+
+        // Act
+        let yaml = serde_yaml::to_string(&p).unwrap();
+        let value: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap();
+        let map = value
+            .as_mapping()
+            .expect("payment method serializes as map");
+
+        // Assert
+        assert!(
+            !map.contains_key(serde_yaml::Value::String("label".into())),
+            "Expected `label` key to be absent, got YAML: {yaml}"
+        );
+    }
+
+    #[test]
+    fn payment_method_key_none_omitted_from_yaml() {
+        // Arrange — legacy shape: label-only, no key.
+        let p = PaymentMethod {
+            key: None,
+            label: Some("SEPA Transfer".into()),
+            iban: Iban::try_new("DE89370400440532013000").unwrap(),
+            bic_swift: "COBADEFFXXX".into(),
+        };
+
+        // Act
+        let yaml = serde_yaml::to_string(&p).unwrap();
+        let value: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap();
+        let map = value
+            .as_mapping()
+            .expect("payment method serializes as map");
+
+        // Assert
+        assert!(
+            !map.contains_key(serde_yaml::Value::String("key".into())),
+            "Expected `key` key to be absent, got YAML: {yaml}"
+        );
+    }
+
+    #[test]
+    fn payment_method_bic_alias_still_works() {
+        // Arrange — historical regression guard: `bic:` is accepted as alias
+        // for `bic_swift:`.
+        let yaml = "label: SEPA\niban: DE89370400440532013000\nbic: COBADEFFXXX\n";
+
+        // Act
+        let p: PaymentMethod = serde_yaml::from_str(yaml).unwrap();
+
+        // Assert
+        assert_eq!(p.bic_swift, "COBADEFFXXX");
+    }
+
+    #[test]
+    fn payment_method_round_trip_with_key_and_label() {
+        // Arrange
+        let p = PaymentMethod {
+            key: Some(PaymentMethodKey::try_new("mono-eur-sepa").unwrap()),
+            label: Some("SEPA Transfer".into()),
+            iban: Iban::try_new("DE89370400440532013000").unwrap(),
+            bic_swift: "COBADEFFXXX".into(),
+        };
+
+        // Act
+        let yaml = serde_yaml::to_string(&p).unwrap();
+        let loaded: PaymentMethod = serde_yaml::from_str(&yaml).unwrap();
+
+        // Assert
+        assert_eq!(loaded, p);
     }
 }

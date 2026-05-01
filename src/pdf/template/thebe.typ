@@ -132,7 +132,9 @@
       #set text(size: 8pt)
       #for method in data.payment {
         block(below: 5pt)[
-          *#method.label* \
+          #if "label" in method [
+            *#method.label* \
+          ]
           #text(font: ("Courier New", "Courier", "monospace"), size: 8pt)[#method.iban] \
           #text(size: 7pt, fill: muted)[BIC #method.bic_swift]
         ]
