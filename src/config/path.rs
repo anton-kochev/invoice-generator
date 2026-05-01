@@ -16,8 +16,8 @@ use std::path::{Path, PathBuf};
 
 use etcetera::{AppStrategy, AppStrategyArgs, choose_app_strategy};
 
+use super::error::ConfigError;
 use crate::config::loader::CONFIG_FILENAME;
-use crate::error::AppError;
 
 /// Environment variable consulted when no `--config` flag is supplied.
 const ENV_VAR: &str = "INVOICE_GENERATOR_CONFIG";
@@ -51,7 +51,7 @@ impl EnvReader for RealEnv {
 pub fn resolve_config_path(
     flag: Option<&Path>,
     env: &dyn EnvReader,
-) -> Result<PathBuf, AppError> {
+) -> Result<PathBuf, ConfigError> {
     if let Some(p) = flag {
         return Ok(p.to_path_buf());
     }
@@ -61,13 +61,13 @@ pub fn resolve_config_path(
     default_config_path()
 }
 
-fn default_config_path() -> Result<PathBuf, AppError> {
+fn default_config_path() -> Result<PathBuf, ConfigError> {
     let strategy = choose_app_strategy(AppStrategyArgs {
         top_level_domain: String::new(),
         author: String::new(),
         app_name: "invoice-generator".into(),
     })
-    .map_err(|e| AppError::ConfigPath(format!("strategy: {e}")))?;
+    .map_err(|e| ConfigError::Path(format!("strategy: {e}")))?;
     Ok(strategy.config_dir().join(CONFIG_FILENAME))
 }
 
@@ -75,18 +75,18 @@ fn default_config_path() -> Result<PathBuf, AppError> {
 ///
 /// Returns an error if `path` has no parent (e.g. a bare `config.yaml` with no
 /// directory component) or if directory creation fails.
-pub fn ensure_parent_dir(path: &Path) -> Result<(), AppError> {
+pub fn ensure_parent_dir(path: &Path) -> Result<(), ConfigError> {
     let parent = path
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .ok_or_else(|| {
-            AppError::ConfigPath(format!(
+            ConfigError::Path(format!(
                 "config path {} has no parent directory",
                 path.display()
             ))
         })?;
     std::fs::create_dir_all(parent)
-        .map_err(|e| AppError::ConfigPath(format!("create {}: {e}", parent.display())))
+        .map_err(|e| ConfigError::Path(format!("create {}: {e}", parent.display())))
 }
 
 #[cfg(test)]
@@ -226,7 +226,7 @@ mod tests {
         let result = ensure_parent_dir(&path);
 
         // Assert
-        assert!(matches!(result, Err(AppError::ConfigPath(_))));
+        assert!(matches!(result, Err(ConfigError::Path(_))));
     }
 
     #[test]
@@ -244,7 +244,7 @@ mod tests {
         let result = ensure_parent_dir(&target);
 
         // Assert
-        assert!(matches!(result, Err(AppError::ConfigPath(_))));
+        assert!(matches!(result, Err(ConfigError::Path(_))));
 
         // Restore permissions so TempDir cleanup works.
         std::fs::set_permissions(&readonly, std::fs::Permissions::from_mode(0o755)).unwrap();

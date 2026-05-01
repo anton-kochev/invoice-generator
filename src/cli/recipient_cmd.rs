@@ -1,6 +1,7 @@
 use std::io::Write;
 use std::path::Path;
 
+use crate::config::ConfigError;
 use crate::config::types::Recipient;
 use crate::config::validator::ValidatedConfig;
 use crate::domain::RecipientKey;
@@ -95,7 +96,9 @@ pub fn handle_recipient_list(
         &validated.recipients,
         validated.default_recipient_key.as_str(),
     );
-    writer.write_all(table.as_bytes())?;
+    writer
+        .write_all(table.as_bytes())
+        .map_err(crate::pdf::PdfError::Write)?;
     Ok(())
 }
 
@@ -111,7 +114,7 @@ pub fn handle_recipient_add(
     // Load config to check for duplicate keys
     let config = match load_config(config_path)? {
         LoadResult::Loaded(c) => *c,
-        LoadResult::NotFound => return Err(AppError::ConfigNotFound),
+        LoadResult::NotFound => return Err(ConfigError::NotFound.into()),
     };
 
     let existing_recipients = config.recipients.as_deref().unwrap_or_default();
@@ -158,7 +161,8 @@ pub fn handle_recipient_add(
         "✓ Recipient \"{}\" added to {}",
         key_for_msg.as_str(),
         config_path.display()
-    )?;
+    )
+    .map_err(crate::pdf::PdfError::Write)?;
     Ok(())
 }
 
@@ -175,7 +179,7 @@ pub fn handle_recipient_delete(
     // Load config to get recipient details for confirmation
     let config = match load_config(config_path)? {
         LoadResult::Loaded(c) => *c,
-        LoadResult::NotFound => return Err(AppError::ConfigNotFound),
+        LoadResult::NotFound => return Err(ConfigError::NotFound.into()),
     };
 
     let recipients = config.recipients.as_deref().unwrap_or_default();
@@ -184,7 +188,7 @@ pub fn handle_recipient_delete(
     let recipient = recipients
         .iter()
         .find(|r| r.key.as_ref().is_some_and(|k| k.as_str() == key))
-        .ok_or_else(|| AppError::RecipientNotFound {
+        .ok_or_else(|| ConfigError::RecipientNotFound {
             key: key.to_string(),
             available: recipients
                 .iter()
@@ -194,7 +198,7 @@ pub fn handle_recipient_delete(
 
     // Guard: cannot delete the last recipient
     if recipients.len() <= 1 {
-        return Err(AppError::LastRecipient);
+        return Err(ConfigError::LastRecipient.into());
     }
 
     let prompt = format!("Delete recipient \"{}\" ({})?", key, recipient.name);
@@ -215,7 +219,7 @@ pub fn handle_recipient_delete(
         // Reload to get remaining recipients
         let updated = match load_config(config_path)? {
             LoadResult::Loaded(c) => *c,
-            LoadResult::NotFound => return Err(AppError::ConfigNotFound),
+            LoadResult::NotFound => return Err(ConfigError::NotFound.into()),
         };
         let remaining = updated.recipients.as_deref().unwrap_or_default();
 
@@ -250,7 +254,8 @@ pub fn handle_recipient_delete(
         writer,
         "✓ Recipient \"{key}\" deleted from {}",
         config_path.display()
-    )?;
+    )
+    .map_err(crate::pdf::PdfError::Write)?;
     Ok(())
 }
 
@@ -514,7 +519,7 @@ mod tests {
         let result = handle_recipient_add(&prompter, &cfg_path(&dir), &mut buf);
 
         // Assert
-        assert!(matches!(result, Err(AppError::ConfigNotFound)));
+        assert!(matches!(result, Err(AppError::Config(ConfigError::NotFound))));
         prompter.assert_exhausted();
     }
 
@@ -581,7 +586,7 @@ mod tests {
         let result = handle_recipient_delete(&prompter, &cfg_path(&dir), "nope", &mut buf);
 
         // Assert
-        assert!(matches!(result, Err(AppError::RecipientNotFound { .. })));
+        assert!(matches!(result, Err(AppError::Config(ConfigError::RecipientNotFound { .. }))));
         prompter.assert_exhausted();
     }
 
@@ -597,7 +602,7 @@ mod tests {
         let result = handle_recipient_delete(&prompter, &cfg_path(&dir), "acme", &mut buf);
 
         // Assert
-        assert!(matches!(result, Err(AppError::LastRecipient)));
+        assert!(matches!(result, Err(AppError::Config(ConfigError::LastRecipient))));
         prompter.assert_exhausted();
     }
 
@@ -686,7 +691,7 @@ mod tests {
         let result = handle_recipient_delete(&prompter, &cfg_path(&dir), "acme", &mut buf);
 
         // Assert
-        assert!(matches!(result, Err(AppError::ConfigNotFound)));
+        assert!(matches!(result, Err(AppError::Config(ConfigError::NotFound))));
         prompter.assert_exhausted();
     }
 }

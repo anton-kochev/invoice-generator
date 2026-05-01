@@ -1,8 +1,7 @@
 use std::io::Write;
 use std::path::Path;
 
-use crate::error::AppError;
-
+use super::error::ConfigError;
 use super::types::{Config, Preset, Recipient};
 
 /// Serialize `config` to YAML and atomically write it to `path`.
@@ -17,7 +16,7 @@ use super::types::{Config, Preset, Recipient};
 /// If `path` has no parent component (e.g. a bare `config.yaml`), the temp
 /// file is created in the current working directory. This matches the
 /// behaviour of the original `std::fs::write` for relative paths.
-pub fn save_config(path: &Path, config: &Config) -> Result<(), AppError> {
+pub fn save_config(path: &Path, config: &Config) -> Result<(), ConfigError> {
     let yaml = serde_yaml::to_string(config)?;
 
     // Use the same directory as the target so the final rename stays on the
@@ -32,7 +31,7 @@ pub fn save_config(path: &Path, config: &Config) -> Result<(), AppError> {
     // Flush the kernel buffers before the rename so a crash post-rename
     // doesn't leave us with a renamed-but-empty file on some filesystems.
     tmp.as_file().sync_all()?;
-    tmp.persist(path).map_err(|e| AppError::from(e.error))?;
+    tmp.persist(path).map_err(|e| ConfigError::Io(e.error))?;
     Ok(())
 }
 
@@ -40,13 +39,13 @@ pub fn save_config(path: &Path, config: &Config) -> Result<(), AppError> {
 ///
 /// Returns the removed preset on success.
 /// Checks the last-preset guard BEFORE key lookup.
-pub fn remove_preset(path: &Path, key: &str) -> Result<Preset, AppError> {
+pub fn remove_preset(path: &Path, key: &str) -> Result<Preset, ConfigError> {
     use super::loader::{load_config, LoadResult};
 
     let config = match load_config(path)? {
         LoadResult::Loaded(config) => *config,
         LoadResult::NotFound => {
-            return Err(AppError::ConfigIo(std::io::Error::new(
+            return Err(ConfigError::Io(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 format!("config file not found at {}", path.display()),
             )));
@@ -57,13 +56,13 @@ pub fn remove_preset(path: &Path, key: &str) -> Result<Preset, AppError> {
     let mut presets = config.presets.unwrap_or_default();
 
     if presets.len() <= 1 {
-        return Err(AppError::LastPreset);
+        return Err(ConfigError::LastPreset);
     }
 
     let pos = presets
         .iter()
         .position(|p| p.key.as_str() == key)
-        .ok_or_else(|| AppError::PresetNotFound(key.to_string()))?;
+        .ok_or_else(|| ConfigError::PresetNotFound(key.to_string()))?;
 
     let removed = presets.remove(pos);
     config.presets = Some(presets);
@@ -76,13 +75,13 @@ pub fn remove_preset(path: &Path, key: &str) -> Result<Preset, AppError> {
 ///
 /// Loads the existing config, pushes the new preset, and saves it back.
 /// Returns an error if no config file exists yet.
-pub fn append_preset(path: &Path, preset: Preset) -> Result<(), AppError> {
+pub fn append_preset(path: &Path, preset: Preset) -> Result<(), ConfigError> {
     use super::loader::{load_config, LoadResult};
 
     let config = match load_config(path)? {
         LoadResult::Loaded(config) => *config,
         LoadResult::NotFound => {
-            return Err(AppError::ConfigIo(std::io::Error::new(
+            return Err(ConfigError::Io(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 format!("config file not found at {}", path.display()),
             )));
@@ -99,7 +98,7 @@ pub fn append_preset(path: &Path, preset: Preset) -> Result<(), AppError> {
 
 /// Migrate a v1 Config (single `recipient:`) to v2 (`recipients:` list).
 /// No-op if already v2. Consumes the `recipient` field via `.take()`.
-fn ensure_recipients_v2(config: &mut Config) -> Result<(), AppError> {
+fn ensure_recipients_v2(config: &mut Config) -> Result<(), ConfigError> {
     use crate::domain::RecipientKey;
 
     if config.recipients.is_some() {
@@ -109,7 +108,7 @@ fn ensure_recipients_v2(config: &mut Config) -> Result<(), AppError> {
         let key = match legacy.key.clone() {
             Some(k) => k,
             None => RecipientKey::from_name(&legacy.name)
-                .map_err(|e| AppError::InvalidDefaultRecipient(e.to_string()))?,
+                .map_err(|e| ConfigError::InvalidDefaultRecipient(e.to_string()))?,
         };
         legacy.key = Some(key.clone());
         config.recipients = Some(vec![legacy]);
@@ -123,13 +122,13 @@ fn ensure_recipients_v2(config: &mut Config) -> Result<(), AppError> {
 /// Append a recipient to the config file at `path`.
 ///
 /// If `set_default` is true, also sets `default_recipient` to the new recipient's key.
-pub fn append_recipient(path: &Path, recipient: Recipient, set_default: bool) -> Result<(), AppError> {
+pub fn append_recipient(path: &Path, recipient: Recipient, set_default: bool) -> Result<(), ConfigError> {
     use super::loader::{load_config, LoadResult};
 
     let config = match load_config(path)? {
         LoadResult::Loaded(config) => *config,
         LoadResult::NotFound => {
-            return Err(AppError::ConfigIo(std::io::Error::new(
+            return Err(ConfigError::Io(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 format!("config file not found at {}", path.display()),
             )));
@@ -154,13 +153,13 @@ pub fn append_recipient(path: &Path, recipient: Recipient, set_default: bool) ->
 ///
 /// Returns the removed recipient on success.
 /// If the removed recipient was the default, clears `default_recipient` (caller handles reassignment).
-pub fn remove_recipient(path: &Path, key: &str) -> Result<Recipient, AppError> {
+pub fn remove_recipient(path: &Path, key: &str) -> Result<Recipient, ConfigError> {
     use super::loader::{load_config, LoadResult};
 
     let config = match load_config(path)? {
         LoadResult::Loaded(config) => *config,
         LoadResult::NotFound => {
-            return Err(AppError::ConfigIo(std::io::Error::new(
+            return Err(ConfigError::Io(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 format!("config file not found at {}", path.display()),
             )));
@@ -172,13 +171,13 @@ pub fn remove_recipient(path: &Path, key: &str) -> Result<Recipient, AppError> {
     let mut recipients = config.recipients.take().unwrap_or_default();
 
     if recipients.len() <= 1 {
-        return Err(AppError::LastRecipient);
+        return Err(ConfigError::LastRecipient);
     }
 
     let pos = recipients
         .iter()
         .position(|r| r.key.as_ref().is_some_and(|k| k.as_str() == key))
-        .ok_or_else(|| AppError::RecipientNotFound {
+        .ok_or_else(|| ConfigError::RecipientNotFound {
             key: key.to_string(),
             available: recipients
                 .iter()
@@ -205,13 +204,13 @@ pub fn remove_recipient(path: &Path, key: &str) -> Result<Recipient, AppError> {
 /// Set the default recipient key in the config file at `path`.
 ///
 /// Verifies the key exists in the recipients list before updating.
-pub fn set_default_recipient(path: &Path, key: &str) -> Result<(), AppError> {
+pub fn set_default_recipient(path: &Path, key: &str) -> Result<(), ConfigError> {
     use super::loader::{load_config, LoadResult};
 
     let config = match load_config(path)? {
         LoadResult::Loaded(config) => *config,
         LoadResult::NotFound => {
-            return Err(AppError::ConfigIo(std::io::Error::new(
+            return Err(ConfigError::Io(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 format!("config file not found at {}", path.display()),
             )));
@@ -226,7 +225,7 @@ pub fn set_default_recipient(path: &Path, key: &str) -> Result<(), AppError> {
         .iter()
         .any(|r| r.key.as_ref().is_some_and(|k| k.as_str() == key))
     {
-        return Err(AppError::RecipientNotFound {
+        return Err(ConfigError::RecipientNotFound {
             key: key.to_string(),
             available: recipients
                 .iter()
@@ -237,7 +236,7 @@ pub fn set_default_recipient(path: &Path, key: &str) -> Result<(), AppError> {
 
     config.default_recipient = Some(
         crate::domain::RecipientKey::try_new(key)
-            .map_err(|e| AppError::InvalidDefaultRecipient(e.to_string()))?,
+            .map_err(|e| ConfigError::InvalidDefaultRecipient(e.to_string()))?,
     );
     save_config(path, &config)
 }
@@ -316,7 +315,7 @@ mod tests {
         }
     }
 
-    fn unwrap_loaded(result: Result<LoadResult, AppError>) -> Config {
+    fn unwrap_loaded(result: Result<LoadResult, ConfigError>) -> Config {
         match result.unwrap() {
             LoadResult::Loaded(c) => *c,
             LoadResult::NotFound => panic!("Expected Loaded, got NotFound"),
@@ -443,7 +442,7 @@ mod tests {
         let result = save_config(&cfg_path(&dir), &Config::default());
 
         // Assert
-        assert!(matches!(result, Err(AppError::ConfigIo(_))));
+        assert!(matches!(result, Err(ConfigError::Io(_))));
 
         // Restore permissions so TempDir cleanup works.
         std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
@@ -558,7 +557,7 @@ mod tests {
 
         // Assert
         assert!(result.is_err());
-        assert!(matches!(result, Err(AppError::ConfigIo(_))));
+        assert!(matches!(result, Err(ConfigError::Io(_))));
     }
 
     // ── remove_preset tests ──
@@ -610,7 +609,7 @@ mod tests {
         let result = remove_preset(&cfg_path(&dir), "nope");
 
         // Assert
-        assert!(matches!(result, Err(AppError::PresetNotFound(_))));
+        assert!(matches!(result, Err(ConfigError::PresetNotFound(_))));
     }
 
     #[test]
@@ -623,7 +622,7 @@ mod tests {
         let result = remove_preset(&cfg_path(&dir), "dev");
 
         // Assert
-        assert!(matches!(result, Err(AppError::LastPreset)));
+        assert!(matches!(result, Err(ConfigError::LastPreset)));
     }
 
     #[test]
@@ -662,7 +661,7 @@ mod tests {
         let result = remove_preset(&cfg_path(&dir), "dev");
 
         // Assert
-        assert!(matches!(result, Err(AppError::ConfigIo(_))));
+        assert!(matches!(result, Err(ConfigError::Io(_))));
     }
 
     #[test]
@@ -855,7 +854,7 @@ mod tests {
         let result = remove_preset(&cfg_path(&dir), "Dev");
 
         // Assert
-        assert!(matches!(result, Err(AppError::PresetNotFound(_))));
+        assert!(matches!(result, Err(ConfigError::PresetNotFound(_))));
     }
 
     // ── append_recipient tests ──
@@ -993,7 +992,7 @@ mod tests {
         let result = append_recipient(&cfg_path(&dir), recipient, true);
 
         // Assert
-        assert!(matches!(result, Err(AppError::ConfigIo(_))));
+        assert!(matches!(result, Err(ConfigError::Io(_))));
     }
 
     // ── remove_recipient tests ──
@@ -1032,7 +1031,7 @@ mod tests {
         let result = remove_recipient(&cfg_path(&dir), "nope");
 
         // Assert
-        assert!(matches!(result, Err(AppError::RecipientNotFound { .. })));
+        assert!(matches!(result, Err(ConfigError::RecipientNotFound { .. })));
     }
 
     #[test]
@@ -1045,7 +1044,7 @@ mod tests {
         let result = remove_recipient(&cfg_path(&dir), "acme");
 
         // Assert
-        assert!(matches!(result, Err(AppError::LastRecipient)));
+        assert!(matches!(result, Err(ConfigError::LastRecipient)));
     }
 
     #[test]
@@ -1075,7 +1074,7 @@ mod tests {
         let result = remove_recipient(&cfg_path(&dir), "acme");
 
         // Assert
-        assert!(matches!(result, Err(AppError::ConfigIo(_))));
+        assert!(matches!(result, Err(ConfigError::Io(_))));
     }
 
     // ── set_default_recipient tests ──
@@ -1224,7 +1223,7 @@ mod tests {
         let result = set_default_recipient(&cfg_path(&dir), "nope");
 
         // Assert
-        assert!(matches!(result, Err(AppError::RecipientNotFound { .. })));
+        assert!(matches!(result, Err(ConfigError::RecipientNotFound { .. })));
     }
 
     // ── Atomic-write tests (Option A) ──

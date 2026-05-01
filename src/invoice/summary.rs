@@ -1,9 +1,9 @@
 use time::{Date, Duration, Month};
 
 use crate::config::types::Defaults;
-use crate::error::AppError;
 
 use super::currency::validate_uniform_currency;
+use super::error::InvoiceError;
 use super::types::{InvoicePeriod, InvoiceSummary, LineItem, round_half_up_2dp};
 
 /// Format invoice number as "INV-YYYY-MM".
@@ -24,7 +24,7 @@ fn next_month(period: &InvoicePeriod) -> (i32, Month) {
 
 /// Compute the invoice date: `invoice_date_day` of the month after the billed period.
 /// Clamps the day if it exceeds the month's length (e.g., day=31 in a 30-day month).
-fn compute_invoice_date(period: &InvoicePeriod, invoice_date_day: u32) -> Result<Date, AppError> {
+fn compute_invoice_date(period: &InvoicePeriod, invoice_date_day: u32) -> Result<Date, InvoiceError> {
     let (year, month) = next_month(period);
     let day = invoice_date_day as u8;
     match Date::from_calendar_date(year, month, day) {
@@ -36,7 +36,7 @@ fn compute_invoice_date(period: &InvoicePeriod, invoice_date_day: u32) -> Result
                     return Ok(date);
                 }
             }
-            Err(AppError::InvalidDate(format!(
+            Err(InvoiceError::InvalidDate(format!(
                 "Cannot construct date for {year}-{month:?}"
             )))
         }
@@ -48,7 +48,7 @@ pub fn build_summary(
     period: InvoicePeriod,
     line_items: Vec<LineItem>,
     defaults: &Defaults,
-) -> Result<InvoiceSummary, AppError> {
+) -> Result<InvoiceSummary, InvoiceError> {
     let invoice_number = format_invoice_number(&period);
     let invoice_date = compute_invoice_date(&period, defaults.invoice_date_day)?;
     let due_date = invoice_date + Duration::days(defaults.payment_terms_days as i64);
@@ -405,7 +405,7 @@ mod tests {
         let result = build_summary(period, items, &make_defaults());
 
         // Assert
-        assert!(matches!(result, Err(crate::error::AppError::MixedCurrency { .. })));
+        assert!(matches!(result, Err(InvoiceError::MixedCurrency { .. })));
     }
 
     // --- subtotal / tax_total tests ---

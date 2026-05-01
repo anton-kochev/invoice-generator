@@ -2,13 +2,15 @@ use std::io::Write;
 use std::path::Path;
 use std::str::FromStr;
 
+use crate::config::ConfigError;
 use crate::config::types::{Preset, Recipient, TemplateKey};
 use crate::config::validator::ValidatedConfig;
 use crate::domain::Currency;
 use crate::error::AppError;
-use crate::locale::Locale;
+use crate::invoice::InvoiceError;
 use crate::invoice::summary::build_summary;
 use crate::invoice::types::{InvoicePeriod, LineItem};
+use crate::locale::Locale;
 use crate::pdf::generate_pdf;
 
 use crate::invoice::currency::effective_currency;
@@ -27,41 +29,48 @@ struct ItemSpec {
 }
 
 /// Validate month/year into an `InvoicePeriod`.
-fn validate_period(month: u32, year: u32) -> Result<InvoicePeriod, AppError> {
+fn validate_period(month: u32, year: u32) -> Result<InvoicePeriod, InvoiceError> {
     InvoicePeriod::new(month, year).ok_or_else(|| {
-        AppError::InvalidDate(format!("month={month}, year={year}"))
+        InvoiceError::InvalidDate(format!("month={month}, year={year}"))
     })
 }
 
 /// Validate that days is positive and finite.
-fn validate_days(days: f64) -> Result<(), AppError> {
+fn validate_days(days: f64) -> Result<(), InvoiceError> {
     if !days.is_finite() || days <= 0.0 {
-        return Err(AppError::InvalidDays(format!("{days}")));
+        return Err(InvoiceError::InvalidDays(format!("{days}")));
     }
     Ok(())
 }
 
 /// Find a preset by key, returning `PresetNotFound` if absent.
-fn find_preset<'a>(key: &str, presets: &'a [Preset]) -> Result<&'a Preset, AppError> {
+fn find_preset<'a>(key: &str, presets: &'a [Preset]) -> Result<&'a Preset, ConfigError> {
     presets
         .iter()
         .find(|p| p.key.as_str() == key)
-        .ok_or_else(|| AppError::PresetNotFound(key.to_string()))
+        .ok_or_else(|| ConfigError::PresetNotFound(key.to_string()))
 }
 
 /// Parse the `--items` JSON string into validated `ItemSpec` entries.
 fn parse_items(json: &str) -> Result<Vec<ItemSpec>, AppError> {
+    use serde::de::Error as _;
+    // serde_json::Error → InvoiceError::ItemsParse via #[from]; then → AppError via #[from].
     let items: Vec<ItemSpec> =
-        serde_json::from_str(json).map_err(|e| AppError::ItemsParse(e.to_string()))?;
+        serde_json::from_str(json).map_err(InvoiceError::from)?;
     if items.is_empty() {
-        return Err(AppError::ItemsParse("items array must not be empty".into()));
+        // Build a synthetic serde_json::Error so the empty-array case keeps
+        // surfacing as `InvoiceError::ItemsParse` (matching pre-refactor tests).
+        return Err(InvoiceError::ItemsParse(serde_json::Error::custom(
+            "items array must not be empty",
+        ))
+        .into());
     }
     for item in &items {
         validate_days(item.days)?;
         if let Some(tr) = item.tax_rate
             && tr < 0.0
         {
-            return Err(AppError::InvalidTaxRate(format!("{tr}")));
+            return Err(InvoiceError::InvalidTaxRate(format!("{tr}")).into());
         }
     }
     Ok(items)
@@ -111,14 +120,14 @@ fn resolve_line_items(args: &GenerateArgs, presets: &[Preset], default_currency:
 fn resolve_recipient<'a>(
     client: Option<&str>,
     validated: &'a ValidatedConfig,
-) -> Result<&'a Recipient, AppError> {
+) -> Result<&'a Recipient, ConfigError> {
     match client {
         None => Ok(&validated.recipient),
         Some(key) => validated
             .recipients
             .iter()
             .find(|r| r.key.as_ref().is_some_and(|k| k.as_str() == key))
-            .ok_or_else(|| AppError::RecipientNotFound {
+            .ok_or_else(|| ConfigError::RecipientNotFound {
                 key: key.to_string(),
                 available: validated
                     .recipients
@@ -143,7 +152,7 @@ pub fn handle_generate(
     let validated = load_validated_config(config_path)?;
     let recipient = resolve_recipient(args.client.as_deref(), &validated)?;
     let template = match args.template.as_deref() {
-        Some(key) => TemplateKey::from_str(key).map_err(|_| AppError::InvalidTemplateKey {
+        Some(key) => TemplateKey::from_str(key).map_err(|_| InvoiceError::InvalidTemplateKey {
             key: key.to_string(),
             available: TemplateKey::ALL.iter().map(|t| t.to_string()).collect(),
         })?,
@@ -165,8 +174,9 @@ pub fn handle_generate(
     let config_dir = config_path.parent().unwrap_or_else(|| Path::new("."));
     let pdf_bytes = generate_pdf(&summary, &validated, recipient, config_dir, template, locale)?;
     let output_path = pdf_output_path(&validated.sender.name, &period, output_dir);
-    std::fs::write(&output_path, &pdf_bytes)?;
-    writeln!(writer, "PDF saved: {}", output_path.display())?;
+    std::fs::write(&output_path, &pdf_bytes).map_err(crate::pdf::PdfError::Write)?;
+    writeln!(writer, "PDF saved: {}", output_path.display())
+        .map_err(crate::pdf::PdfError::Write)?;
     Ok(())
 }
 
@@ -233,7 +243,7 @@ mod tests {
         let result = parse_items(json);
 
         // Assert
-        assert!(matches!(result, Err(AppError::ItemsParse(_))));
+        assert!(matches!(result, Err(AppError::Invoice(InvoiceError::ItemsParse(_)))));
     }
 
     #[test]
@@ -245,7 +255,7 @@ mod tests {
         let result = parse_items(json);
 
         // Assert
-        assert!(matches!(result, Err(AppError::ItemsParse(_))));
+        assert!(matches!(result, Err(AppError::Invoice(InvoiceError::ItemsParse(_)))));
     }
 
     #[test]
@@ -282,7 +292,7 @@ mod tests {
         let result = parse_items(json);
 
         // Assert
-        assert!(matches!(result, Err(AppError::ItemsParse(_))));
+        assert!(matches!(result, Err(AppError::Invoice(InvoiceError::ItemsParse(_)))));
     }
 
     #[test]
@@ -294,7 +304,7 @@ mod tests {
         let result = parse_items(json);
 
         // Assert
-        assert!(matches!(result, Err(AppError::InvalidDays(_))));
+        assert!(matches!(result, Err(AppError::Invoice(InvoiceError::InvalidDays(_)))));
     }
 
     // ── Phase 3: Validation tests (pure) ──
@@ -308,7 +318,7 @@ mod tests {
         let result = validate_days(days);
 
         // Assert
-        assert!(matches!(result, Err(AppError::InvalidDays(_))));
+        assert!(matches!(result, Err(InvoiceError::InvalidDays(_))));
     }
 
     #[test]
@@ -333,7 +343,7 @@ mod tests {
         let result = validate_period(month, year);
 
         // Assert
-        assert!(matches!(result, Err(AppError::InvalidDate(_))));
+        assert!(matches!(result, Err(InvoiceError::InvalidDate(_))));
     }
 
     #[test]
@@ -345,7 +355,7 @@ mod tests {
         let result = find_preset("nonexistent", &presets);
 
         // Assert
-        assert!(matches!(result, Err(AppError::PresetNotFound(_))));
+        assert!(matches!(result, Err(ConfigError::PresetNotFound(_))));
     }
 
     #[test]
@@ -374,7 +384,7 @@ mod tests {
         let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
-        assert!(matches!(result, Err(AppError::ConfigNotFound)));
+        assert!(matches!(result, Err(AppError::Config(ConfigError::NotFound))));
     }
 
     #[test]
@@ -389,7 +399,7 @@ mod tests {
         let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
-        assert!(matches!(result, Err(AppError::PresetNotFound(_))));
+        assert!(matches!(result, Err(AppError::Config(ConfigError::PresetNotFound(_)))));
     }
 
     #[test]
@@ -464,7 +474,7 @@ mod tests {
 
         // Assert
         match result {
-            Err(AppError::PresetNotFound(key)) => assert_eq!(key, "bogus"),
+            Err(AppError::Config(ConfigError::PresetNotFound(key))) => assert_eq!(key, "bogus"),
             other => panic!("Expected PresetNotFound, got {other:?}"),
         }
     }
@@ -550,7 +560,7 @@ mod tests {
         let result = resolve_recipient(Some("nonexistent"), &validated);
 
         // Assert
-        assert!(matches!(result, Err(AppError::RecipientNotFound { .. })));
+        assert!(matches!(result, Err(ConfigError::RecipientNotFound { .. })));
     }
 
     #[test]
@@ -565,7 +575,7 @@ mod tests {
 
         // Assert
         match result {
-            Err(AppError::RecipientNotFound { key, available }) => {
+            Err(ConfigError::RecipientNotFound { key, available }) => {
                 assert_eq!(key, "nope");
                 assert!(available.contains(&"acme".to_string()));
                 assert!(available.contains(&"globex".to_string()));
@@ -607,7 +617,7 @@ mod tests {
         let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
-        assert!(matches!(result, Err(AppError::RecipientNotFound { .. })));
+        assert!(matches!(result, Err(AppError::Config(ConfigError::RecipientNotFound { .. }))));
     }
 
     // ── Story 11.1: v1 backwards compatibility verification ──
@@ -680,7 +690,7 @@ mod tests {
         let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
-        assert!(matches!(result, Err(AppError::MixedCurrency { .. })));
+        assert!(matches!(result, Err(AppError::Invoice(InvoiceError::MixedCurrency { .. }))));
     }
 
     fn config_with_tax_presets(entries: &[(&str, f64, Option<f64>)]) -> crate::config::types::Config {
@@ -737,7 +747,7 @@ mod tests {
         let result = parse_items(json);
 
         // Assert
-        assert!(matches!(result, Err(AppError::InvalidTaxRate(_))));
+        assert!(matches!(result, Err(AppError::Invoice(InvoiceError::InvalidTaxRate(_)))));
     }
 
     #[test]
@@ -803,7 +813,7 @@ mod tests {
         let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
-        assert!(matches!(result, Err(AppError::InvalidTaxRate(_))));
+        assert!(matches!(result, Err(AppError::Invoice(InvoiceError::InvalidTaxRate(_)))));
     }
 
     #[test]
@@ -887,7 +897,7 @@ mod tests {
         let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
 
         // Assert
-        assert!(matches!(result, Err(AppError::InvalidTemplateKey { .. })));
+        assert!(matches!(result, Err(AppError::Invoice(InvoiceError::InvalidTemplateKey { .. }))));
     }
 
     // ── Story 13.3: --locale flag handler tests ──
@@ -980,7 +990,7 @@ mod tests {
 
         // Assert
         match result {
-            Err(AppError::InvalidTemplateKey { key, available }) => {
+            Err(AppError::Invoice(InvoiceError::InvalidTemplateKey { key, available })) => {
                 assert_eq!(key, "xyz");
                 assert!(available.contains(&"leda".to_string()), "Expected 'leda' in available: {available:?}");
             }

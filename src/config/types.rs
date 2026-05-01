@@ -4,7 +4,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{Currency, HexColor, Iban, PresetKey, RecipientKey};
-use crate::error::AppError;
+use crate::invoice::InvoiceError;
 use crate::locale::Locale;
 
 /// Available invoice template styles.
@@ -55,7 +55,7 @@ impl fmt::Display for TemplateKey {
 }
 
 impl FromStr for TemplateKey {
-    type Err = AppError;
+    type Err = InvoiceError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
@@ -64,7 +64,7 @@ impl FromStr for TemplateKey {
             "thebe" => Ok(Self::Thebe),
             "amalthea" => Ok(Self::Amalthea),
             "metis" => Ok(Self::Metis),
-            _ => Err(AppError::InvalidTemplateKey {
+            _ => Err(InvoiceError::InvalidTemplateKey {
                 key: s.to_string(),
                 available: Self::ALL.iter().map(|k| k.to_string()).collect(),
             }),

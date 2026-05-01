@@ -1,8 +1,8 @@
 use std::fmt;
 
+use super::error::ConfigError;
 use super::types::*;
 use crate::domain::{HexColor, RecipientKey};
-use crate::error::AppError;
 use crate::locale::Locale;
 
 const DEFAULT_ACCENT_COLOR: &str = "#2c3e50";
@@ -108,9 +108,9 @@ impl Config {
     /// all sections are filled in, or `Ok(ValidationOutcome::Incomplete)` listing
     /// which sections are missing.
     ///
-    /// Returns `Err(AppError)` for hard errors like duplicate keys or invalid
+    /// Returns `Err(ConfigError)` for hard errors like duplicate keys or invalid
     /// default recipient references.
-    pub fn validate(self) -> Result<ValidationOutcome, AppError> {
+    pub fn validate(self) -> Result<ValidationOutcome, ConfigError> {
         let mut missing = Vec::new();
 
         let sender = self.sender;
@@ -138,7 +138,7 @@ impl Config {
                         None => match RecipientKey::from_name(&r.name) {
                             Ok(k) => k,
                             Err(e) => {
-                                return Err(AppError::InvalidDefaultRecipient(e.to_string()));
+                                return Err(ConfigError::InvalidDefaultRecipient(e.to_string()));
                             }
                         },
                     };
@@ -156,7 +156,7 @@ impl Config {
             // Every recipient must have a key.
             for r in list {
                 if r.key.is_none() {
-                    return Err(AppError::InvalidDefaultRecipient(
+                    return Err(ConfigError::InvalidDefaultRecipient(
                         "recipient has missing key".into(),
                     ));
                 }
@@ -166,18 +166,18 @@ impl Config {
             for r in list {
                 let k = r.key.as_ref().unwrap();
                 if !seen.insert(k.clone()) {
-                    return Err(AppError::DuplicateRecipientKey(k.as_str().to_string()));
+                    return Err(ConfigError::DuplicateRecipientKey(k.as_str().to_string()));
                 }
             }
             // Validate default_recipient references a valid key
             match &default_key {
                 Some(dk) => {
                     if !list.iter().any(|r| r.key.as_ref() == Some(dk)) {
-                        return Err(AppError::InvalidDefaultRecipient(dk.as_str().to_string()));
+                        return Err(ConfigError::InvalidDefaultRecipient(dk.as_str().to_string()));
                     }
                 }
                 None => {
-                    return Err(AppError::MissingDefaultRecipient);
+                    return Err(ConfigError::MissingDefaultRecipient);
                 }
             }
         }
@@ -558,7 +558,7 @@ mod tests {
         let result = config.validate();
 
         // Assert
-        assert!(matches!(result, Err(AppError::InvalidDefaultRecipient(_))));
+        assert!(matches!(result, Err(ConfigError::InvalidDefaultRecipient(_))));
     }
 
     #[test]
@@ -579,7 +579,7 @@ mod tests {
         let result = config.validate();
 
         // Assert
-        assert!(matches!(result, Err(AppError::MissingDefaultRecipient)));
+        assert!(matches!(result, Err(ConfigError::MissingDefaultRecipient)));
     }
 
     #[test]
@@ -615,7 +615,7 @@ mod tests {
         let result = config.validate();
 
         // Assert
-        assert!(matches!(result, Err(AppError::DuplicateRecipientKey(_))));
+        assert!(matches!(result, Err(ConfigError::DuplicateRecipientKey(_))));
     }
 
     #[test]

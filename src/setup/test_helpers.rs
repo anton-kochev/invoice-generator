@@ -2,10 +2,10 @@ use std::path::PathBuf;
 
 use tempfile::TempDir;
 
+use crate::config::ConfigError;
 use crate::config::loader::LoadResult;
 use crate::config::types::*;
 use crate::config::writer::save_config;
-use crate::error::AppError;
 use super::mock_prompter::MockResponse;
 
 // ── Synthetic Data Factories ──
@@ -178,7 +178,7 @@ pub fn setup_dir(config: Option<&Config>) -> TempDir {
 }
 
 /// Extract Config from a LoadResult, panicking on NotFound.
-pub fn unwrap_loaded(result: Result<LoadResult, AppError>) -> Config {
+pub fn unwrap_loaded(result: Result<LoadResult, ConfigError>) -> Config {
     match result.unwrap() {
         LoadResult::Loaded(c) => *c,
         LoadResult::NotFound => panic!("Expected Loaded, got NotFound"),

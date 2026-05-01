@@ -19,7 +19,7 @@ fn main() {
             error::AppError::SetupCancelled => {
                 println!("Setup cancelled. Your progress has been saved.");
             }
-            error::AppError::ConfigParse(_) => {
+            error::AppError::Config(config::ConfigError::Parse(_)) => {
                 eprintln!("Error: {e}");
                 eprintln!("Fix the file or delete it to re-run setup.");
                 process::exit(1);
@@ -38,7 +38,9 @@ fn run(cli: Cli) -> Result<(), error::AppError> {
         &config::path::RealEnv,
     )?;
     config::path::ensure_parent_dir(&config_path)?;
-    let output_dir = std::env::current_dir().map_err(error::AppError::ConfigIo)?;
+    // The output directory is consumed by the PDF subsystem only, so a failure
+    // here is a PDF-write IO failure rather than a config-IO failure.
+    let output_dir = std::env::current_dir().map_err(pdf::PdfError::Write)?;
     let prompter = InquirePrompter::new();
 
     match cli.command {

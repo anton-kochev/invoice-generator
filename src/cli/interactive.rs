@@ -155,7 +155,7 @@ pub fn run_invoice_flow(
                 continue;
             }
 
-            std::fs::write(&output_path, &pdf_bytes)?;
+            std::fs::write(&output_path, &pdf_bytes).map_err(pdf::PdfError::Write)?;
             prompter.message(&format!("PDF saved: {}", output_path.display()));
             break;
         }

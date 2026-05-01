@@ -1,6 +1,7 @@
 use std::io::Write;
 use std::path::Path;
 
+use crate::config::ConfigError;
 use crate::config::loader::{load_config, LoadResult};
 use crate::config::types::Preset;
 use crate::config::validator::ValidatedConfig;
@@ -79,7 +80,9 @@ pub fn handle_preset_list(
     writer: &mut dyn Write,
 ) -> Result<(), AppError> {
     let table = format_preset_table(&validated.presets, validated.defaults.currency);
-    writer.write_all(table.as_bytes())?;
+    writer
+        .write_all(table.as_bytes())
+        .map_err(crate::pdf::PdfError::Write)?;
     Ok(())
 }
 
@@ -93,7 +96,7 @@ pub fn handle_preset_delete(
     // Load config to get preset details for confirmation
     let config = match load_config(config_path)? {
         LoadResult::Loaded(c) => *c,
-        LoadResult::NotFound => return Err(AppError::ConfigNotFound),
+        LoadResult::NotFound => return Err(ConfigError::NotFound.into()),
     };
 
     let presets = config.presets.as_deref().unwrap_or_default();
@@ -102,11 +105,11 @@ pub fn handle_preset_delete(
     let preset = presets
         .iter()
         .find(|p| p.key.as_str() == key)
-        .ok_or_else(|| AppError::PresetNotFound(key.to_string()))?;
+        .ok_or_else(|| ConfigError::PresetNotFound(key.to_string()))?;
 
     // Guard: cannot delete the last preset
     if presets.len() <= 1 {
-        return Err(AppError::LastPreset);
+        return Err(ConfigError::LastPreset.into());
     }
 
     let prompt = format!("Delete preset \"{}\" ({})?", preset.key, preset.description);
@@ -121,7 +124,8 @@ pub fn handle_preset_delete(
         "✓ Preset \"{}\" deleted from {}",
         key,
         config_path.display()
-    )?;
+    )
+    .map_err(crate::pdf::PdfError::Write)?;
     Ok(())
 }
 
@@ -244,6 +248,7 @@ mod tests {
 
     // ── Handler tests ──
 
+    use crate::config::ConfigError;
     use crate::config::loader::{load_config, LoadResult};
     use crate::config::validator::ValidationOutcome;
     use crate::error::AppError;
@@ -285,7 +290,7 @@ mod tests {
         let result = crate::cli::load_validated_config(&cfg_path(&dir));
 
         // Assert
-        assert!(matches!(result, Err(AppError::ConfigNotFound)));
+        assert!(matches!(result, Err(AppError::Config(ConfigError::NotFound))));
     }
 
     #[test]
@@ -347,7 +352,7 @@ mod tests {
         let result = handle_preset_delete(&prompter, &cfg_path(&dir), "nope", &mut buf);
 
         // Assert
-        assert!(matches!(result, Err(AppError::PresetNotFound(_))));
+        assert!(matches!(result, Err(AppError::Config(ConfigError::PresetNotFound(_)))));
         prompter.assert_exhausted();
     }
 
@@ -363,7 +368,7 @@ mod tests {
         let result = handle_preset_delete(&prompter, &cfg_path(&dir), "dev", &mut buf);
 
         // Assert
-        assert!(matches!(result, Err(AppError::LastPreset)));
+        assert!(matches!(result, Err(AppError::Config(ConfigError::LastPreset))));
         prompter.assert_exhausted();
     }
 
@@ -404,7 +409,7 @@ mod tests {
         let result = handle_preset_delete(&prompter, &cfg_path(&dir), "dev", &mut buf);
 
         // Assert
-        assert!(matches!(result, Err(AppError::ConfigNotFound)));
+        assert!(matches!(result, Err(AppError::Config(ConfigError::NotFound))));
         prompter.assert_exhausted();
     }
 

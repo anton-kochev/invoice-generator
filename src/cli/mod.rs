@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 
 use clap::{Parser, Subcommand};
 
+use crate::config::ConfigError;
 use crate::config::loader::{load_config, LoadResult};
 use crate::config::validator::{ValidatedConfig, ValidationOutcome};
 use crate::error::AppError;
@@ -103,10 +104,10 @@ pub enum PresetAction {
 /// Never triggers the setup wizard — returns error if config missing or incomplete.
 pub fn load_validated_config(config_path: &Path) -> Result<ValidatedConfig, AppError> {
     match load_config(config_path)? {
-        LoadResult::NotFound => Err(AppError::ConfigNotFound),
+        LoadResult::NotFound => Err(ConfigError::NotFound.into()),
         LoadResult::Loaded(config) => match (*config).validate()? {
             ValidationOutcome::Complete(v) => Ok(v),
-            ValidationOutcome::Incomplete { .. } => Err(AppError::ConfigNotFound),
+            ValidationOutcome::Incomplete { .. } => Err(ConfigError::NotFound.into()),
         },
     }
 }

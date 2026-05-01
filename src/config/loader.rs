@@ -1,7 +1,6 @@
 use std::path::Path;
 
-use crate::error::AppError;
-
+use super::error::ConfigError;
 use super::types::Config;
 
 /// The default config file name used when constructing the default XDG path.
@@ -56,7 +55,7 @@ pub fn missing_field_hints(yaml_content: &str) -> Vec<&'static str> {
 /// This function does **not** print hints about missing optional fields.
 /// Callers that want to display hints (e.g. the interactive flow) should read
 /// the raw YAML and call [`missing_field_hints`] themselves.
-pub fn load_config(path: &Path) -> Result<LoadResult, AppError> {
+pub fn load_config(path: &Path) -> Result<LoadResult, ConfigError> {
     if !path.exists() {
         return Ok(LoadResult::NotFound);
     }
@@ -210,7 +209,7 @@ sender:
         let result = load_from_yaml("sender:\n  name: [invalid yaml\n  broken: {{}");
 
         // Assert
-        assert!(matches!(result, Err(AppError::ConfigParse(_))));
+        assert!(matches!(result, Err(ConfigError::Parse(_))));
     }
 
     // ── Cycle 6: IO error (unix only) ──
@@ -229,7 +228,7 @@ sender:
         let result = load_config(&path);
 
         // Assert
-        assert!(matches!(result, Err(AppError::ConfigIo(_))));
+        assert!(matches!(result, Err(ConfigError::Io(_))));
     }
 
     // ── Cycle 7: bic alias ──
@@ -511,7 +510,7 @@ defaults:
 
     // ── Helper ──
 
-    fn load_from_yaml(yaml: &str) -> Result<LoadResult, AppError> {
+    fn load_from_yaml(yaml: &str) -> Result<LoadResult, ConfigError> {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("config.yaml");
         std::fs::write(&path, yaml).unwrap();

@@ -1,5 +1,8 @@
 mod data;
+pub mod error;
 mod world;
+
+pub use error::PdfError;
 
 use std::path::Path;
 
@@ -7,7 +10,6 @@ use typst::layout::PagedDocument;
 
 use crate::config::types::TemplateKey;
 use crate::config::validator::ValidatedConfig;
-use crate::error::AppError;
 use crate::invoice::types::InvoiceSummary;
 
 /// Return the Typst template source for the given template key.
@@ -65,7 +67,7 @@ pub fn generate_pdf(
     config_dir: &Path,
     template: TemplateKey,
     locale: crate::locale::Locale,
-) -> Result<Vec<u8>, AppError> {
+) -> Result<Vec<u8>, PdfError> {
     let logo = config
         .branding
         .logo
@@ -75,7 +77,7 @@ pub fn generate_pdf(
     let invoice_data = data::InvoiceData::from_parts(summary, config, recipient, logo_file, locale);
 
     let json = serde_json::to_vec(&invoice_data)
-        .map_err(|e| AppError::PdfCompile(format!("JSON serialization failed: {e}")))?;
+        .map_err(|e| PdfError::Compile(format!("JSON serialization failed: {e}")))?;
 
     let source = template_source(template);
     let world = world::InvoiceWorld::new(source, json, logo);
@@ -86,14 +88,14 @@ pub fn generate_pdf(
             .iter()
             .map(|d| d.message.to_string())
             .collect();
-        AppError::PdfCompile(messages.join("; "))
+        PdfError::Compile(messages.join("; "))
     })?;
 
     let pdf =
         typst_pdf::pdf(&document, &typst_pdf::PdfOptions::default()).map_err(|errors| {
             let messages: Vec<String> =
                 errors.iter().map(|e| e.message.to_string()).collect();
-            AppError::PdfExport(messages.join("; "))
+            PdfError::Export(messages.join("; "))
         })?;
 
     Ok(pdf)

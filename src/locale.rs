@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::AppError;
+use crate::invoice::InvoiceError;
 
 /// Supported locale codes for invoice localization.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -246,7 +246,7 @@ impl fmt::Display for Locale {
 }
 
 impl FromStr for Locale {
-    type Err = AppError;
+    type Err = InvoiceError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
@@ -256,7 +256,7 @@ impl FromStr for Locale {
             "fr-fr" => Ok(Self::FrFr),
             "cs-cz" => Ok(Self::CsCz),
             "uk-ua" => Ok(Self::UkUa),
-            _ => Err(AppError::InvalidLocale {
+            _ => Err(InvoiceError::InvalidLocale {
                 key: s.to_string(),
                 available: Self::ALL.iter().map(|l| l.to_string()).collect(),
             }),

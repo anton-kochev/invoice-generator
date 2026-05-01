@@ -1,7 +1,7 @@
 use crate::config::types::Preset;
 use crate::domain::Currency;
-use crate::error::AppError;
 
+use super::error::InvoiceError;
 use super::types::LineItem;
 
 /// Resolve the effective currency for a preset.
@@ -15,11 +15,11 @@ pub fn effective_currency(preset: &Preset, default: Currency) -> Currency {
 ///
 /// # Panics
 /// Panics if `items` is empty (callers guarantee at least one item).
-pub fn validate_uniform_currency(items: &[LineItem]) -> Result<Currency, AppError> {
+pub fn validate_uniform_currency(items: &[LineItem]) -> Result<Currency, InvoiceError> {
     let first = items[0].currency;
     for item in &items[1..] {
         if item.currency != first {
-            return Err(AppError::MixedCurrency {
+            return Err(InvoiceError::MixedCurrency {
                 first,
                 second: item.currency,
             });
@@ -96,7 +96,7 @@ mod tests {
 
         // Assert
         match result {
-            Err(AppError::MixedCurrency { first, second }) => {
+            Err(InvoiceError::MixedCurrency { first, second }) => {
                 assert_eq!(first, Currency::Eur);
                 assert_eq!(second, Currency::Usd);
             }
@@ -119,7 +119,7 @@ mod tests {
 
         // Assert
         match result {
-            Err(AppError::MixedCurrency { first, second }) => {
+            Err(InvoiceError::MixedCurrency { first, second }) => {
                 assert_eq!(first, Currency::Eur);
                 assert_eq!(second, Currency::Usd);
             }
