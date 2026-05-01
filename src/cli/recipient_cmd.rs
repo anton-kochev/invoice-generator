@@ -24,7 +24,7 @@ pub fn format_recipient_table(recipients: &[ValidatedRecipient], default_key: &s
     let display_keys: Vec<String> = recipients
         .iter()
         .map(|r| {
-            let base = r.key.as_str();
+            let base = r.key().as_str();
             if base == default_key {
                 format!("{base} (default)")
             } else {
@@ -41,19 +41,19 @@ pub fn format_recipient_table(recipients: &[ValidatedRecipient], default_key: &s
         .max(min_key);
     let name_w = recipients
         .iter()
-        .map(|r| r.name.len())
+        .map(|r| r.name().len())
         .max()
         .unwrap_or(0)
         .max(min_name);
     let addr_w = recipients
         .iter()
-        .map(|r| r.address.first().map(|a| a.len()).unwrap_or(1))
+        .map(|r| r.address().first().map(|a| a.len()).unwrap_or(1))
         .max()
         .unwrap_or(0)
         .max(min_addr);
     let cid_w = recipients
         .iter()
-        .map(|r| r.company_id.as_deref().unwrap_or("-").len())
+        .map(|r| r.company_id().unwrap_or("-").len())
         .max()
         .unwrap_or(0)
         .max(min_cid);
@@ -77,11 +77,11 @@ pub fn format_recipient_table(recipients: &[ValidatedRecipient], default_key: &s
 
     // Data rows
     for (i, r) in recipients.iter().enumerate() {
-        let addr = r.address.first().map(|a| a.as_str()).unwrap_or("-");
-        let cid = r.company_id.as_deref().unwrap_or("-");
+        let addr = r.address().first().map(|a| a.as_str()).unwrap_or("-");
+        let cid = r.company_id().unwrap_or("-");
         out.push_str(&format!(
             "{:<key_w$}  {:<name_w$}  {:<addr_w$}  {:<cid_w$}\n",
-            display_keys[i], r.name, addr, cid,
+            display_keys[i], r.name(), addr, cid,
         ));
     }
 

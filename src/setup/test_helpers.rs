@@ -127,24 +127,24 @@ pub fn synthetic_recipient_globex() -> Recipient {
 /// Synthetic [`ValidatedRecipient`] mirroring [`synthetic_recipient_acme`] for
 /// tests that exercise validated-only call sites (e.g. `format_recipient_table`).
 pub fn synthetic_validated_acme() -> crate::config::validator::ValidatedRecipient {
-    crate::config::validator::ValidatedRecipient {
-        key: crate::domain::RecipientKey::try_new("acme").unwrap(),
-        name: "Acme Corp".into(),
-        address: vec!["100 Acme Blvd".into(), "Metropolis, IL 62960".into()],
-        company_id: Some("AC-12345".into()),
-        vat_number: None,
-    }
+    crate::config::validator::ValidatedRecipient::from_validated_parts(
+        crate::domain::RecipientKey::try_new("acme").unwrap(),
+        "Acme Corp".into(),
+        vec!["100 Acme Blvd".into(), "Metropolis, IL 62960".into()],
+        Some("AC-12345".into()),
+        None,
+    )
 }
 
 /// Synthetic [`ValidatedRecipient`] mirroring [`synthetic_recipient_globex`].
 pub fn synthetic_validated_globex() -> crate::config::validator::ValidatedRecipient {
-    crate::config::validator::ValidatedRecipient {
-        key: crate::domain::RecipientKey::try_new("globex").unwrap(),
-        name: "Globex Inc".into(),
-        address: vec!["200 Globex Ave".into()],
-        company_id: None,
-        vat_number: Some("CZ87654321".into()),
-    }
+    crate::config::validator::ValidatedRecipient::from_validated_parts(
+        crate::domain::RecipientKey::try_new("globex").unwrap(),
+        "Globex Inc".into(),
+        vec!["200 Globex Ave".into()],
+        None,
+        Some("CZ87654321".into()),
+    )
 }
 
 pub fn v2_complete_config() -> Config {

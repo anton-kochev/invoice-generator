@@ -119,13 +119,13 @@ fn resolve_recipient<'a>(
         Some(key) => validated
             .recipients
             .iter()
-            .find(|r| r.key.as_str() == key)
+            .find(|r| r.key().as_str() == key)
             .ok_or_else(|| ConfigError::RecipientNotFound {
                 key: key.to_string(),
                 available: validated
                     .recipients
                     .iter()
-                    .map(|r| r.key.as_str().to_string())
+                    .map(|r| r.key().as_str().to_string())
                     .collect(),
             }),
     }
@@ -524,7 +524,7 @@ mod tests {
 
         // Assert
         let recipient = result.unwrap();
-        assert_eq!(recipient.name, "Acme Corp");
+        assert_eq!(recipient.name(), "Acme Corp");
     }
 
     #[test]
@@ -539,7 +539,7 @@ mod tests {
 
         // Assert
         let recipient = result.unwrap();
-        assert_eq!(recipient.name, "Globex Inc");
+        assert_eq!(recipient.name(), "Globex Inc");
     }
 
     #[test]

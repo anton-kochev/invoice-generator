@@ -13,7 +13,7 @@ pub fn select_recipient(
     default_key: &str,
 ) -> Result<ValidatedRecipient, AppError> {
     if recipients.len() == 1 {
-        prompter.message(&format!("Using recipient: {}", recipients[0].name));
+        prompter.message(&format!("Using recipient: {}", recipients[0].name()));
         return Ok(recipients[0].clone());
     }
 
@@ -21,22 +21,22 @@ pub fn select_recipient(
 
     let default_index = recipients
         .iter()
-        .position(|r| r.key.as_str() == default_key)
+        .position(|r| r.key().as_str() == default_key)
         .map(|i| i + 1)
         .unwrap_or(1) as u32;
 
     for (i, r) in recipients.iter().enumerate() {
-        let marker = if r.key.as_str() == default_key {
+        let marker = if r.key().as_str() == default_key {
             " (default)"
         } else {
             ""
         };
-        let addr = r.address.first().map(|a| a.as_str()).unwrap_or("");
+        let addr = r.address().first().map(|a| a.as_str()).unwrap_or("");
         prompter.message(&format!(
             "  [{}] {} \u{2014} {}, {}{}",
             i + 1,
-            r.key.as_str(),
-            r.name,
+            r.key().as_str(),
+            r.name(),
             addr,
             marker,
         ));
@@ -69,7 +69,7 @@ mod tests {
         let result = select_recipient(&prompter, &recipients, "acme").unwrap();
 
         // Assert
-        assert_eq!(result.name, "Acme Corp");
+        assert_eq!(result.name(), "Acme Corp");
         prompter.assert_exhausted();
     }
 
@@ -143,7 +143,7 @@ mod tests {
         let result = select_recipient(&prompter, &recipients, "acme").unwrap();
 
         // Assert
-        assert_eq!(result.name, "Acme Corp");
+        assert_eq!(result.name(), "Acme Corp");
         prompter.assert_exhausted();
     }
 
@@ -157,7 +157,7 @@ mod tests {
         let result = select_recipient(&prompter, &recipients, "acme").unwrap();
 
         // Assert
-        assert_eq!(result.name, "Globex Inc");
+        assert_eq!(result.name(), "Globex Inc");
         prompter.assert_exhausted();
     }
 
@@ -171,7 +171,7 @@ mod tests {
         let result = select_recipient(&prompter, &recipients, "acme").unwrap();
 
         // Assert
-        assert_eq!(result.name, "Acme Corp");
+        assert_eq!(result.name(), "Acme Corp");
         let messages = prompter.messages.borrow();
         let all = messages.join("\n");
         assert!(
@@ -191,7 +191,7 @@ mod tests {
         let result = select_recipient(&prompter, &recipients, "acme").unwrap();
 
         // Assert
-        assert_eq!(result.name, "Globex Inc");
+        assert_eq!(result.name(), "Globex Inc");
         prompter.assert_exhausted();
     }
 
@@ -200,13 +200,13 @@ mod tests {
     #[test]
     fn test_v1_config_single_recipient_auto_selects_without_prompt() {
         // Arrange — simulate v1 config that was normalized: single recipient with derived key
-        let recipient = ValidatedRecipient {
-            key: crate::domain::RecipientKey::try_new("bob-corp").unwrap(),
-            name: "Bob Corp".into(),
-            address: vec!["456 Ave".into()],
-            company_id: None,
-            vat_number: None,
-        };
+        let recipient = ValidatedRecipient::from_validated_parts(
+            crate::domain::RecipientKey::try_new("bob-corp").unwrap(),
+            "Bob Corp".into(),
+            vec!["456 Ave".into()],
+            None,
+            None,
+        );
         let recipients = vec![recipient];
         let prompter = MockPrompter::new(vec![]); // no prompts expected
 
@@ -214,7 +214,7 @@ mod tests {
         let result = select_recipient(&prompter, &recipients, "bob-corp").unwrap();
 
         // Assert
-        assert_eq!(result.name, "Bob Corp");
+        assert_eq!(result.name(), "Bob Corp");
         prompter.assert_exhausted(); // confirms no interactive prompt was needed
     }
 }

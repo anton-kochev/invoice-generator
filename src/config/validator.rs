@@ -68,21 +68,26 @@ impl fmt::Display for ConfigSection {
 /// one is well-formed. Eliminating the `Option` removes a swarm of
 /// `.as_ref().is_some_and(...)` checks at every call site that already knows
 /// the key must be present.
+///
+/// Fields are `pub(super)` so only the [`crate::config`] module can construct
+/// instances directly. External callers — including tests in other modules —
+/// must go through [`ValidatedRecipient::from_validated_parts`] (test-only) or
+/// obtain instances by validating a [`Config`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct ValidatedRecipient {
-    pub key: RecipientKey,
-    pub name: String,
-    pub address: Vec<String>,
-    pub company_id: Option<String>,
-    pub vat_number: Option<String>,
+    pub(super) key: RecipientKey,
+    pub(super) name: String,
+    pub(super) address: Vec<String>,
+    pub(super) company_id: Option<String>,
+    pub(super) vat_number: Option<String>,
 }
 
 impl ValidatedRecipient {
     /// Convert from a raw [`Recipient`] whose `key` is known to be `Some`.
     ///
     /// Panics if `key` is `None`. Only the validator should call this — it is
-    /// responsible for filling in derived keys before invoking `from_recipient`.
-    fn from_recipient(r: Recipient) -> Self {
+    /// responsible for filling in derived keys before invoking `from_partial`.
+    fn from_partial(r: Recipient) -> Self {
         Self {
             key: r
                 .key
@@ -93,14 +98,57 @@ impl ValidatedRecipient {
             vat_number: r.vat_number,
         }
     }
+
+    /// Borrow the recipient's key.
+    pub fn key(&self) -> &RecipientKey {
+        &self.key
+    }
+
+    /// Borrow the recipient's display name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Borrow the recipient's address lines.
+    pub fn address(&self) -> &[String] {
+        &self.address
+    }
+
+    /// Borrow the recipient's company ID, if present.
+    pub fn company_id(&self) -> Option<&str> {
+        self.company_id.as_deref()
+    }
+
+    /// Borrow the recipient's VAT number, if present.
+    pub fn vat_number(&self) -> Option<&str> {
+        self.vat_number.as_deref()
+    }
+
+    /// Test-only constructor that bypasses the normal validator path.
+    ///
+    /// Used by test fixtures in other modules that need to assemble a
+    /// [`ValidatedRecipient`] without round-tripping through [`Config::validate`].
+    /// Production code paths construct via [`ValidatedRecipient::from_partial`]
+    /// inside the validator.
+    #[cfg(test)]
+    pub(crate) fn from_validated_parts(
+        key: RecipientKey,
+        name: String,
+        address: Vec<String>,
+        company_id: Option<String>,
+        vat_number: Option<String>,
+    ) -> Self {
+        Self { key, name, address, company_id, vat_number }
+    }
 }
 
 /// A fully validated configuration with all required sections present.
 ///
 /// Invariants encoded in the type system (post-validation):
 /// - `recipients` has at least one entry.
-/// - `default_recipient_idx` is in-bounds for `recipients` (use
-///   [`default_recipient`](Self::default_recipient) to dereference safely).
+/// - The default-recipient index is in-bounds for `recipients` (encapsulated
+///   as a private field; use [`default_recipient`](Self::default_recipient)
+///   to dereference safely).
 /// - `payment` has at least one entry.
 /// - `presets` has at least one entry.
 /// - Every recipient's key is `Some` (encoded as a non-`Option` field on
@@ -111,8 +159,11 @@ pub struct ValidatedConfig {
     /// All available recipients (guaranteed non-empty).
     pub recipients: NonEmpty<ValidatedRecipient>,
     /// Index of the default recipient within `recipients`.
-    /// Invariant: `< recipients.len()` (validator enforces).
-    pub default_recipient_idx: usize,
+    /// Invariant: `< recipients.len()` (validator enforces). Private so the
+    /// invariant cannot be violated by external construction; access via
+    /// [`default_recipient`](Self::default_recipient) /
+    /// [`default_recipient_key`](Self::default_recipient_key).
+    default_recipient_idx: usize,
     /// Guaranteed non-empty.
     pub payment: NonEmpty<PaymentMethod>,
     /// Guaranteed non-empty.
@@ -124,8 +175,8 @@ pub struct ValidatedConfig {
 }
 
 impl ValidatedConfig {
-    /// Borrow the default recipient — the one referenced by
-    /// [`default_recipient_idx`](Self::default_recipient_idx).
+    /// Borrow the default recipient — the one referenced by the (private)
+    /// default-recipient index.
     pub fn default_recipient(&self) -> &ValidatedRecipient {
         // Safe by construction: validator guarantees the index is in-bounds.
         &self.recipients[self.default_recipient_idx]
@@ -135,6 +186,42 @@ impl ValidatedConfig {
     /// sites that previously used `default_recipient_key` directly.
     pub fn default_recipient_key(&self) -> &RecipientKey {
         &self.default_recipient().key
+    }
+
+    /// Test-only constructor that assembles a [`ValidatedConfig`] directly,
+    /// asserting the index invariant rather than re-validating from scratch.
+    ///
+    /// External tests use this to build fixtures without round-tripping
+    /// through [`Config::validate`]. Production code paths assemble inline at
+    /// the end of [`Config::validate`].
+    #[cfg(test)]
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn from_validated_parts(
+        sender: Sender,
+        recipients: NonEmpty<ValidatedRecipient>,
+        default_recipient_idx: usize,
+        payment: NonEmpty<PaymentMethod>,
+        presets: NonEmpty<Preset>,
+        defaults: Defaults,
+        branding: ValidatedBranding,
+        template: TemplateKey,
+        locale: Locale,
+    ) -> Self {
+        assert!(
+            default_recipient_idx < recipients.len(),
+            "default_recipient_idx must be in bounds"
+        );
+        Self {
+            sender,
+            recipients,
+            default_recipient_idx,
+            payment,
+            presets,
+            defaults,
+            branding,
+            template,
+            locale,
+        }
     }
 }
 
@@ -256,7 +343,7 @@ impl Config {
             // (RecipientKey). Validator already enforced `key.is_some()` above.
             let validated_recipients: Vec<ValidatedRecipient> = recipients_vec
                 .into_iter()
-                .map(ValidatedRecipient::from_recipient)
+                .map(ValidatedRecipient::from_partial)
                 .collect();
             let recipients_ne = NonEmpty::try_from_vec(validated_recipients)
                 .expect("recipients non-empty checked above");

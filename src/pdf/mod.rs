@@ -127,28 +127,28 @@ mod tests {
     }
 
     fn make_config() -> ValidatedConfig {
-        let recipient = ValidatedRecipient {
-            key: crate::domain::RecipientKey::try_new("acme-corp").unwrap(),
-            name: "Acme Corp".into(),
-            address: vec!["456 Oak Ave".into(), "Berlin, Germany".into()],
-            company_id: Some("DE123456".into()),
-            vat_number: Some("ATU12345678".into()),
-        };
-        ValidatedConfig {
-            sender: Sender {
+        let recipient = ValidatedRecipient::from_validated_parts(
+            crate::domain::RecipientKey::try_new("acme-corp").unwrap(),
+            "Acme Corp".into(),
+            vec!["456 Oak Ave".into(), "Berlin, Germany".into()],
+            Some("DE123456".into()),
+            Some("ATU12345678".into()),
+        );
+        ValidatedConfig::from_validated_parts(
+            Sender {
                 name: "Jane Doe".into(),
                 address: vec!["123 Main St".into(), "Vienna, Austria".into()],
                 email: "jane@example.com".into(),
             },
-            recipients: crate::domain::NonEmpty::try_from_vec(vec![recipient]).unwrap(),
-            default_recipient_idx: 0,
-            payment: crate::domain::NonEmpty::try_from_vec(vec![PaymentMethod {
+            crate::domain::NonEmpty::try_from_vec(vec![recipient]).unwrap(),
+            0,
+            crate::domain::NonEmpty::try_from_vec(vec![PaymentMethod {
                 label: "Primary Bank Account".into(),
                 iban: crate::domain::Iban::try_new("DE89 3704 0044 0532 0130 00").unwrap(),
                 bic_swift: "COBADEFFXXX".into(),
             }])
             .unwrap(),
-            presets: crate::domain::NonEmpty::try_from_vec(vec![Preset {
+            crate::domain::NonEmpty::try_from_vec(vec![Preset {
                 key: crate::domain::PresetKey::try_new("dev").unwrap(),
                 description: "Software development".into(),
                 default_rate: 800.0,
@@ -156,11 +156,11 @@ mod tests {
                 tax_rate: None,
             }])
             .unwrap(),
-            defaults: Defaults::default(),
-            branding: ValidatedBranding::default(),
-            template: TemplateKey::Leda,
-            locale: crate::locale::Locale::EnUs,
-        }
+            Defaults::default(),
+            ValidatedBranding::default(),
+            TemplateKey::Leda,
+            crate::locale::Locale::EnUs,
+        )
     }
 
     #[test]
@@ -328,28 +328,28 @@ mod tests {
     }
 
     fn make_config_without_optional_fields() -> ValidatedConfig {
-        let recipient = ValidatedRecipient {
-            key: crate::domain::RecipientKey::try_new("acme-corp").unwrap(),
-            name: "Acme Corp".into(),
-            address: vec!["456 Oak Ave".into(), "Berlin, Germany".into()],
-            company_id: None,
-            vat_number: None,
-        };
-        ValidatedConfig {
-            sender: Sender {
+        let recipient = ValidatedRecipient::from_validated_parts(
+            crate::domain::RecipientKey::try_new("acme-corp").unwrap(),
+            "Acme Corp".into(),
+            vec!["456 Oak Ave".into(), "Berlin, Germany".into()],
+            None,
+            None,
+        );
+        ValidatedConfig::from_validated_parts(
+            Sender {
                 name: "Jane Doe".into(),
                 address: vec!["123 Main St".into(), "Vienna, Austria".into()],
                 email: "jane@example.com".into(),
             },
-            recipients: crate::domain::NonEmpty::try_from_vec(vec![recipient]).unwrap(),
-            default_recipient_idx: 0,
-            payment: crate::domain::NonEmpty::try_from_vec(vec![PaymentMethod {
+            crate::domain::NonEmpty::try_from_vec(vec![recipient]).unwrap(),
+            0,
+            crate::domain::NonEmpty::try_from_vec(vec![PaymentMethod {
                 label: "Primary Bank Account".into(),
                 iban: crate::domain::Iban::try_new("DE89 3704 0044 0532 0130 00").unwrap(),
                 bic_swift: "COBADEFFXXX".into(),
             }])
             .unwrap(),
-            presets: crate::domain::NonEmpty::try_from_vec(vec![Preset {
+            crate::domain::NonEmpty::try_from_vec(vec![Preset {
                 key: crate::domain::PresetKey::try_new("dev").unwrap(),
                 description: "Software development".into(),
                 default_rate: 800.0,
@@ -357,11 +357,11 @@ mod tests {
                 tax_rate: None,
             }])
             .unwrap(),
-            defaults: Defaults::default(),
-            branding: ValidatedBranding::default(),
-            template: TemplateKey::Leda,
-            locale: crate::locale::Locale::EnUs,
-        }
+            Defaults::default(),
+            ValidatedBranding::default(),
+            TemplateKey::Leda,
+            crate::locale::Locale::EnUs,
+        )
     }
 
     #[test]

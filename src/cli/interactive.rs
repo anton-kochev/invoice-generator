@@ -50,7 +50,7 @@ pub fn run_interactive(
             ValidationOutcome::Complete(v) => {
                 println!("Config loaded successfully.");
                 println!("Sender: {}", v.sender.name);
-                println!("Recipient: {}", v.default_recipient().name);
+                println!("Recipient: {}", v.default_recipient().name());
                 v
             }
             ValidationOutcome::Incomplete { mut config, missing } => {
@@ -82,7 +82,6 @@ pub fn run_invoice_flow(
     output_dir: &Path,
 ) -> Result<(), AppError> {
     let config_dir = config_path.parent().unwrap_or_else(|| Path::new("."));
-    let presets = validated.presets.clone();
     loop {
         let now = time::OffsetDateTime::now_utc();
         let period = invoice::period::collect_invoice_period(
@@ -93,7 +92,7 @@ pub fn run_invoice_flow(
 
         let line_items = invoice::line_item::collect_all_line_items(
             prompter,
-            &presets,
+            &validated.presets,
             validated.defaults.currency,
             config_path,
         )?;
@@ -175,28 +174,28 @@ mod tests {
     use crate::setup::mock_prompter::{MockPrompter, MockResponse};
 
     fn make_validated_config() -> ValidatedConfig {
-        let recipient = ValidatedRecipient {
-            key: crate::domain::RecipientKey::try_new("acme").unwrap(),
-            name: "Acme Corp".into(),
-            address: vec!["123 Test St".into()],
-            company_id: None,
-            vat_number: None,
-        };
-        ValidatedConfig {
-            sender: Sender {
+        let recipient = ValidatedRecipient::from_validated_parts(
+            crate::domain::RecipientKey::try_new("acme").unwrap(),
+            "Acme Corp".into(),
+            vec!["123 Test St".into()],
+            None,
+            None,
+        );
+        ValidatedConfig::from_validated_parts(
+            Sender {
                 name: "Test User".into(),
                 address: vec!["456 Dev Ave".into()],
                 email: "test@example.com".into(),
             },
-            recipients: NonEmpty::try_from_vec(vec![recipient]).unwrap(),
-            default_recipient_idx: 0,
-            payment: NonEmpty::try_from_vec(vec![PaymentMethod {
+            NonEmpty::try_from_vec(vec![recipient]).unwrap(),
+            0,
+            NonEmpty::try_from_vec(vec![PaymentMethod {
                 label: "SEPA".into(),
                 iban: crate::domain::Iban::try_new("DE89370400440532013000").unwrap(),
                 bic_swift: "TESTBIC".into(),
             }])
             .unwrap(),
-            presets: NonEmpty::try_from_vec(vec![Preset {
+            NonEmpty::try_from_vec(vec![Preset {
                 key: crate::domain::PresetKey::try_new("dev").unwrap(),
                 description: "Development".into(),
                 default_rate: 800.0,
@@ -204,11 +203,11 @@ mod tests {
                 tax_rate: None,
             }])
             .unwrap(),
-            defaults: Defaults::default(),
-            branding: ValidatedBranding::default(),
-            template: TemplateKey::Leda,
-            locale: crate::locale::Locale::EnUs,
-        }
+            Defaults::default(),
+            ValidatedBranding::default(),
+            TemplateKey::Leda,
+            crate::locale::Locale::EnUs,
+        )
     }
 
     fn flow_responses_no_change() -> Vec<MockResponse> {
