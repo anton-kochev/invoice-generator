@@ -1,8 +1,8 @@
 use std::path::Path;
 
 use crate::config::loader::{load_config, missing_field_hints, LoadResult};
-use crate::config::types::{Config, Recipient, TemplateKey};
-use crate::config::validator::{ConfigSection, ValidatedConfig, ValidationOutcome};
+use crate::config::types::{Config, TemplateKey};
+use crate::config::validator::{ConfigSection, ValidatedConfig, ValidatedRecipient, ValidationOutcome};
 use crate::error::AppError;
 use crate::setup::prompter::Prompter;
 use crate::{invoice, pdf, setup};
@@ -50,7 +50,7 @@ pub fn run_interactive(
             ValidationOutcome::Complete(v) => {
                 println!("Config loaded successfully.");
                 println!("Sender: {}", v.sender.name);
-                println!("Recipient: {}", v.recipient.name);
+                println!("Recipient: {}", v.default_recipient().name);
                 v
             }
             ValidationOutcome::Incomplete { mut config, missing } => {
@@ -68,7 +68,7 @@ pub fn run_interactive(
     let recipient = select_recipient(
         prompter,
         &validated.recipients,
-        validated.default_recipient_key.as_str(),
+        validated.default_recipient_key().as_str(),
     )?;
     run_invoice_flow(prompter, &validated, &recipient, config_path, output_dir)
 }
@@ -77,7 +77,7 @@ pub fn run_interactive(
 pub fn run_invoice_flow(
     prompter: &dyn Prompter,
     validated: &ValidatedConfig,
-    recipient: &Recipient,
+    recipient: &ValidatedRecipient,
     config_path: &Path,
     output_dir: &Path,
 ) -> Result<(), AppError> {
@@ -171,11 +171,12 @@ mod tests {
     use super::*;
     use crate::config::types::*;
     use crate::config::validator::ValidatedBranding;
+    use crate::domain::NonEmpty;
     use crate::setup::mock_prompter::{MockPrompter, MockResponse};
 
     fn make_validated_config() -> ValidatedConfig {
-        let recipient = Recipient {
-            key: Some(crate::domain::RecipientKey::try_new("acme").unwrap()),
+        let recipient = ValidatedRecipient {
+            key: crate::domain::RecipientKey::try_new("acme").unwrap(),
             name: "Acme Corp".into(),
             address: vec!["123 Test St".into()],
             company_id: None,
@@ -187,21 +188,22 @@ mod tests {
                 address: vec!["456 Dev Ave".into()],
                 email: "test@example.com".into(),
             },
-            recipient: recipient.clone(),
-            recipients: vec![recipient],
-            default_recipient_key: crate::domain::RecipientKey::try_new("acme").unwrap(),
-            payment: vec![PaymentMethod {
+            recipients: NonEmpty::try_from_vec(vec![recipient]).unwrap(),
+            default_recipient_idx: 0,
+            payment: NonEmpty::try_from_vec(vec![PaymentMethod {
                 label: "SEPA".into(),
                 iban: crate::domain::Iban::try_new("DE89370400440532013000").unwrap(),
                 bic_swift: "TESTBIC".into(),
-            }],
-            presets: vec![Preset {
+            }])
+            .unwrap(),
+            presets: NonEmpty::try_from_vec(vec![Preset {
                 key: crate::domain::PresetKey::try_new("dev").unwrap(),
                 description: "Development".into(),
                 default_rate: 800.0,
                 currency: None,
                 tax_rate: None,
-            }],
+            }])
+            .unwrap(),
             defaults: Defaults::default(),
             branding: ValidatedBranding::default(),
             template: TemplateKey::Leda,
@@ -240,7 +242,7 @@ mod tests {
     fn test_invoice_flow_shows_template_info() {
         // Arrange
         let config = make_validated_config();
-        let recipient = config.recipient.clone();
+        let recipient = config.default_recipient().clone();
         let dir = tempfile::tempdir().unwrap();
         let config_path = dir.path().join("config.yaml");
         let prompter = MockPrompter::new(flow_responses_no_change());
@@ -259,7 +261,7 @@ mod tests {
     fn test_invoice_flow_decline_change_uses_default_template() {
         // Arrange
         let config = make_validated_config();
-        let recipient = config.recipient.clone();
+        let recipient = config.default_recipient().clone();
         let dir = tempfile::tempdir().unwrap();
         let config_path = dir.path().join("config.yaml");
         let prompter = MockPrompter::new(flow_responses_no_change());
@@ -274,7 +276,7 @@ mod tests {
     fn test_invoice_flow_accept_change_shows_template_list() {
         // Arrange
         let config = make_validated_config();
-        let recipient = config.recipient.clone();
+        let recipient = config.default_recipient().clone();
         let dir = tempfile::tempdir().unwrap();
         let config_path = dir.path().join("config.yaml");
         let prompter = MockPrompter::new(flow_responses_with_change());
@@ -293,7 +295,7 @@ mod tests {
     fn test_invoice_flow_template_change_does_not_modify_config() {
         // Arrange
         let config = make_validated_config();
-        let recipient = config.recipient.clone();
+        let recipient = config.default_recipient().clone();
         let dir = tempfile::tempdir().unwrap();
         let config_path = dir.path().join("config.yaml");
         let prompter = MockPrompter::new(flow_responses_with_change());

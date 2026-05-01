@@ -9,7 +9,7 @@ use std::path::Path;
 use typst::layout::PagedDocument;
 
 use crate::config::types::TemplateKey;
-use crate::config::validator::ValidatedConfig;
+use crate::config::validator::{ValidatedConfig, ValidatedRecipient};
 use crate::invoice::types::InvoiceSummary;
 
 /// Return the Typst template source for the given template key.
@@ -63,7 +63,7 @@ fn resolve_logo(raw_path: &str, config_dir: &Path) -> Option<(String, Vec<u8>)> 
 pub fn generate_pdf(
     summary: &InvoiceSummary,
     config: &ValidatedConfig,
-    recipient: &crate::config::types::Recipient,
+    recipient: &ValidatedRecipient,
     config_dir: &Path,
     template: TemplateKey,
     locale: crate::locale::Locale,
@@ -127,8 +127,8 @@ mod tests {
     }
 
     fn make_config() -> ValidatedConfig {
-        let recipient = Recipient {
-            key: Some(crate::domain::RecipientKey::try_new("acme-corp").unwrap()),
+        let recipient = ValidatedRecipient {
+            key: crate::domain::RecipientKey::try_new("acme-corp").unwrap(),
             name: "Acme Corp".into(),
             address: vec!["456 Oak Ave".into(), "Berlin, Germany".into()],
             company_id: Some("DE123456".into()),
@@ -140,21 +140,22 @@ mod tests {
                 address: vec!["123 Main St".into(), "Vienna, Austria".into()],
                 email: "jane@example.com".into(),
             },
-            recipient: recipient.clone(),
-            recipients: vec![recipient],
-            default_recipient_key: crate::domain::RecipientKey::try_new("acme-corp").unwrap(),
-            payment: vec![PaymentMethod {
+            recipients: crate::domain::NonEmpty::try_from_vec(vec![recipient]).unwrap(),
+            default_recipient_idx: 0,
+            payment: crate::domain::NonEmpty::try_from_vec(vec![PaymentMethod {
                 label: "Primary Bank Account".into(),
                 iban: crate::domain::Iban::try_new("DE89 3704 0044 0532 0130 00").unwrap(),
                 bic_swift: "COBADEFFXXX".into(),
-            }],
-            presets: vec![Preset {
+            }])
+            .unwrap(),
+            presets: crate::domain::NonEmpty::try_from_vec(vec![Preset {
                 key: crate::domain::PresetKey::try_new("dev").unwrap(),
                 description: "Software development".into(),
                 default_rate: 800.0,
                 currency: None,
                 tax_rate: None,
-            }],
+            }])
+            .unwrap(),
             defaults: Defaults::default(),
             branding: ValidatedBranding::default(),
             template: TemplateKey::Leda,
@@ -186,7 +187,7 @@ mod tests {
         let summary = make_summary();
         let config = make_config();
         // Act
-        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Leda, crate::locale::Locale::EnUs);
+        let result = generate_pdf(&summary, &config, config.default_recipient(), Path::new("."), TemplateKey::Leda, crate::locale::Locale::EnUs);
         // Assert
         let pdf = result.expect("PDF generation should succeed");
         assert!(pdf.starts_with(b"%PDF"), "Output should start with PDF header");
@@ -198,8 +199,8 @@ mod tests {
         let summary = make_summary();
         let config = make_config();
         // Act
-        let pdf1 = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Leda, crate::locale::Locale::EnUs).unwrap();
-        let pdf2 = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Leda, crate::locale::Locale::EnUs).unwrap();
+        let pdf1 = generate_pdf(&summary, &config, config.default_recipient(), Path::new("."), TemplateKey::Leda, crate::locale::Locale::EnUs).unwrap();
+        let pdf2 = generate_pdf(&summary, &config, config.default_recipient(), Path::new("."), TemplateKey::Leda, crate::locale::Locale::EnUs).unwrap();
         // Assert
         assert_eq!(pdf1, pdf2, "Same input should produce identical PDF bytes");
     }
@@ -210,7 +211,7 @@ mod tests {
         let summary = make_summary();
         let config = make_config();
         // Act
-        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Callisto, crate::locale::Locale::EnUs);
+        let result = generate_pdf(&summary, &config, config.default_recipient(), Path::new("."), TemplateKey::Callisto, crate::locale::Locale::EnUs);
         // Assert
         assert!(result.is_ok(), "Callisto template should produce a valid PDF");
     }
@@ -275,7 +276,7 @@ mod tests {
         let summary = make_summary();
         let config = make_config(); // branding.logo is None
         // Act
-        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Leda, crate::locale::Locale::EnUs);
+        let result = generate_pdf(&summary, &config, config.default_recipient(), Path::new("."), TemplateKey::Leda, crate::locale::Locale::EnUs);
         // Assert
         assert!(result.is_ok());
     }
@@ -289,7 +290,7 @@ mod tests {
         config.branding.font = Some("Arial".into());
         config.branding.footer_text = Some("Custom footer text".into());
         // Act
-        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Leda, crate::locale::Locale::EnUs);
+        let result = generate_pdf(&summary, &config, config.default_recipient(), Path::new("."), TemplateKey::Leda, crate::locale::Locale::EnUs);
         // Assert
         let pdf = result.expect("PDF with custom branding should succeed");
         assert!(pdf.starts_with(b"%PDF"));
@@ -302,7 +303,7 @@ mod tests {
         let mut config = make_config();
         config.branding.footer_text = Some("".into());
         // Act
-        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Leda, crate::locale::Locale::EnUs);
+        let result = generate_pdf(&summary, &config, config.default_recipient(), Path::new("."), TemplateKey::Leda, crate::locale::Locale::EnUs);
         // Assert
         assert!(result.is_ok());
     }
@@ -327,8 +328,8 @@ mod tests {
     }
 
     fn make_config_without_optional_fields() -> ValidatedConfig {
-        let recipient = Recipient {
-            key: Some(crate::domain::RecipientKey::try_new("acme-corp").unwrap()),
+        let recipient = ValidatedRecipient {
+            key: crate::domain::RecipientKey::try_new("acme-corp").unwrap(),
             name: "Acme Corp".into(),
             address: vec!["456 Oak Ave".into(), "Berlin, Germany".into()],
             company_id: None,
@@ -340,21 +341,22 @@ mod tests {
                 address: vec!["123 Main St".into(), "Vienna, Austria".into()],
                 email: "jane@example.com".into(),
             },
-            recipient: recipient.clone(),
-            recipients: vec![recipient],
-            default_recipient_key: crate::domain::RecipientKey::try_new("acme-corp").unwrap(),
-            payment: vec![PaymentMethod {
+            recipients: crate::domain::NonEmpty::try_from_vec(vec![recipient]).unwrap(),
+            default_recipient_idx: 0,
+            payment: crate::domain::NonEmpty::try_from_vec(vec![PaymentMethod {
                 label: "Primary Bank Account".into(),
                 iban: crate::domain::Iban::try_new("DE89 3704 0044 0532 0130 00").unwrap(),
                 bic_swift: "COBADEFFXXX".into(),
-            }],
-            presets: vec![Preset {
+            }])
+            .unwrap(),
+            presets: crate::domain::NonEmpty::try_from_vec(vec![Preset {
                 key: crate::domain::PresetKey::try_new("dev").unwrap(),
                 description: "Software development".into(),
                 default_rate: 800.0,
                 currency: None,
                 tax_rate: None,
-            }],
+            }])
+            .unwrap(),
             defaults: Defaults::default(),
             branding: ValidatedBranding::default(),
             template: TemplateKey::Leda,
@@ -389,7 +391,7 @@ mod tests {
         let config = make_config();
 
         // Act
-        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Callisto, crate::locale::Locale::EnUs);
+        let result = generate_pdf(&summary, &config, config.default_recipient(), Path::new("."), TemplateKey::Callisto, crate::locale::Locale::EnUs);
 
         // Assert
         let pdf = result.expect("Callisto template should produce a valid PDF");
@@ -403,7 +405,7 @@ mod tests {
         let config = make_config();
 
         // Act
-        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Thebe, crate::locale::Locale::EnUs);
+        let result = generate_pdf(&summary, &config, config.default_recipient(), Path::new("."), TemplateKey::Thebe, crate::locale::Locale::EnUs);
 
         // Assert
         let pdf = result.expect("Thebe template should produce a valid PDF");
@@ -417,7 +419,7 @@ mod tests {
         let config = make_config();
 
         // Act
-        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Amalthea, crate::locale::Locale::EnUs);
+        let result = generate_pdf(&summary, &config, config.default_recipient(), Path::new("."), TemplateKey::Amalthea, crate::locale::Locale::EnUs);
 
         // Assert
         let pdf = result.expect("Amalthea template should produce a valid PDF");
@@ -431,7 +433,7 @@ mod tests {
         let config = make_config();
 
         // Act
-        let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), TemplateKey::Metis, crate::locale::Locale::EnUs);
+        let result = generate_pdf(&summary, &config, config.default_recipient(), Path::new("."), TemplateKey::Metis, crate::locale::Locale::EnUs);
 
         // Assert
         let pdf = result.expect("Metis template should produce a valid PDF");
@@ -446,7 +448,7 @@ mod tests {
 
         // Act & Assert
         for key in TemplateKey::ALL {
-            let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), key, crate::locale::Locale::EnUs);
+            let result = generate_pdf(&summary, &config, config.default_recipient(), Path::new("."), key, crate::locale::Locale::EnUs);
             assert!(result.is_ok(), "Template {key} should succeed with tax line items");
         }
     }
@@ -459,7 +461,7 @@ mod tests {
 
         // Act & Assert
         for key in TemplateKey::ALL {
-            let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), key, crate::locale::Locale::EnUs);
+            let result = generate_pdf(&summary, &config, config.default_recipient(), Path::new("."), key, crate::locale::Locale::EnUs);
             assert!(result.is_ok(), "Template {key} should succeed without optional fields");
         }
     }
@@ -475,7 +477,7 @@ mod tests {
 
         // Act & Assert
         for key in TemplateKey::ALL {
-            let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), key, crate::locale::Locale::EnUs);
+            let result = generate_pdf(&summary, &config, config.default_recipient(), Path::new("."), key, crate::locale::Locale::EnUs);
             assert!(result.is_ok(), "Template {key} should succeed with custom branding");
         }
     }
@@ -489,7 +491,7 @@ mod tests {
 
         // Act & Assert
         for key in TemplateKey::ALL {
-            let result = generate_pdf(&summary, &config, &config.recipient, Path::new("."), key, crate::locale::Locale::EnUs);
+            let result = generate_pdf(&summary, &config, config.default_recipient(), Path::new("."), key, crate::locale::Locale::EnUs);
             assert!(result.is_ok(), "Template {key} should succeed with empty footer");
         }
     }

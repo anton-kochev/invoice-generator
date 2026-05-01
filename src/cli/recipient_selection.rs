@@ -1,4 +1,4 @@
-use crate::config::types::Recipient;
+use crate::config::validator::ValidatedRecipient;
 use crate::error::AppError;
 use crate::setup::prompter::Prompter;
 use crate::setup::prompts::prompt_u32_in_range;
@@ -9,9 +9,9 @@ use crate::setup::prompts::prompt_u32_in_range;
 /// If multiple exist, shows a numbered list and prompts for selection.
 pub fn select_recipient(
     prompter: &dyn Prompter,
-    recipients: &[Recipient],
+    recipients: &[ValidatedRecipient],
     default_key: &str,
-) -> Result<Recipient, AppError> {
+) -> Result<ValidatedRecipient, AppError> {
     if recipients.len() == 1 {
         prompter.message(&format!("Using recipient: {}", recipients[0].name));
         return Ok(recipients[0].clone());
@@ -21,12 +21,12 @@ pub fn select_recipient(
 
     let default_index = recipients
         .iter()
-        .position(|r| r.key.as_ref().is_some_and(|k| k.as_str() == default_key))
+        .position(|r| r.key.as_str() == default_key)
         .map(|i| i + 1)
         .unwrap_or(1) as u32;
 
     for (i, r) in recipients.iter().enumerate() {
-        let marker = if r.key.as_ref().is_some_and(|k| k.as_str() == default_key) {
+        let marker = if r.key.as_str() == default_key {
             " (default)"
         } else {
             ""
@@ -35,7 +35,7 @@ pub fn select_recipient(
         prompter.message(&format!(
             "  [{}] {} \u{2014} {}, {}{}",
             i + 1,
-            r.key.as_ref().map(|k| k.as_str()).unwrap_or(""),
+            r.key.as_str(),
             r.name,
             addr,
             marker,
@@ -62,7 +62,7 @@ mod tests {
     #[test]
     fn test_select_recipient_single_returns_without_prompt() {
         // Arrange
-        let recipients = vec![synthetic_recipient_acme()];
+        let recipients = vec![synthetic_validated_acme()];
         let prompter = MockPrompter::new(vec![]);
 
         // Act
@@ -76,7 +76,7 @@ mod tests {
     #[test]
     fn test_select_recipient_single_displays_auto_select_message() {
         // Arrange
-        let recipients = vec![synthetic_recipient_acme()];
+        let recipients = vec![synthetic_validated_acme()];
         let prompter = MockPrompter::new(vec![]);
 
         // Act
@@ -94,7 +94,7 @@ mod tests {
     #[test]
     fn test_select_recipient_multiple_displays_numbered_list() {
         // Arrange
-        let recipients = vec![synthetic_recipient_acme(), synthetic_recipient_globex()];
+        let recipients = vec![synthetic_validated_acme(), synthetic_validated_globex()];
         let prompter = MockPrompter::new(vec![MockResponse::U32(1)]);
 
         // Act
@@ -118,7 +118,7 @@ mod tests {
     #[test]
     fn test_select_recipient_marks_default_with_indicator() {
         // Arrange
-        let recipients = vec![synthetic_recipient_acme(), synthetic_recipient_globex()];
+        let recipients = vec![synthetic_validated_acme(), synthetic_validated_globex()];
         let prompter = MockPrompter::new(vec![MockResponse::U32(1)]);
 
         // Act
@@ -136,7 +136,7 @@ mod tests {
     #[test]
     fn test_select_recipient_choice_one_returns_first() {
         // Arrange
-        let recipients = vec![synthetic_recipient_acme(), synthetic_recipient_globex()];
+        let recipients = vec![synthetic_validated_acme(), synthetic_validated_globex()];
         let prompter = MockPrompter::new(vec![MockResponse::U32(1)]);
 
         // Act
@@ -150,7 +150,7 @@ mod tests {
     #[test]
     fn test_select_recipient_choice_two_returns_second() {
         // Arrange
-        let recipients = vec![synthetic_recipient_acme(), synthetic_recipient_globex()];
+        let recipients = vec![synthetic_validated_acme(), synthetic_validated_globex()];
         let prompter = MockPrompter::new(vec![MockResponse::U32(2)]);
 
         // Act
@@ -164,7 +164,7 @@ mod tests {
     #[test]
     fn test_select_recipient_invalid_number_reprompts() {
         // Arrange
-        let recipients = vec![synthetic_recipient_acme(), synthetic_recipient_globex()];
+        let recipients = vec![synthetic_validated_acme(), synthetic_validated_globex()];
         let prompter = MockPrompter::new(vec![MockResponse::U32(0), MockResponse::U32(1)]);
 
         // Act
@@ -184,7 +184,7 @@ mod tests {
     #[test]
     fn test_select_recipient_too_high_reprompts() {
         // Arrange
-        let recipients = vec![synthetic_recipient_acme(), synthetic_recipient_globex()];
+        let recipients = vec![synthetic_validated_acme(), synthetic_validated_globex()];
         let prompter = MockPrompter::new(vec![MockResponse::U32(99), MockResponse::U32(2)]);
 
         // Act
@@ -200,8 +200,8 @@ mod tests {
     #[test]
     fn test_v1_config_single_recipient_auto_selects_without_prompt() {
         // Arrange — simulate v1 config that was normalized: single recipient with derived key
-        let recipient = crate::config::types::Recipient {
-            key: Some(crate::domain::RecipientKey::try_new("bob-corp").unwrap()),
+        let recipient = ValidatedRecipient {
+            key: crate::domain::RecipientKey::try_new("bob-corp").unwrap(),
             name: "Bob Corp".into(),
             address: vec!["456 Ave".into()],
             company_id: None,

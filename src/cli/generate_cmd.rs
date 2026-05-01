@@ -3,8 +3,8 @@ use std::path::Path;
 use std::str::FromStr;
 
 use crate::config::ConfigError;
-use crate::config::types::{Preset, Recipient, TemplateKey};
-use crate::config::validator::ValidatedConfig;
+use crate::config::types::{Preset, TemplateKey};
+use crate::config::validator::{ValidatedConfig, ValidatedRecipient};
 use crate::domain::Currency;
 use crate::error::AppError;
 use crate::invoice::InvoiceError;
@@ -113,19 +113,19 @@ fn resolve_line_items(args: &GenerateArgs, presets: &[Preset], default_currency:
 fn resolve_recipient<'a>(
     client: Option<&str>,
     validated: &'a ValidatedConfig,
-) -> Result<&'a Recipient, ConfigError> {
+) -> Result<&'a ValidatedRecipient, ConfigError> {
     match client {
-        None => Ok(&validated.recipient),
+        None => Ok(validated.default_recipient()),
         Some(key) => validated
             .recipients
             .iter()
-            .find(|r| r.key.as_ref().is_some_and(|k| k.as_str() == key))
+            .find(|r| r.key.as_str() == key)
             .ok_or_else(|| ConfigError::RecipientNotFound {
                 key: key.to_string(),
                 available: validated
                     .recipients
                     .iter()
-                    .filter_map(|r| r.key.as_ref().map(|k| k.as_str().to_string()))
+                    .map(|r| r.key.as_str().to_string())
                     .collect(),
             }),
     }

@@ -4,7 +4,7 @@ use std::path::Path;
 use crate::cli::CliError;
 use crate::config::ConfigError;
 use crate::config::types::Recipient;
-use crate::config::validator::ValidatedConfig;
+use crate::config::validator::{ValidatedConfig, ValidatedRecipient};
 use crate::domain::RecipientKey;
 use crate::error::AppError;
 use crate::setup::prompter::Prompter;
@@ -14,7 +14,7 @@ use crate::setup::prompts::{prompt_parsed, prompt_u32_in_range};
 ///
 /// The default recipient is marked with `(default)` appended to its key.
 /// Dynamic column widths based on data.
-pub fn format_recipient_table(recipients: &[Recipient], default_key: &str) -> String {
+pub fn format_recipient_table(recipients: &[ValidatedRecipient], default_key: &str) -> String {
     let min_key = 3;
     let min_name = 4;
     let min_addr = 7;
@@ -24,7 +24,7 @@ pub fn format_recipient_table(recipients: &[Recipient], default_key: &str) -> St
     let display_keys: Vec<String> = recipients
         .iter()
         .map(|r| {
-            let base = r.key.as_ref().map(|k| k.as_str()).unwrap_or("");
+            let base = r.key.as_str();
             if base == default_key {
                 format!("{base} (default)")
             } else {
@@ -95,7 +95,7 @@ pub fn handle_recipient_list(
 ) -> Result<(), AppError> {
     let table = format_recipient_table(
         &validated.recipients,
-        validated.default_recipient_key.as_str(),
+        validated.default_recipient_key().as_str(),
     );
     writer
         .write_all(table.as_bytes())
@@ -270,7 +270,7 @@ mod tests {
     #[test]
     fn test_format_recipient_table_contains_header_row() {
         // Arrange
-        let recipients = vec![synthetic_recipient_acme()];
+        let recipients = vec![synthetic_validated_acme()];
 
         // Act
         let output = format_recipient_table(&recipients, "acme");
@@ -288,7 +288,7 @@ mod tests {
     #[test]
     fn test_format_recipient_table_contains_recipient_data() {
         // Arrange
-        let recipients = vec![synthetic_recipient_acme()];
+        let recipients = vec![synthetic_validated_acme()];
 
         // Act
         let output = format_recipient_table(&recipients, "acme");
@@ -303,7 +303,7 @@ mod tests {
     #[test]
     fn test_format_recipient_table_marks_default() {
         // Arrange
-        let recipients = vec![synthetic_recipient_acme(), synthetic_recipient_globex()];
+        let recipients = vec![synthetic_validated_acme(), synthetic_validated_globex()];
 
         // Act
         let output = format_recipient_table(&recipients, "acme");
@@ -322,7 +322,7 @@ mod tests {
     #[test]
     fn test_format_recipient_table_multiple_shows_all() {
         // Arrange
-        let recipients = vec![synthetic_recipient_acme(), synthetic_recipient_globex()];
+        let recipients = vec![synthetic_validated_acme(), synthetic_validated_globex()];
 
         // Act
         let output = format_recipient_table(&recipients, "acme");
@@ -335,7 +335,7 @@ mod tests {
     #[test]
     fn test_format_recipient_table_missing_company_id_shows_placeholder() {
         // Arrange — globex has company_id: None
-        let recipients = vec![synthetic_recipient_globex()];
+        let recipients = vec![synthetic_validated_globex()];
 
         // Act
         let output = format_recipient_table(&recipients, "globex");
@@ -352,7 +352,7 @@ mod tests {
     #[test]
     fn test_format_recipient_table_empty_shows_header_only() {
         // Arrange
-        let recipients: Vec<Recipient> = vec![];
+        let recipients: Vec<ValidatedRecipient> = vec![];
 
         // Act
         let output = format_recipient_table(&recipients, "");

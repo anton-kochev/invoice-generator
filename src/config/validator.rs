@@ -2,7 +2,7 @@ use std::fmt;
 
 use super::error::ConfigError;
 use super::types::*;
-use crate::domain::{HexColor, RecipientKey};
+use crate::domain::{HexColor, NonEmpty, RecipientKey};
 use crate::locale::Locale;
 
 const DEFAULT_ACCENT_COLOR: &str = "#2c3e50";
@@ -61,19 +61,62 @@ impl fmt::Display for ConfigSection {
     }
 }
 
+/// A recipient with all post-validation invariants encoded in the type.
+///
+/// Compared to the raw [`Recipient`], `key` is non-`Option`: the validator
+/// either supplies a derived key (v1 configs) or asserts the user-provided
+/// one is well-formed. Eliminating the `Option` removes a swarm of
+/// `.as_ref().is_some_and(...)` checks at every call site that already knows
+/// the key must be present.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ValidatedRecipient {
+    pub key: RecipientKey,
+    pub name: String,
+    pub address: Vec<String>,
+    pub company_id: Option<String>,
+    pub vat_number: Option<String>,
+}
+
+impl ValidatedRecipient {
+    /// Convert from a raw [`Recipient`] whose `key` is known to be `Some`.
+    ///
+    /// Panics if `key` is `None`. Only the validator should call this — it is
+    /// responsible for filling in derived keys before invoking `from_recipient`.
+    fn from_recipient(r: Recipient) -> Self {
+        Self {
+            key: r
+                .key
+                .expect("validator must populate Recipient.key before constructing ValidatedRecipient"),
+            name: r.name,
+            address: r.address,
+            company_id: r.company_id,
+            vat_number: r.vat_number,
+        }
+    }
+}
+
 /// A fully validated configuration with all required sections present.
+///
+/// Invariants encoded in the type system (post-validation):
+/// - `recipients` has at least one entry.
+/// - `default_recipient_idx` is in-bounds for `recipients` (use
+///   [`default_recipient`](Self::default_recipient) to dereference safely).
+/// - `payment` has at least one entry.
+/// - `presets` has at least one entry.
+/// - Every recipient's key is `Some` (encoded as a non-`Option` field on
+///   [`ValidatedRecipient`]).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ValidatedConfig {
     pub sender: Sender,
-    pub recipient: Recipient,
     /// All available recipients (guaranteed non-empty).
-    pub recipients: Vec<Recipient>,
-    /// Key of the default recipient profile.
-    pub default_recipient_key: RecipientKey,
+    pub recipients: NonEmpty<ValidatedRecipient>,
+    /// Index of the default recipient within `recipients`.
+    /// Invariant: `< recipients.len()` (validator enforces).
+    pub default_recipient_idx: usize,
     /// Guaranteed non-empty.
-    pub payment: Vec<PaymentMethod>,
+    pub payment: NonEmpty<PaymentMethod>,
     /// Guaranteed non-empty.
-    pub presets: Vec<Preset>,
+    pub presets: NonEmpty<Preset>,
     pub defaults: Defaults,
     pub branding: ValidatedBranding,
     pub template: TemplateKey,
@@ -81,10 +124,17 @@ pub struct ValidatedConfig {
 }
 
 impl ValidatedConfig {
-    /// Returns the default recipient (the one matching `default_recipient_key`).
-    #[allow(dead_code)] // needed by Story 7.2 (recipient selection)
-    pub fn active_recipient(&self) -> &Recipient {
-        &self.recipient
+    /// Borrow the default recipient — the one referenced by
+    /// [`default_recipient_idx`](Self::default_recipient_idx).
+    pub fn default_recipient(&self) -> &ValidatedRecipient {
+        // Safe by construction: validator guarantees the index is in-bounds.
+        &self.recipients[self.default_recipient_idx]
+    }
+
+    /// Borrow the default recipient's key. Convenience accessor for call
+    /// sites that previously used `default_recipient_key` directly.
+    pub fn default_recipient_key(&self) -> &RecipientKey {
+        &self.default_recipient().key
     }
 }
 
@@ -194,22 +244,40 @@ impl Config {
         if missing.is_empty() {
             let recipients_vec = recipients.unwrap();
             let dk = default_key.unwrap();
-            let recipient = recipients_vec
+
+            // Locate the default recipient's index before consuming the vec,
+            // so the resulting NonEmpty + idx pair is invariant-by-construction.
+            let default_idx = recipients_vec
                 .iter()
-                .find(|r| r.key.as_ref() == Some(&dk))
-                .cloned()
-                .unwrap();
+                .position(|r| r.key.as_ref() == Some(&dk))
+                .expect("default key validated against recipients above");
+
+            // Tighten Recipient (Option<RecipientKey>) → ValidatedRecipient
+            // (RecipientKey). Validator already enforced `key.is_some()` above.
+            let validated_recipients: Vec<ValidatedRecipient> = recipients_vec
+                .into_iter()
+                .map(ValidatedRecipient::from_recipient)
+                .collect();
+            let recipients_ne = NonEmpty::try_from_vec(validated_recipients)
+                .expect("recipients non-empty checked above");
+
+            // Both `payment` and `presets` are guaranteed non-empty by the
+            // missing-section check above; lift them into `NonEmpty` to encode
+            // that statically.
+            let payment_ne = NonEmpty::try_from_vec(payment.unwrap())
+                .expect("payment non-empty checked above");
+            let presets_ne = NonEmpty::try_from_vec(presets.unwrap())
+                .expect("presets non-empty checked above");
 
             let resolved_defaults = defaults.unwrap_or_default();
             let template = resolved_defaults.template;
             let locale = resolved_defaults.locale;
             Ok(ValidationOutcome::Complete(ValidatedConfig {
                 sender: sender.unwrap(),
-                recipient,
-                recipients: recipients_vec,
-                default_recipient_key: dk,
-                payment: payment.unwrap(),
-                presets: presets.unwrap(),
+                recipients: recipients_ne,
+                default_recipient_idx: default_idx,
+                payment: payment_ne,
+                presets: presets_ne,
                 defaults: resolved_defaults,
                 branding: match branding {
                     Some(b) => ValidatedBranding {
@@ -288,10 +356,10 @@ mod tests {
         match result {
             ValidationOutcome::Complete(v) => {
                 assert_eq!(v.sender.name, "Alice");
-                assert_eq!(v.recipient.name, "Bob Corp");
+                assert_eq!(v.default_recipient().name, "Bob Corp");
                 assert_eq!(v.recipients.len(), 1);
-                assert_eq!(v.default_recipient_key.as_str(), "bob-corp");
-                assert_eq!(v.recipient.key, Some(RecipientKey::try_new("bob-corp").unwrap()));
+                assert_eq!(v.default_recipient_key().as_str(), "bob-corp");
+                assert_eq!(v.default_recipient().key, RecipientKey::try_new("bob-corp").unwrap());
                 assert_eq!(v.payment.len(), 1);
                 assert_eq!(v.presets.len(), 1);
                 assert_eq!(v.defaults.currency, crate::domain::Currency::Eur);
@@ -437,9 +505,9 @@ mod tests {
         match result {
             ValidationOutcome::Complete(v) => {
                 assert_eq!(v.recipients.len(), 1);
-                assert_eq!(v.default_recipient_key.as_str(), "bob-corp");
-                assert_eq!(v.recipient.name, "Bob Corp");
-                assert_eq!(v.recipient.key, Some(RecipientKey::try_new("bob-corp").unwrap()));
+                assert_eq!(v.default_recipient_key().as_str(), "bob-corp");
+                assert_eq!(v.default_recipient().name, "Bob Corp");
+                assert_eq!(v.default_recipient().key, RecipientKey::try_new("bob-corp").unwrap());
             }
             ValidationOutcome::Incomplete { .. } => panic!("Expected Complete"),
         }
@@ -481,8 +549,8 @@ mod tests {
         match result {
             ValidationOutcome::Complete(v) => {
                 assert_eq!(v.recipients.len(), 2);
-                assert_eq!(v.default_recipient_key.as_str(), "globex");
-                assert_eq!(v.recipient.name, "Globex Inc");
+                assert_eq!(v.default_recipient_key().as_str(), "globex");
+                assert_eq!(v.default_recipient().name, "Globex Inc");
             }
             ValidationOutcome::Incomplete { .. } => panic!("Expected Complete"),
         }
@@ -657,17 +725,17 @@ mod tests {
         // Assert — v2 recipients wins, not the v1 recipient
         match result {
             ValidationOutcome::Complete(v) => {
-                assert_eq!(v.recipient.name, "Bob Corp");
+                assert_eq!(v.default_recipient().name, "Bob Corp");
                 assert_eq!(v.recipients.len(), 1);
             }
             ValidationOutcome::Incomplete { .. } => panic!("Expected Complete"),
         }
     }
 
-    // ── Story 7.1 Phase 5: active_recipient() ──
+    // ── Story 7.1 Phase 5: default_recipient() ──
 
     #[test]
-    fn test_active_recipient_returns_default() {
+    fn test_default_recipient_returns_configured_default() {
         // Arrange
         let config = Config {
             sender: Some(make_sender()),
@@ -702,11 +770,11 @@ mod tests {
         };
 
         // Assert
-        assert_eq!(validated.active_recipient().name, "Globex Inc");
+        assert_eq!(validated.default_recipient().name, "Globex Inc");
     }
 
     #[test]
-    fn test_active_recipient_single_recipient() {
+    fn test_default_recipient_single_recipient() {
         // Arrange
         let config = make_complete_config();
 
@@ -717,7 +785,7 @@ mod tests {
         };
 
         // Assert
-        assert_eq!(validated.active_recipient().name, "Bob Corp");
+        assert_eq!(validated.default_recipient().name, "Bob Corp");
     }
 
     // ── Story 11.1: v1 backwards compatibility verification ──
@@ -743,8 +811,8 @@ mod tests {
         match result {
             ValidationOutcome::Complete(v) => {
                 assert_eq!(v.recipients.len(), 1, "v1 config should normalize to single-element recipients list");
-                assert_eq!(v.recipient.name, "Bob Corp");
-                assert!(!v.default_recipient_key.as_str().is_empty(), "default key should be auto-derived");
+                assert_eq!(v.default_recipient().name, "Bob Corp");
+                assert!(!v.default_recipient_key().as_str().is_empty(), "default key should be auto-derived");
             }
             ValidationOutcome::Incomplete { .. } => panic!("Expected Complete for v1 config"),
         }
