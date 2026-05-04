@@ -1,5 +1,12 @@
 // Invoice template (Amalthea: Editorial & refined) -- expects `data` variable to be defined
 
+// ─── Currency symbol (falls back to ISO code + space) ───
+#let currency-sym = (
+  "USD": "$",
+  "EUR": "€",
+  "UAH": "₴",
+).at(data.invoice.currency, default: data.invoice.currency + " ")
+
 // ─── Palette ───
 #let accent     = rgb(data.branding.accent_color)
 #let ink        = rgb("#16171a")
@@ -62,7 +69,7 @@
   meta-cell("Issued",  data.invoice.date),
   meta-cell("Due",     data.invoice.due_date),
   meta-cell("Period",  data.invoice.period),
-  meta-cell("Amount", [#data.invoice.currency #data.invoice.total]),
+  meta-cell("Amount", [#currency-sym#data.invoice.total]),
 )
 
 #v(0.4cm)
@@ -75,8 +82,8 @@
   gutter: 1.4cm,
   // From
   [
-    #caps-label("From")
-    #v(4pt)
+    #caps-label("From") \
+    #v(-4pt)
     #text(font: serif-font, size: 13pt, weight: "medium", fill: ink)[#data.sender.name]
     #v(3pt)
     #set text(size: 10pt, fill: ink-soft)
@@ -87,8 +94,8 @@
   ],
   // Billed To
   [
-    #caps-label("Billed to")
-    #v(4pt)
+    #caps-label("Billed to") \
+    #v(-4pt)
     #text(font: serif-font, size: 13pt, weight: "medium", fill: ink)[#data.recipient.name]
     #v(3pt)
     #set text(size: 10pt, fill: ink-soft)
@@ -96,12 +103,19 @@
       #ln \
     ]
     #if "company_id" in data.recipient or "vat_number" in data.recipient {
-      v(2pt)
+      v(8pt)
       block[
-        #set text(size: 8.5pt, fill: ink-muted)
-        #if "company_id" in data.recipient [Company ID #data.recipient.company_id]
-        #if "company_id" in data.recipient and "vat_number" in data.recipient [ · ]
-        #if "vat_number" in data.recipient [VAT #data.recipient.vat_number]
+        #if "company_id" in data.recipient [
+          #caps-label("Company ID") \
+          #v(2pt)
+          #text(size: 10pt, fill: ink-soft)[#data.recipient.company_id]
+        ]
+        #if "company_id" in data.recipient and "vat_number" in data.recipient { v(8pt) }
+        #if "vat_number" in data.recipient [
+          #caps-label("VAT") \
+          #v(2pt)
+          #text(size: 10pt, fill: ink-soft)[#data.recipient.vat_number]
+        ]
       ]
     }
   ],
@@ -179,11 +193,12 @@
       columns: (auto, auto),
       align: (right, right),
       stroke: none,
-      inset: (x: 12pt, y: 4pt),
+      inset: (x: 0pt, y: 4pt),
+      column-gutter: 1.5em,
       text(size: 10pt, fill: ink-soft)[Subtotal],
-      text(size: 10pt, fill: ink)[#data.invoice.currency #data.invoice.subtotal],
+      text(size: 10pt, fill: ink)[#currency-sym#data.invoice.subtotal],
       text(size: 10pt, fill: ink-soft)[Tax],
-      text(size: 10pt, fill: ink)[#data.invoice.currency #data.invoice.tax_total],
+      text(size: 10pt, fill: ink)[#currency-sym#data.invoice.tax_total],
     )
   ]
 }
@@ -196,15 +211,15 @@
     columns: (1fr, auto),
     align: (left + horizon, right + horizon),
     text(size: 8pt, weight: "semibold", tracking: 0.14em, fill: white.transparentize(35%))[#upper("Total due")],
-    text(font: serif-font, size: 22pt, weight: "semibold", tracking: -0.3pt, fill: white)[#data.invoice.currency #data.invoice.total],
+    text(font: serif-font, size: 22pt, weight: "semibold", tracking: -0.3pt, fill: white)[#currency-sym#data.invoice.total],
   )
 ]
 
 #v(0.7cm)
 
 // ═══ PAYMENT ═══
-#caps-label("Payment")
-#v(0.35cm)
+#caps-label("Payment") \
+#v(2pt)
 #for (i, method) in data.payment.enumerate() [
   #if i > 0 [#v(0.4cm)]
   #if "label" in method [
