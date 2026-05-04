@@ -2,6 +2,8 @@
 
 A CLI tool that generates professional PDF invoices through an interactive prompt session. Built for freelance developers who send monthly invoices and need a fast, repeatable workflow with minimal manual input.
 
+![Sample invoice rendered with the amalthea template](samples/sample_amalthea.png)
+
 ## Table of Contents
 
 - [Features](#features)
@@ -23,7 +25,7 @@ A CLI tool that generates professional PDF invoices through an interactive promp
 - **Inline preset creation** — add new presets on the fly during invoice generation without editing the config file
 - **Per-preset currency and tax** — each preset can carry its own currency and tax rate, overriding the global default
 - **Smart defaults** — billing month defaults to last month, currency to EUR, payment terms to 30 days
-- **5 built-in PDF templates** — choose from callisto (bold), leda (clean), thebe (compact), amalthea (high-contrast), or metis (bare-bones)
+- **5 built-in PDF templates** — choose from callisto (bold), leda (clean), thebe (compact), amalthea (editorial), or metis (bare-bones)
 - **Locale-aware formatting** — dates and numbers in the PDF follow locale rules (en-US, en-GB, de-DE, fr-FR, cs-CZ, uk-UA)
 - **Non-interactive CLI mode** — `invoice generate` for scripting and CI; supports single-item (`--preset`/`--days`) or multi-item (`--items` JSON)
 - **Preset and recipient management** — `invoice preset list|delete` and `invoice recipient list|add|delete` subcommands
@@ -224,7 +226,7 @@ Five built-in templates control the visual style of the PDF:
 | `callisto` | Bold & structured |
 | `leda` | Clean & minimal (default) |
 | `thebe` | Compact & dense |
-| `amalthea` | High-contrast & vivid |
+| `amalthea` | Editorial & refined |
 | `metis` | Bare-bones & printable |
 
 Set the default in config (`defaults.template`) or override per-invoice with `--template` in CLI mode. In interactive mode, you're prompted to change the template before generating.
