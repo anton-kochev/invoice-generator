@@ -5,6 +5,7 @@ pub mod interactive;
 pub mod preset_cmd;
 pub mod recipient_cmd;
 pub mod recipient_selection;
+pub mod template;
 
 pub use error::CliError;
 
@@ -42,6 +43,11 @@ pub enum Command {
     Recipient {
         #[command(subcommand)]
         action: RecipientAction,
+    },
+    /// Manage invoice templates (manifest refresh, etc.)
+    Template {
+        #[command(subcommand)]
+        action: template::TemplateAction,
     },
 }
 

@@ -259,7 +259,10 @@ pub struct ValidatedConfig {
     pub presets: NonEmpty<Preset>,
     pub defaults: Defaults,
     pub branding: ValidatedBranding,
-    pub template: TemplateKey,
+    /// Slug of the template to use. Carried as a string so the registry
+    /// (which lives in the `pdf` crate) can resolve it to an on-disk file
+    /// without forcing `config` to depend on `pdf`.
+    pub template: String,
     pub locale: Locale,
 }
 
@@ -293,7 +296,7 @@ impl ValidatedConfig {
         presets: NonEmpty<Preset>,
         defaults: Defaults,
         branding: ValidatedBranding,
-        template: TemplateKey,
+        template: String,
         locale: Locale,
     ) -> Self {
         assert!(
@@ -567,7 +570,7 @@ impl Config {
             .expect("presets non-empty checked above");
 
         let resolved_defaults = defaults.unwrap_or_default();
-        let template = resolved_defaults.template;
+        let template = resolved_defaults.template.clone();
         let locale = resolved_defaults.locale;
 
         Ok(ValidationOutcome::Complete(ValidatedConfig {
@@ -1125,7 +1128,7 @@ mod tests {
         // Assert
         match result {
             ValidationOutcome::Complete(v) => {
-                assert_eq!(v.template, TemplateKey::Leda);
+                assert_eq!(v.template, "leda");
             }
             ValidationOutcome::Incomplete { .. } => panic!("Expected Complete"),
         }
@@ -1136,7 +1139,7 @@ mod tests {
         // Arrange
         let mut config = make_complete_config();
         config.defaults = Some(Defaults {
-            template: TemplateKey::Callisto,
+            template: "callisto".into(),
             ..Defaults::default()
         });
 
@@ -1146,7 +1149,7 @@ mod tests {
         // Assert
         match result {
             ValidationOutcome::Complete(v) => {
-                assert_eq!(v.template, TemplateKey::Callisto);
+                assert_eq!(v.template, "callisto");
             }
             ValidationOutcome::Incomplete { .. } => panic!("Expected Complete"),
         }
@@ -1164,7 +1167,7 @@ mod tests {
         // Assert
         match result {
             ValidationOutcome::Complete(v) => {
-                assert_eq!(v.template, TemplateKey::Leda);
+                assert_eq!(v.template, "leda");
             }
             ValidationOutcome::Incomplete { .. } => panic!("Expected Complete"),
         }

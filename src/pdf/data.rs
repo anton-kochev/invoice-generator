@@ -246,7 +246,7 @@ mod tests {
             .unwrap(),
             Defaults::default(),
             ValidatedBranding::default(),
-            TemplateKey::Leda,
+            "leda".into(),
             crate::locale::Locale::EnUs,
         )
     }
@@ -362,7 +362,7 @@ mod tests {
             .unwrap(),
             Defaults::default(),
             ValidatedBranding::default(),
-            TemplateKey::Leda,
+            "leda".into(),
             crate::locale::Locale::EnUs,
         )
     }

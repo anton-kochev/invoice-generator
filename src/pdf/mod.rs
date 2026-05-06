@@ -1,26 +1,29 @@
 mod data;
 pub mod error;
+pub mod manifest;
+pub mod registry;
+pub mod remote;
 mod world;
 
 pub use error::PdfError;
+pub use registry::Template;
 
 use std::path::Path;
 
 use typst::layout::PagedDocument;
 
-use crate::config::types::TemplateKey;
 use crate::config::validator::{ValidatedConfig, ValidatedRecipient};
 use crate::invoice::types::InvoiceSummary;
 
-/// Return the Typst template source for the given template key.
-fn template_source(key: TemplateKey) -> &'static str {
-    match key {
-        TemplateKey::Callisto => include_str!("template/callisto.typ"),
-        TemplateKey::Leda => include_str!("template/leda.typ"),
-        TemplateKey::Thebe => include_str!("template/thebe.typ"),
-        TemplateKey::Amalthea => include_str!("template/amalthea.typ"),
-        TemplateKey::Metis => include_str!("template/metis.typ"),
-    }
+/// Read the on-disk Typst source for a template.
+fn read_template_source(template: &Template) -> Result<String, PdfError> {
+    std::fs::read_to_string(&template.source).map_err(|e| {
+        PdfError::Manifest(format!(
+            "read template '{}' at {}: {e}",
+            template.name,
+            template.source.display()
+        ))
+    })
 }
 
 /// Resolve a logo path relative to the config directory.
@@ -65,7 +68,7 @@ pub fn generate_pdf(
     config: &ValidatedConfig,
     recipient: &ValidatedRecipient,
     config_dir: &Path,
-    template: TemplateKey,
+    template: &Template,
     locale: crate::locale::Locale,
 ) -> Result<Vec<u8>, PdfError> {
     let logo = config
@@ -79,8 +82,8 @@ pub fn generate_pdf(
     let json = serde_json::to_vec(&invoice_data)
         .map_err(|e| PdfError::Compile(format!("JSON serialization failed: {e}")))?;
 
-    let source = template_source(template);
-    let world = world::InvoiceWorld::new(source, json, logo);
+    let source = read_template_source(template)?;
+    let world = world::InvoiceWorld::new(&source, json, logo);
 
     let warned = typst::compile::<PagedDocument>(&world);
     let document = warned.output.map_err(|diagnostics| {
@@ -102,7 +105,32 @@ mod tests {
     use crate::config::types::*;
     use crate::config::validator::{ValidatedBranding, ValidatedPaymentMethod};
     use crate::invoice::types::*;
+    use std::path::PathBuf;
+    use tempfile::TempDir;
     use time::{Date, Month};
+
+    /// Path to the repo's `templates/` dir, used by tests so they don't depend
+    /// on the user's `<XDG_CONFIG>` state.
+    fn repo_templates_dir() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("templates")
+    }
+
+    /// Build a `Template` pointing at a `.typ` file in the repo's
+    /// `templates/` dir. Used by tests to render every shipped template
+    /// without going through the user's local install.
+    fn repo_template(name: &str) -> Template {
+        Template {
+            name: name.to_string(),
+            description: None,
+            source: repo_templates_dir().join(format!("{name}.typ")),
+        }
+    }
+
+    /// All shipped template names. Tests iterate over this in lieu of the
+    /// removed `TemplateKey::ALL`.
+    const ALL_TEMPLATE_NAMES: [&str; 6] = [
+        "callisto", "leda", "thebe", "amalthea", "metis", "io",
+    ];
 
     fn make_summary() -> InvoiceSummary {
         InvoiceSummary {
@@ -166,29 +194,29 @@ mod tests {
             .unwrap(),
             Defaults::default(),
             ValidatedBranding::default(),
-            TemplateKey::Leda,
+            "leda".into(),
             crate::locale::Locale::EnUs,
         )
     }
 
     #[test]
-    fn test_template_source_leda_returns_nonempty_string() {
+    fn test_read_template_source_leda_returns_nonempty() {
         // Arrange & Act
-        let source = template_source(TemplateKey::Leda);
+        let template = repo_template("leda");
+        let source = read_template_source(&template).expect("leda source readable");
         // Assert
         assert!(!source.is_empty());
         assert!(source.contains("#"), "Should contain Typst syntax");
     }
 
     #[test]
-    fn test_template_source_all_keys_return_nonempty() {
+    fn test_read_template_source_all_shipped_return_nonempty() {
         // Arrange & Act & Assert
-        for key in TemplateKey::ALL {
-            let source = template_source(key);
-            assert!(
-                !source.is_empty(),
-                "template_source({key}) should be non-empty"
-            );
+        for name in ALL_TEMPLATE_NAMES {
+            let template = repo_template(name);
+            let source = read_template_source(&template)
+                .unwrap_or_else(|e| panic!("read {name}: {e}"));
+            assert!(!source.is_empty(), "{name} should be non-empty");
         }
     }
 
@@ -197,13 +225,14 @@ mod tests {
         // Arrange
         let summary = make_summary();
         let config = make_config();
+        let template = repo_template("leda");
         // Act
         let result = generate_pdf(
             &summary,
             &config,
             config.default_recipient(),
             Path::new("."),
-            TemplateKey::Leda,
+            &template,
             crate::locale::Locale::EnUs,
         );
         // Assert
@@ -219,13 +248,14 @@ mod tests {
         // Arrange
         let summary = make_summary();
         let config = make_config();
+        let template = repo_template("leda");
         // Act
         let pdf1 = generate_pdf(
             &summary,
             &config,
             config.default_recipient(),
             Path::new("."),
-            TemplateKey::Leda,
+            &template,
             crate::locale::Locale::EnUs,
         )
         .unwrap();
@@ -234,7 +264,7 @@ mod tests {
             &config,
             config.default_recipient(),
             Path::new("."),
-            TemplateKey::Leda,
+            &template,
             crate::locale::Locale::EnUs,
         )
         .unwrap();
@@ -247,13 +277,14 @@ mod tests {
         // Arrange
         let summary = make_summary();
         let config = make_config();
+        let template = repo_template("callisto");
         // Act
         let result = generate_pdf(
             &summary,
             &config,
             config.default_recipient(),
             Path::new("."),
-            TemplateKey::Callisto,
+            &template,
             crate::locale::Locale::EnUs,
         );
         // Assert
@@ -268,7 +299,7 @@ mod tests {
     #[test]
     fn test_resolve_logo_existing_file_returns_bytes() {
         // Arrange
-        let dir = tempfile::tempdir().unwrap();
+        let dir = TempDir::new().unwrap();
         let logo_path = dir.path().join("logo.png");
         // Minimal PNG header (8 bytes)
         std::fs::write(&logo_path, b"\x89PNG\r\n\x1a\n").unwrap();
@@ -284,7 +315,7 @@ mod tests {
     #[test]
     fn test_resolve_logo_missing_file_returns_none() {
         // Arrange
-        let dir = tempfile::tempdir().unwrap();
+        let dir = TempDir::new().unwrap();
         // Act
         let result = resolve_logo("nonexistent.png", dir.path());
         // Assert
@@ -294,7 +325,7 @@ mod tests {
     #[test]
     fn test_resolve_logo_relative_path_resolved() {
         // Arrange
-        let dir = tempfile::tempdir().unwrap();
+        let dir = TempDir::new().unwrap();
         let subdir = dir.path().join("assets");
         std::fs::create_dir(&subdir).unwrap();
         std::fs::write(subdir.join("logo.jpg"), b"\xFF\xD8\xFF").unwrap();
@@ -309,7 +340,7 @@ mod tests {
     #[test]
     fn test_resolve_logo_unsupported_format_returns_none() {
         // Arrange
-        let dir = tempfile::tempdir().unwrap();
+        let dir = TempDir::new().unwrap();
         std::fs::write(dir.path().join("logo.svg"), b"<svg></svg>").unwrap();
         // Act
         let result = resolve_logo("logo.svg", dir.path());
@@ -322,13 +353,14 @@ mod tests {
         // Arrange
         let summary = make_summary();
         let config = make_config(); // branding.logo is None
+        let template = repo_template("leda");
         // Act
         let result = generate_pdf(
             &summary,
             &config,
             config.default_recipient(),
             Path::new("."),
-            TemplateKey::Leda,
+            &template,
             crate::locale::Locale::EnUs,
         );
         // Assert
@@ -343,13 +375,14 @@ mod tests {
         config.branding.accent_color = crate::domain::HexColor::try_new("#ff5500").unwrap();
         config.branding.font = Some("Arial".into());
         config.branding.footer_text = Some("Custom footer text".into());
+        let template = repo_template("leda");
         // Act
         let result = generate_pdf(
             &summary,
             &config,
             config.default_recipient(),
             Path::new("."),
-            TemplateKey::Leda,
+            &template,
             crate::locale::Locale::EnUs,
         );
         // Assert
@@ -363,13 +396,14 @@ mod tests {
         let summary = make_summary();
         let mut config = make_config();
         config.branding.footer_text = Some("".into());
+        let template = repo_template("leda");
         // Act
         let result = generate_pdf(
             &summary,
             &config,
             config.default_recipient(),
             Path::new("."),
-            TemplateKey::Leda,
+            &template,
             crate::locale::Locale::EnUs,
         );
         // Assert
@@ -442,26 +476,37 @@ mod tests {
             .unwrap(),
             Defaults::default(),
             ValidatedBranding::default(),
-            TemplateKey::Leda,
+            "leda".into(),
             crate::locale::Locale::EnUs,
         )
     }
 
+    /// All non-`io` templates render with the standard data model produced by
+    /// `InvoiceData::from_parts`. The `io` template requires a hand-crafted
+    /// bilingual data blob and is exercised separately via
+    /// [`regen_io_sample`].
+    const STANDARD_TEMPLATE_NAMES: [&str; 5] =
+        ["callisto", "leda", "thebe", "amalthea", "metis"];
+
     #[test]
     fn test_template_source_each_key_returns_distinct_content() {
         // Arrange
-        let keys = TemplateKey::ALL;
+        let templates: Vec<Template> =
+            ALL_TEMPLATE_NAMES.iter().map(|n| repo_template(n)).collect();
 
         // Act
-        let sources: Vec<&str> = keys.iter().map(|k| template_source(*k)).collect();
+        let sources: Vec<String> = templates
+            .iter()
+            .map(|t| read_template_source(t).expect("template readable"))
+            .collect();
 
         // Assert
         for i in 0..sources.len() {
             for j in (i + 1)..sources.len() {
                 assert_ne!(
                     sources[i], sources[j],
-                    "template_source({}) and template_source({}) should be distinct",
-                    keys[i], keys[j]
+                    "{} and {} should be distinct",
+                    templates[i].name, templates[j].name
                 );
             }
         }
@@ -472,6 +517,7 @@ mod tests {
         // Arrange
         let summary = make_summary();
         let config = make_config();
+        let template = repo_template("callisto");
 
         // Act
         let result = generate_pdf(
@@ -479,7 +525,7 @@ mod tests {
             &config,
             config.default_recipient(),
             Path::new("."),
-            TemplateKey::Callisto,
+            &template,
             crate::locale::Locale::EnUs,
         );
 
@@ -496,6 +542,7 @@ mod tests {
         // Arrange
         let summary = make_summary();
         let config = make_config();
+        let template = repo_template("thebe");
 
         // Act
         let result = generate_pdf(
@@ -503,7 +550,7 @@ mod tests {
             &config,
             config.default_recipient(),
             Path::new("."),
-            TemplateKey::Thebe,
+            &template,
             crate::locale::Locale::EnUs,
         );
 
@@ -520,6 +567,7 @@ mod tests {
         // Arrange
         let summary = make_summary();
         let config = make_config();
+        let template = repo_template("amalthea");
 
         // Act
         let result = generate_pdf(
@@ -527,7 +575,7 @@ mod tests {
             &config,
             config.default_recipient(),
             Path::new("."),
-            TemplateKey::Amalthea,
+            &template,
             crate::locale::Locale::EnUs,
         );
 
@@ -544,6 +592,7 @@ mod tests {
         // Arrange
         let summary = make_summary();
         let config = make_config();
+        let template = repo_template("metis");
 
         // Act
         let result = generate_pdf(
@@ -551,7 +600,7 @@ mod tests {
             &config,
             config.default_recipient(),
             Path::new("."),
-            TemplateKey::Metis,
+            &template,
             crate::locale::Locale::EnUs,
         );
 
@@ -569,19 +618,20 @@ mod tests {
         let summary = make_summary_with_tax();
         let config = make_config();
 
-        // Act & Assert
-        for key in TemplateKey::ALL {
+        // Act & Assert — `io` uses a different data model (see regen helper).
+        for name in STANDARD_TEMPLATE_NAMES {
+            let template = repo_template(name);
             let result = generate_pdf(
                 &summary,
                 &config,
                 config.default_recipient(),
                 Path::new("."),
-                key,
+                &template,
                 crate::locale::Locale::EnUs,
             );
             assert!(
                 result.is_ok(),
-                "Template {key} should succeed with tax line items"
+                "Template {name} should succeed with tax line items"
             );
         }
     }
@@ -592,19 +642,20 @@ mod tests {
         let summary = make_summary();
         let config = make_config_without_optional_fields();
 
-        // Act & Assert
-        for key in TemplateKey::ALL {
+        // Act & Assert — `io` uses a different data model (see regen helper).
+        for name in STANDARD_TEMPLATE_NAMES {
+            let template = repo_template(name);
             let result = generate_pdf(
                 &summary,
                 &config,
                 config.default_recipient(),
                 Path::new("."),
-                key,
+                &template,
                 crate::locale::Locale::EnUs,
             );
             assert!(
                 result.is_ok(),
-                "Template {key} should succeed without optional fields"
+                "Template {name} should succeed without optional fields"
             );
         }
     }
@@ -618,19 +669,20 @@ mod tests {
         config.branding.font = Some("Arial".into());
         config.branding.footer_text = Some("Custom footer".into());
 
-        // Act & Assert
-        for key in TemplateKey::ALL {
+        // Act & Assert — `io` uses a different data model (see regen helper).
+        for name in STANDARD_TEMPLATE_NAMES {
+            let template = repo_template(name);
             let result = generate_pdf(
                 &summary,
                 &config,
                 config.default_recipient(),
                 Path::new("."),
-                key,
+                &template,
                 crate::locale::Locale::EnUs,
             );
             assert!(
                 result.is_ok(),
-                "Template {key} should succeed with custom branding"
+                "Template {name} should succeed with custom branding"
             );
         }
     }
@@ -642,19 +694,20 @@ mod tests {
         let mut config = make_config();
         config.branding.footer_text = Some("".into());
 
-        // Act & Assert
-        for key in TemplateKey::ALL {
+        // Act & Assert — `io` uses a different data model (see regen helper).
+        for name in STANDARD_TEMPLATE_NAMES {
+            let template = repo_template(name);
             let result = generate_pdf(
                 &summary,
                 &config,
                 config.default_recipient(),
                 Path::new("."),
-                key,
+                &template,
                 crate::locale::Locale::EnUs,
             );
             assert!(
                 result.is_ok(),
-                "Template {key} should succeed with empty footer"
+                "Template {name} should succeed with empty footer"
             );
         }
     }
@@ -697,31 +750,123 @@ mod tests {
             .unwrap(),
             Defaults::default(),
             ValidatedBranding::default(),
-            TemplateKey::Leda,
+            "leda".into(),
             crate::locale::Locale::EnUs,
         )
     }
 
+    /// Regen helper: writes `samples/sample_io.pdf` by hand-crafting a
+    /// bilingual UA/EN JSON blob (the `io` template needs fields not produced
+    /// by `InvoiceData::from_parts`). Bypasses the data mapper entirely and
+    /// feeds the JSON directly to `InvoiceWorld`.
+    ///
+    /// Run with: `cargo test regen_io_sample -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn regen_io_sample() {
+        // Arrange — hand-crafted JSON matching the `io.typ` field contract.
+        let data = serde_json::json!({
+            "sender": {
+                "name": "PE Surname Given Patronymic",
+                "name_ua": "ФОП Прізвище Імʼя Побатькові",
+                "address": [
+                    "00000, Ukraine, Kyiv,",
+                    "Example St, 1/1"
+                ],
+                "address_ua": [
+                    "00000, Україна, м. Київ,",
+                    "вул. Прикладна, 1, кв. 1"
+                ],
+                "email": "synthetic@example.com"
+            },
+            "recipient": {
+                "name": "Globex OÜ",
+                "address": [
+                    "Harju maakond, Tallinn,",
+                    "Kesklinna linnaosa, Tornimäe tn 5",
+                    "10145, Estonia"
+                ],
+                "address_ua": [
+                    "Harju maakond, Tallinn,",
+                    "Kesklinna linnaosa, Tornimäe tn 5",
+                    "10145, Estonia"
+                ]
+            },
+            "invoice": {
+                "number": "2026-04",
+                "date": "30.04.2026",
+                "currency": "USD",
+                "currency_name_ua": "Долар США",
+                "description": "Payment for consulting on informatization",
+                "description_ua": "Консультування з питань інформатизації",
+                "amount_in_words": "Five hundred sixty USD",
+                "amount_in_words_ua": "П'ятсот шістдесят доларів США",
+                "total": "560.00",
+                "line_items": [
+                    {
+                        "description": "Consulting on informatization. Period: March 2026",
+                        "description_ua": "Консультування з питань інформатизації, березень 2026",
+                        "days": "1",
+                        "rate": "560.00",
+                        "amount": "560.00"
+                    }
+                ]
+            },
+            "payment": [
+                {
+                    "beneficiary": "PE SURNAME GIVEN",
+                    "beneficiary_bank": "JSC EXAMPLE BANK, KYIV, UKRAINE",
+                    "account_number": "UA00 0000 0000 0000 0000 0000 000",
+                    "iban": "UA000000000000000000000000000",
+                    "bic_swift": "EXMPUAUKXXX",
+                    "correspondent_bank": "WISE",
+                    "correspondent_account": "BE00 0000 0000 0000",
+                    "correspondent_swift": "TRWIBEB1XXX"
+                }
+            ],
+            "branding": {
+                "accent_color": "#6b3421",
+                "font": ["Helvetica", "Noto Sans", "Liberation Sans"]
+            }
+        });
+
+        let json = serde_json::to_vec(&data).expect("JSON serialization");
+        let template = repo_template("io");
+        let source = read_template_source(&template).expect("io source readable");
+        let world = world::InvoiceWorld::new(&source, json, None);
+
+        // Act
+        let warned = typst::compile::<PagedDocument>(&world);
+        let document = warned.output.expect("Io template should compile");
+        let pdf = typst_pdf::pdf(&document, &typst_pdf::PdfOptions::default())
+            .expect("PDF export should succeed");
+
+        // Assert + write artifact
+        assert!(pdf.starts_with(b"%PDF"), "Output should start with PDF header");
+        std::fs::write("samples/sample_io.pdf", &pdf).expect("write sample PDF");
+    }
+
     #[test]
     fn test_generate_pdf_all_templates_render_without_label() {
-        // Arrange — load-bearing smoke test for the bug fix: every template
-        // must compile when `label` is absent from the payment dict.
+        // Arrange — load-bearing smoke test for the bug fix: every standard
+        // template must compile when `label` is absent from the payment dict.
         let summary = make_summary();
         let config = make_config_payment_no_label();
 
-        // Act & Assert
-        for key in TemplateKey::ALL {
+        // Act & Assert — `io` uses a different data model (see regen helper).
+        for name in STANDARD_TEMPLATE_NAMES {
+            let template = repo_template(name);
             let result = generate_pdf(
                 &summary,
                 &config,
                 config.default_recipient(),
                 Path::new("."),
-                key,
+                &template,
                 crate::locale::Locale::EnUs,
             );
             assert!(
                 result.is_ok(),
-                "Template {key} should compile when payment method has no label, got: {:?}",
+                "Template {name} should compile when payment method has no label, got: {:?}",
                 result.err()
             );
         }

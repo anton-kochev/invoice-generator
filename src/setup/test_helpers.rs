@@ -53,7 +53,10 @@ pub fn synthetic_defaults() -> Defaults {
         currency: crate::domain::Currency::Usd,
         invoice_date_day: 5,
         payment_terms_days: 14,
-        template: TemplateKey::Leda,
+        // `amalthea` is one of the three bundled-into-the-binary templates,
+        // so test fixtures can always render against it without depending on
+        // the user having run `template refresh`.
+        template: "amalthea".into(),
         locale: crate::locale::Locale::EnUs,
     }
 }

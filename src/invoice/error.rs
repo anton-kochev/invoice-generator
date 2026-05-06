@@ -40,10 +40,6 @@ pub enum InvoiceError {
     #[error("--items array must not be empty")]
     EmptyItems,
 
-    /// Unknown template key.
-    #[error("unknown template: \"{key}\". Available: {}", available.join(", "))]
-    InvalidTemplateKey { key: String, available: Vec<String> },
-
     /// Unknown locale code.
     #[error("unknown locale: \"{key}\". Available: {}", available.join(", "))]
     InvalidLocale { key: String, available: Vec<String> },
@@ -82,21 +78,4 @@ mod tests {
         assert!(msg.contains(">= 0"), "Expected '>= 0' in: {msg}");
     }
 
-    #[test]
-    fn test_invalid_template_key_displays_key_and_available() {
-        // Arrange
-        let err = InvoiceError::InvalidTemplateKey {
-            key: "ganymede".into(),
-            available: vec!["callisto".into(), "leda".into(), "thebe".into()],
-        };
-
-        // Act
-        let msg = format!("{err}");
-
-        // Assert
-        assert!(msg.contains("ganymede"), "Expected 'ganymede' in: {msg}");
-        assert!(msg.contains("callisto"), "Expected 'callisto' in: {msg}");
-        assert!(msg.contains("leda"), "Expected 'leda' in: {msg}");
-        assert!(msg.contains("thebe"), "Expected 'thebe' in: {msg}");
-    }
 }

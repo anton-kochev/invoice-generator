@@ -78,5 +78,8 @@ fn run(cli: Cli) -> Result<(), error::AppError> {
                 &mut std::io::stdout(),
             ),
         },
+        Some(Command::Template { action }) => {
+            cli::template::handle_template(action, &mut std::io::stdout())
+        }
     }
 }

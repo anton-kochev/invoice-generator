@@ -27,6 +27,22 @@ pub enum PdfError {
     /// subsystems.
     #[error("write: {0}")]
     Write(#[from] std::io::Error),
+
+    /// Failure operating on the template manifest or local templates dir
+    /// (resolving cache paths, reading the on-disk manifest, writing built-in
+    /// templates to disk, etc.).
+    #[error("manifest: {0}")]
+    Manifest(String),
+
+    /// Failure fetching a template or manifest from the upstream repository
+    /// (network error, non-2xx response, malformed body).
+    #[error("remote: {0}")]
+    Remote(String),
+
+    /// User asked for a template that is neither installed locally nor known
+    /// to the manifest cache.
+    #[error("template '{name}' not found locally. Available: {}", available.join(", "))]
+    TemplateNotFound { name: String, available: Vec<String> },
 }
 
 #[cfg(test)]

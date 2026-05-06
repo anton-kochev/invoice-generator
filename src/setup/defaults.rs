@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use super::prompter::Prompter;
 use super::prompts::prompt_parsed;
-use crate::config::types::{Config, Defaults, TemplateKey};
+use crate::config::types::{Config, Defaults};
 use crate::config::writer::save_config;
 use crate::domain::Currency;
 use crate::error::AppError;
@@ -30,17 +30,21 @@ pub fn collect_defaults(
     let invoice_date_day = prompter.u32_with_default("Invoice date (day of month):", 9)?;
     let payment_terms_days = prompter.u32_with_default("Payment terms (days):", 30)?;
 
+    // The setup wizard accepts any non-empty slug. The actual existence
+    // check against the local templates directory is deferred to PDF
+    // generation, where the failure mode is clearer (user gets a helpful
+    // "run `invoice-generator template refresh`" hint instead of a re-prompt
+    // loop during initial setup).
     let template = prompt_parsed(
         prompter,
         |p| p.text_with_default("Template:", "leda"),
         |input: String| {
-            TemplateKey::from_str(&input).map_err(|_| {
-                let list: Vec<String> = TemplateKey::ALL
-                    .iter()
-                    .map(|t| format!("{} ({})", t, t.description()))
-                    .collect();
-                format!("Invalid template. Available: {}", list.join(", "))
-            })
+            let trimmed = input.trim();
+            if trimmed.is_empty() {
+                Err("Template name cannot be empty.".to_string())
+            } else {
+                Ok(trimmed.to_string())
+            }
         },
     )?;
 
@@ -193,7 +197,7 @@ mod tests {
         collect_defaults(&prompter, &mut config, &cfg_path(&dir)).unwrap();
         // Assert
         let defaults = config.defaults.as_ref().unwrap();
-        assert_eq!(defaults.template, TemplateKey::Leda);
+        assert_eq!(defaults.template, "leda");
         prompter.assert_exhausted();
     }
 
@@ -212,10 +216,7 @@ mod tests {
         // Act
         collect_defaults(&prompter, &mut config, &cfg_path(&dir)).unwrap();
         // Assert
-        assert_eq!(
-            config.defaults.as_ref().unwrap().template,
-            TemplateKey::Callisto
-        );
+        assert_eq!(config.defaults.as_ref().unwrap().template, "callisto");
         prompter.assert_exhausted();
     }
 
@@ -235,56 +236,7 @@ mod tests {
         collect_defaults(&prompter, &mut config, &cfg_path(&dir)).unwrap();
         // Assert
         let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
-        assert_eq!(loaded.defaults.unwrap().template, TemplateKey::Thebe);
-        prompter.assert_exhausted();
-    }
-
-    #[test]
-    fn test_collect_defaults_invalid_template_reprompts() {
-        // Arrange
-        let dir = setup_dir(None);
-        let mut config = empty_config();
-        let prompter = MockPrompter::new(vec![
-            MockResponse::Text("EUR".into()),
-            MockResponse::U32(9),
-            MockResponse::U32(30),
-            MockResponse::Text("bogus".into()),
-            MockResponse::Text("leda".into()),
-            MockResponse::Text("en-US".into()),
-        ]);
-        // Act
-        collect_defaults(&prompter, &mut config, &cfg_path(&dir)).unwrap();
-        // Assert
-        assert_eq!(
-            config.defaults.as_ref().unwrap().template,
-            TemplateKey::Leda
-        );
-        prompter.assert_exhausted();
-    }
-
-    #[test]
-    fn test_collect_defaults_invalid_template_shows_available_list() {
-        // Arrange
-        let dir = setup_dir(None);
-        let mut config = empty_config();
-        let prompter = MockPrompter::new(vec![
-            MockResponse::Text("EUR".into()),
-            MockResponse::U32(9),
-            MockResponse::U32(30),
-            MockResponse::Text("xyz".into()),
-            MockResponse::Text("leda".into()),
-            MockResponse::Text("en-US".into()),
-        ]);
-        // Act
-        collect_defaults(&prompter, &mut config, &cfg_path(&dir)).unwrap();
-        // Assert
-        let messages = prompter.messages.borrow();
-        assert!(
-            messages
-                .iter()
-                .any(|m| m.contains("callisto") && m.contains("leda") && m.contains("thebe")),
-            "Expected available templates in messages, got: {messages:?}"
-        );
+        assert_eq!(loaded.defaults.unwrap().template, "thebe");
         prompter.assert_exhausted();
     }
 

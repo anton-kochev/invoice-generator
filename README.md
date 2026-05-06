@@ -25,10 +25,10 @@ A CLI tool that generates professional PDF invoices through an interactive promp
 - **Inline preset creation** — add new presets on the fly during invoice generation without editing the config file
 - **Per-preset currency and tax** — each preset can carry its own currency and tax rate, overriding the global default
 - **Smart defaults** — billing month defaults to last month, currency to EUR, payment terms to 30 days
-- **5 built-in PDF templates** — choose from callisto (bold), leda (clean), thebe (compact), amalthea (editorial), or metis (bare-bones)
+- **Decoupled template system** — 3 templates (amalthea, metis, thebe) ship in the binary; additional templates are fetched on demand from a remote GitHub repo without needing a new binary release
 - **Locale-aware formatting** — dates and numbers in the PDF follow locale rules (en-US, en-GB, de-DE, fr-FR, cs-CZ, uk-UA)
 - **Non-interactive CLI mode** — `invoice generate` for scripting and CI; supports single-item (`--preset`/`--days`) or multi-item (`--items` JSON)
-- **Preset and recipient management** — `invoice preset list|delete` and `invoice recipient list|add|delete` subcommands
+- **Preset, recipient, and template management** — `invoice preset list|delete`, `invoice recipient list|add|delete`, and `invoice template refresh` subcommands
 - **Professional PDF output** — clean A4 layout rendered via Typst with line-item table, payment details, and formatted totals
 - **Overwrite protection** — prompts before overwriting an existing PDF; standardized filenames (`Invoice_Name_MonYYYY.pdf`)
 
@@ -90,6 +90,9 @@ invoice-generator preset delete old-key
 invoice-generator recipient list
 invoice-generator recipient add
 invoice-generator recipient delete old-key
+
+# Refresh the remote template manifest
+invoice-generator template refresh
 ```
 
 On first run, the setup wizard walks you through entering your details, client info, payment methods, and presets. On subsequent runs, you go straight to invoice generation.
@@ -199,7 +202,7 @@ branding:
 | `currency` | `EUR` | Currency code used in invoice |
 | `payment_terms_days` | `30` | Days until payment is due |
 | `invoice_date_day` | `9` | Day of the month for the invoice date (following month) |
-| `template` | `leda` | PDF template key (callisto, leda, thebe, amalthea, metis) |
+| `template` | `leda` | PDF template name (any installed template; see [Templates](#templates)) |
 | `locale` | `en-US` | Locale for date/number formatting in PDF (en-US, en-GB, de-DE, fr-FR, cs-CZ, uk-UA) |
 
 All sections except `defaults` and `branding` are required. The `defaults` section is optional and falls back to the values above. Field aliases are supported for convenience (`bic` for `bic_swift`, `vat` for `vat_number`).
@@ -219,17 +222,36 @@ The generated PDF is a single-page A4 document with:
 
 ### Templates
 
-Five built-in templates control the visual style of the PDF:
+Templates are stored as `.typ` files (Typst source) in `~/.config/invoice-generator/templates/`. They control the visual style of the PDF and are decoupled from the CLI binary — adding or modifying a template doesn't require a new release.
+
+**Three templates ship bundled with the binary** and are written to your local templates dir on first run:
+
+| Template | Style |
+|----------|-------|
+| `amalthea` | Editorial & refined |
+| `metis` | Bare-bones & printable |
+| `thebe` | Compact & dense |
+
+**Additional templates are available remotely** from the project's GitHub repo (`templates/` directory). They're not bundled in the binary; you fetch them on demand:
 
 | Template | Style |
 |----------|-------|
 | `callisto` | Bold & structured |
-| `leda` | Clean & minimal (default) |
-| `thebe` | Compact & dense |
-| `amalthea` | Editorial & refined |
-| `metis` | Bare-bones & printable |
+| `leda` | Clean & minimal |
+| `io` | Bilingual UA/EN refined card |
 
-Set the default in config (`defaults.template`) or override per-invoice with `--template` in CLI mode. In interactive mode, you're prompted to change the template before generating.
+**Installing a remote template:**
+
+1. Run `invoice-generator template refresh` to fetch the latest manifest of available templates.
+2. During invoice generation, when prompted to select a template, pick "Browse remote templates…" — pick a template, and it's downloaded to `~/.config/invoice-generator/templates/` and used for the current invoice.
+
+After install, the template is local and works offline. The CLI never makes a network call except via `template refresh` and the explicit "Browse remote templates…" flow.
+
+**Adding your own template:** drop a `.typ` file in `~/.config/invoice-generator/templates/`. It'll appear in the prompt on next run.
+
+**Set the default** in config (`defaults.template`) or override per-invoice with `--template` in CLI mode. In interactive mode, you're prompted to change the template before generating.
+
+> **Migration note:** if you're upgrading from a previous version where `leda` was bundled, your config may reference `defaults.template: leda`. Since `leda` is now remote-only, run `invoice-generator template refresh` and install it via the interactive "Browse remote templates…" flow — or change `defaults.template` to one of the bundled three.
 
 ### Locale Formatting
 

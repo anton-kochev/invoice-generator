@@ -3,7 +3,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 use crate::config::ConfigError;
-use crate::config::types::{Preset, TemplateKey};
+use crate::config::types::Preset;
 use crate::config::validator::{ValidatedConfig, ValidatedRecipient};
 use crate::domain::Currency;
 use crate::error::AppError;
@@ -11,7 +11,8 @@ use crate::invoice::InvoiceError;
 use crate::invoice::summary::build_summary;
 use crate::invoice::types::{InvoicePeriod, LineItem};
 use crate::locale::Locale;
-use crate::pdf::generate_pdf;
+use crate::pdf::registry::{Template, TemplateRegistry};
+use crate::pdf::{generate_pdf, PdfError};
 
 use crate::invoice::currency::effective_currency;
 
@@ -154,6 +155,26 @@ fn resolve_recipient<'a>(
     }
 }
 
+/// Resolve the template to use for this invoice.
+///
+/// Priority: explicit `--template <name>` flag, then config-default. The
+/// resolved name must exist in the local templates dir; if not, the user is
+/// pointed at `template refresh` and the remote-install prompt for next time.
+fn resolve_template(
+    registry: &TemplateRegistry,
+    flag: Option<&str>,
+    config_default: &str,
+) -> Result<Template, PdfError> {
+    let name = flag.unwrap_or(config_default);
+    match registry.find_by_name(name) {
+        Some(t) => Ok(t.clone()),
+        None => Err(PdfError::TemplateNotFound {
+            name: name.to_string(),
+            available: registry.names(),
+        }),
+    }
+}
+
 /// Handle `invoice generate` — non-interactive invoice generation.
 ///
 /// `config_path` is the path to the config file (e.g. `~/.config/invoice-generator/config.yaml`).
@@ -167,13 +188,16 @@ pub fn handle_generate(
 ) -> Result<(), AppError> {
     let validated = load_validated_config(config_path)?;
     let recipient = resolve_recipient(args.client.as_deref(), &validated)?;
-    let template = match args.template.as_deref() {
-        Some(key) => TemplateKey::from_str(key).map_err(|_| InvoiceError::InvalidTemplateKey {
-            key: key.to_string(),
-            available: TemplateKey::ALL.iter().map(|t| t.to_string()).collect(),
-        })?,
-        None => validated.template,
-    };
+
+    // Build a registry snapshot — seeding bundled templates first so the
+    // first-run UX still resolves the default `leda` template even when the
+    // local templates dir doesn't exist yet.
+    if let Err(e) = TemplateRegistry::write_builtins_if_missing() {
+        eprintln!("Warning: could not seed bundled templates: {e}");
+    }
+    let registry = TemplateRegistry::scan_local()?;
+    let template = resolve_template(&registry, args.template.as_deref(), &validated.template)?;
+
     let period = validate_period(args.month, args.year)?;
     let line_items = resolve_line_items(args, &validated.presets, validated.defaults.currency)?;
     let locale = match args.locale.as_deref() {
@@ -189,7 +213,7 @@ pub fn handle_generate(
     let summary = build_summary(period, line_items, &validated.defaults)?;
     let config_dir = config_path.parent().unwrap_or_else(|| Path::new("."));
     let pdf_bytes = generate_pdf(
-        &summary, &validated, recipient, config_dir, template, locale,
+        &summary, &validated, recipient, config_dir, &template, locale,
     )?;
     let output_path = pdf_output_path(&validated.sender.name, &period, output_dir);
     std::fs::write(&output_path, &pdf_bytes).map_err(crate::pdf::PdfError::Write)?;
@@ -912,7 +936,7 @@ mod tests {
         let config = complete_config();
         let dir = setup_dir(Some(&config));
         let mut args = generate_single_args(3, 2026, "dev", 10.0);
-        args.template = Some("leda".to_string());
+        args.template = Some("amalthea".to_string());
         let mut buf: Vec<u8> = Vec::new();
 
         // Act
@@ -954,7 +978,7 @@ mod tests {
         // Assert
         assert!(matches!(
             result,
-            Err(AppError::Invoice(InvoiceError::InvalidTemplateKey { .. }))
+            Err(AppError::Pdf(PdfError::TemplateNotFound { .. }))
         ));
     }
 
@@ -1054,14 +1078,17 @@ mod tests {
 
         // Assert
         match result {
-            Err(AppError::Invoice(InvoiceError::InvalidTemplateKey { key, available })) => {
-                assert_eq!(key, "xyz");
+            Err(AppError::Pdf(PdfError::TemplateNotFound { name, available })) => {
+                assert_eq!(name, "xyz");
+                // After the refactor, only the three built-in templates
+                // (amalthea/metis/thebe) are guaranteed to be installed
+                // in a fresh test environment.
                 assert!(
-                    available.contains(&"leda".to_string()),
-                    "Expected 'leda' in available: {available:?}"
+                    available.contains(&"amalthea".to_string()),
+                    "Expected 'amalthea' in available: {available:?}"
                 );
             }
-            other => panic!("Expected InvalidTemplateKey, got {other:?}"),
+            other => panic!("Expected TemplateNotFound, got {other:?}"),
         }
     }
 }

@@ -1,75 +1,14 @@
-use std::fmt;
-use std::str::FromStr;
-
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{Currency, HexColor, Iban, PaymentMethodKey, PresetKey, RecipientKey};
-use crate::invoice::InvoiceError;
 use crate::locale::Locale;
 
-/// Available invoice template styles.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum TemplateKey {
-    Callisto,
-    #[default]
-    Leda,
-    Thebe,
-    Amalthea,
-    Metis,
-}
+/// Default template name baked into [`Defaults`] when the user has not picked
+/// one explicitly. Matches the previous `TemplateKey::Leda` default.
+const DEFAULT_TEMPLATE_NAME: &str = "leda";
 
-impl TemplateKey {
-    /// All available template keys.
-    pub const ALL: [TemplateKey; 5] = [
-        TemplateKey::Callisto,
-        TemplateKey::Leda,
-        TemplateKey::Thebe,
-        TemplateKey::Amalthea,
-        TemplateKey::Metis,
-    ];
-
-    /// Short description of the template style.
-    pub fn description(&self) -> &'static str {
-        match self {
-            Self::Callisto => "Bold & structured",
-            Self::Leda => "Clean & minimal",
-            Self::Thebe => "Compact & dense",
-            Self::Amalthea => "High-contrast & vivid",
-            Self::Metis => "Bare-bones & printable",
-        }
-    }
-}
-
-impl fmt::Display for TemplateKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = match self {
-            Self::Callisto => "callisto",
-            Self::Leda => "leda",
-            Self::Thebe => "thebe",
-            Self::Amalthea => "amalthea",
-            Self::Metis => "metis",
-        };
-        write!(f, "{s}")
-    }
-}
-
-impl FromStr for TemplateKey {
-    type Err = InvoiceError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "callisto" => Ok(Self::Callisto),
-            "leda" => Ok(Self::Leda),
-            "thebe" => Ok(Self::Thebe),
-            "amalthea" => Ok(Self::Amalthea),
-            "metis" => Ok(Self::Metis),
-            _ => Err(InvoiceError::InvalidTemplateKey {
-                key: s.to_string(),
-                available: Self::ALL.iter().map(|k| k.to_string()).collect(),
-            }),
-        }
-    }
+fn default_template() -> String {
+    DEFAULT_TEMPLATE_NAME.to_string()
 }
 
 /// Branding options for invoice appearance.
@@ -199,8 +138,10 @@ pub struct Defaults {
     pub invoice_date_day: u32,
     #[serde(default = "default_payment_terms_days")]
     pub payment_terms_days: u32,
-    #[serde(default)]
-    pub template: TemplateKey,
+    /// Slug of the template to use. Validated against the local templates
+    /// directory by [`crate::config::validator`], not at deserialize time.
+    #[serde(default = "default_template")]
+    pub template: String,
     #[serde(
         default,
         deserialize_with = "crate::locale::deserialize_locale_lenient"
@@ -214,7 +155,7 @@ impl Default for Defaults {
             currency: default_currency(),
             invoice_date_day: default_invoice_date_day(),
             payment_terms_days: default_payment_terms_days(),
-            template: TemplateKey::default(),
+            template: default_template(),
             locale: Locale::default(),
         }
     }
@@ -590,200 +531,7 @@ mod tests {
         assert!(loaded.branding.is_some());
     }
 
-    // ── Story 12.1 Cycle 1: TemplateKey basics ──
-
-    #[test]
-    fn test_template_key_default_is_leda() {
-        // Arrange & Act
-        let key = TemplateKey::default();
-
-        // Assert
-        assert_eq!(key, TemplateKey::Leda);
-    }
-
-    #[test]
-    fn test_template_key_all_has_five_variants() {
-        // Arrange & Act & Assert
-        assert_eq!(TemplateKey::ALL.len(), 5);
-    }
-
-    #[test]
-    fn test_template_key_all_contains_all_variants() {
-        // Arrange
-        let all = TemplateKey::ALL;
-
-        // Act & Assert
-        assert!(all.contains(&TemplateKey::Callisto));
-        assert!(all.contains(&TemplateKey::Leda));
-        assert!(all.contains(&TemplateKey::Thebe));
-        assert!(all.contains(&TemplateKey::Amalthea));
-        assert!(all.contains(&TemplateKey::Metis));
-    }
-
-    #[test]
-    fn test_template_key_display_leda() {
-        // Arrange
-        let key = TemplateKey::Leda;
-
-        // Act
-        let display = format!("{key}");
-
-        // Assert
-        assert_eq!(display, "leda");
-    }
-
-    #[test]
-    fn test_template_key_display_all_lowercase() {
-        // Arrange & Act & Assert
-        for key in TemplateKey::ALL {
-            let display = format!("{key}");
-            assert_eq!(
-                display,
-                display.to_lowercase(),
-                "Display for {key:?} should be lowercase"
-            );
-        }
-    }
-
-    #[test]
-    fn test_template_key_description_leda() {
-        // Arrange
-        let key = TemplateKey::Leda;
-
-        // Act
-        let desc = key.description();
-
-        // Assert
-        assert_eq!(desc, "Clean & minimal");
-    }
-
-    #[test]
-    fn test_template_key_description_all_unique() {
-        // Arrange
-        let descriptions: Vec<&str> = TemplateKey::ALL.iter().map(|k| k.description()).collect();
-
-        // Act & Assert
-        let mut seen = std::collections::HashSet::new();
-        for d in &descriptions {
-            assert!(seen.insert(d), "Duplicate description: {d}");
-        }
-    }
-
-    // ── Story 12.1 Cycle 2: FromStr ──
-
-    #[test]
-    fn test_template_key_from_str_leda() {
-        // Arrange & Act
-        let key: TemplateKey = "leda".parse().unwrap();
-
-        // Assert
-        assert_eq!(key, TemplateKey::Leda);
-    }
-
-    #[test]
-    fn test_template_key_from_str_all_valid_keys() {
-        // Arrange
-        let names = ["callisto", "leda", "thebe", "amalthea", "metis"];
-
-        // Act & Assert
-        for name in names {
-            let result: Result<TemplateKey, _> = name.parse();
-            assert!(
-                result.is_ok(),
-                "Should parse '{name}' as a valid TemplateKey"
-            );
-        }
-    }
-
-    #[test]
-    fn test_template_key_from_str_invalid_returns_error() {
-        // Arrange & Act
-        let result: Result<TemplateKey, _> = "europa".parse();
-
-        // Assert
-        assert!(result.is_err());
-        let msg = result.unwrap_err().to_string();
-        assert!(
-            msg.contains("europa"),
-            "Error should contain the invalid key"
-        );
-        assert!(msg.contains("leda"), "Error should list available keys");
-    }
-
-    #[test]
-    fn test_template_key_from_str_empty_returns_error() {
-        // Arrange & Act
-        let result: Result<TemplateKey, _> = "".parse();
-
-        // Assert
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_template_key_from_str_case_insensitive() {
-        // Arrange & Act & Assert
-        assert_eq!(
-            "CALLISTO".parse::<TemplateKey>().unwrap(),
-            TemplateKey::Callisto
-        );
-        assert_eq!("Leda".parse::<TemplateKey>().unwrap(), TemplateKey::Leda);
-        assert_eq!("THEBE".parse::<TemplateKey>().unwrap(), TemplateKey::Thebe);
-        assert_eq!(
-            "AmAlThEa".parse::<TemplateKey>().unwrap(),
-            TemplateKey::Amalthea
-        );
-        assert_eq!("Metis".parse::<TemplateKey>().unwrap(), TemplateKey::Metis);
-    }
-
-    // ── Story 12.1 Cycle 3: serde ──
-
-    #[test]
-    fn test_template_key_serializes_as_lowercase_string() {
-        // Arrange
-        let key = TemplateKey::Callisto;
-
-        // Act
-        let yaml = serde_yaml::to_string(&key).unwrap();
-
-        // Assert
-        assert_eq!(yaml.trim(), "callisto");
-    }
-
-    #[test]
-    fn test_template_key_all_keys_round_trip_through_yaml() {
-        // Arrange & Act & Assert
-        for key in TemplateKey::ALL {
-            let yaml = serde_yaml::to_string(&key).unwrap();
-            let loaded: TemplateKey = serde_yaml::from_str(&yaml).unwrap();
-            assert_eq!(loaded, key, "Round trip failed for {key:?}");
-        }
-    }
-
-    #[test]
-    fn test_template_key_deserializes_from_lowercase_string() {
-        // Arrange
-        let yaml = "amalthea";
-
-        // Act
-        let key: TemplateKey = serde_yaml::from_str(yaml).unwrap();
-
-        // Assert
-        assert_eq!(key, TemplateKey::Amalthea);
-    }
-
-    #[test]
-    fn test_template_key_invalid_yaml_returns_error() {
-        // Arrange
-        let yaml = "ganymede";
-
-        // Act
-        let result: Result<TemplateKey, _> = serde_yaml::from_str(yaml);
-
-        // Assert
-        assert!(result.is_err());
-    }
-
-    // ── Story 12.1 Cycle 4: Defaults.template ──
+    // ── Defaults.template (string slug) ──
 
     #[test]
     fn test_defaults_default_includes_template_leda() {
@@ -791,7 +539,7 @@ mod tests {
         let defaults = Defaults::default();
 
         // Assert
-        assert_eq!(defaults.template, TemplateKey::Leda);
+        assert_eq!(defaults.template, "leda");
     }
 
     #[test]
@@ -803,7 +551,7 @@ mod tests {
         let defaults: Defaults = serde_yaml::from_str(yaml).unwrap();
 
         // Assert
-        assert_eq!(defaults.template, TemplateKey::Leda);
+        assert_eq!(defaults.template, "leda");
     }
 
     #[test]
@@ -816,14 +564,28 @@ mod tests {
         let defaults: Defaults = serde_yaml::from_str(yaml).unwrap();
 
         // Assert
-        assert_eq!(defaults.template, TemplateKey::Callisto);
+        assert_eq!(defaults.template, "callisto");
+    }
+
+    #[test]
+    fn test_defaults_with_arbitrary_template_string_deserializes() {
+        // Arrange — registry no longer constrains the template name to a closed
+        // enum: any non-empty slug round-trips as-is. Validation against the
+        // local templates dir happens later in `crate::config::validator`.
+        let yaml = "template: my-custom-template\n";
+
+        // Act
+        let defaults: Defaults = serde_yaml::from_str(yaml).unwrap();
+
+        // Assert
+        assert_eq!(defaults.template, "my-custom-template");
     }
 
     #[test]
     fn test_defaults_template_round_trips() {
         // Arrange
         let defaults = Defaults {
-            template: TemplateKey::Metis,
+            template: "metis".into(),
             ..Defaults::default()
         };
 
@@ -832,7 +594,7 @@ mod tests {
         let loaded: Defaults = serde_yaml::from_str(&yaml).unwrap();
 
         // Assert
-        assert_eq!(loaded.template, TemplateKey::Metis);
+        assert_eq!(loaded.template, "metis");
     }
 
     #[test]
