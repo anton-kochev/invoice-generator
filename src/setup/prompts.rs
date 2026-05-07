@@ -76,6 +76,27 @@ pub fn prompt_parsed<T, U>(
     }
 }
 
+/// Like [`prompt_parsed`], but for optional inputs. The `prompt_fn` returns
+/// `Option<String>` (e.g. via [`Prompter::optional_text`]). A `None` short-
+/// circuits with `Ok(None)` without invoking `parser`. A `Some(raw)` is fed
+/// to `parser`; on success the helper returns `Ok(Some(parsed))`, on failure
+/// it shows the parser's error verbatim and re-prompts.
+pub fn prompt_optional_parsed<U>(
+    prompter: &dyn Prompter,
+    mut prompt_fn: impl FnMut(&dyn Prompter) -> Result<Option<String>, AppError>,
+    parser: impl Fn(String) -> Result<U, String>,
+) -> Result<Option<U>, AppError> {
+    loop {
+        match prompt_fn(prompter)? {
+            None => return Ok(None),
+            Some(raw) => match parser(raw) {
+                Ok(parsed) => return Ok(Some(parsed)),
+                Err(msg) => prompter.message(&msg),
+            },
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -373,6 +394,57 @@ mod tests {
 
         // Assert
         assert!(matches!(result, Err(AppError::SetupCancelled)));
+    }
+
+    // ── prompt_optional_parsed ──
+
+    #[test]
+    fn test_prompt_optional_parsed_none_input_short_circuits_without_invoking_parser() {
+        // Arrange — parser would panic if invoked; None must skip it entirely.
+        let prompter = MockPrompter::new(vec![MockResponse::OptionalText(None)]);
+
+        // Act
+        let result: Option<u32> = prompt_optional_parsed(
+            &prompter,
+            |p| p.optional_text("Pick a number (blank to skip):"),
+            |_s: String| -> Result<u32, String> {
+                panic!("parser must not be invoked when input is None")
+            },
+        )
+        .unwrap();
+
+        // Assert
+        assert!(result.is_none());
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_prompt_optional_parsed_invalid_then_valid_reprompts_and_returns_parsed() {
+        // Arrange
+        let prompter = MockPrompter::new(vec![
+            MockResponse::OptionalText(Some("nope".into())),
+            MockResponse::OptionalText(Some("7".into())),
+        ]);
+
+        // Act
+        let result: Option<u32> = prompt_optional_parsed(
+            &prompter,
+            |p| p.optional_text("Pick a number (blank to skip):"),
+            |s: String| {
+                s.parse::<u32>()
+                    .map_err(|_| format!("'{s}' is not a valid number"))
+            },
+        )
+        .unwrap();
+
+        // Assert
+        assert_eq!(result, Some(7));
+        let messages = prompter.messages.borrow();
+        assert!(
+            messages.iter().any(|m| m == "'nope' is not a valid number"),
+            "Expected verbatim parser error, got: {messages:?}"
+        );
+        prompter.assert_exhausted();
     }
 
     #[test]

@@ -153,6 +153,7 @@ mod tests {
             MockResponse::Text("dev".into()),
             MockResponse::Text("Dev".into()),
             MockResponse::F64(100.0),
+            MockResponse::OptionalText(None),
             MockResponse::Confirm(false),
             // Defaults
             MockResponse::Text("EUR".into()),
@@ -248,6 +249,7 @@ mod tests {
             MockResponse::Text("dev".into()),
             MockResponse::Text("Development Services".into()),
             MockResponse::F64(100.0),
+            MockResponse::OptionalText(None),
             MockResponse::Confirm(false),
             // Intentionally NO branding response — must be skipped.
         ]);

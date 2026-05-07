@@ -241,6 +241,7 @@ pub fn full_setup_responses() -> Vec<MockResponse> {
         MockResponse::Text("dev".into()),
         MockResponse::Text("Development Services".into()),
         MockResponse::F64(100.0),
+        MockResponse::OptionalText(None),
         MockResponse::Confirm(false),
         // Defaults
         MockResponse::Text("EUR".into()),
@@ -272,6 +273,7 @@ pub fn resume_from_recipient_responses() -> Vec<MockResponse> {
         MockResponse::Text("dev".into()),
         MockResponse::Text("Dev".into()),
         MockResponse::F64(100.0),
+        MockResponse::OptionalText(None),
         MockResponse::Confirm(false),
         // Defaults
         MockResponse::Text("EUR".into()),

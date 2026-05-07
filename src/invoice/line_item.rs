@@ -439,6 +439,7 @@ mod tests {
             MockResponse::Text("design".into()),      // key
             MockResponse::Text("Design work".into()), // description
             MockResponse::F64(500.0),                 // rate
+            MockResponse::OptionalText(None),         // currency (blank → inherit)
             MockResponse::F64(5.0),                   // days worked
             MockResponse::F64(500.0),                 // rate (accept default)
             MockResponse::Confirm(false),             // add another? no
@@ -472,9 +473,10 @@ mod tests {
             MockResponse::Text("design".into()),
             MockResponse::Text("Design work".into()),
             MockResponse::F64(500.0),
-            MockResponse::F64(5.0),      // days
-            MockResponse::F64(500.0),    // rate
-            MockResponse::Confirm(true), // add another? yes
+            MockResponse::OptionalText(None), // currency (blank → inherit)
+            MockResponse::F64(5.0),           // days
+            MockResponse::F64(500.0),         // rate
+            MockResponse::Confirm(true),      // add another? yes
             // Item 2: select "design" which is now preset #3 in the list
             MockResponse::U32(3),         // select preset #3 (design)
             MockResponse::F64(2.0),       // days
@@ -504,9 +506,10 @@ mod tests {
             MockResponse::Text("ops".into()),
             MockResponse::Text("Ops work".into()),
             MockResponse::F64(300.0),
-            MockResponse::F64(10.0),     // days
-            MockResponse::F64(300.0),    // rate
-            MockResponse::Confirm(true), // add another? yes
+            MockResponse::OptionalText(None), // currency (blank → inherit)
+            MockResponse::F64(10.0),          // days
+            MockResponse::F64(300.0),         // rate
+            MockResponse::Confirm(true),      // add another? yes
             // Item 2: select existing "dev" (preset #1)
             MockResponse::U32(1),
             MockResponse::F64(5.0),       // days
@@ -537,6 +540,7 @@ mod tests {
             MockResponse::Text("design".into()),
             MockResponse::Text("Design work".into()),
             MockResponse::F64(500.0),
+            MockResponse::OptionalText(None), // currency (blank → inherit)
             MockResponse::F64(5.0),
             MockResponse::F64(500.0),
             MockResponse::Confirm(false),
@@ -566,6 +570,7 @@ mod tests {
             MockResponse::Text("design".into()),
             MockResponse::Text("Design work".into()),
             MockResponse::F64(500.0),
+            MockResponse::OptionalText(None), // currency (blank → inherit)
             MockResponse::F64(5.0),
             MockResponse::F64(500.0),
             MockResponse::Confirm(false),

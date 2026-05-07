@@ -1,8 +1,10 @@
+use std::str::FromStr;
+
 use crate::config::types::Preset;
-use crate::domain::PresetKey;
+use crate::domain::{Currency, PresetKey};
 use crate::error::AppError;
 use crate::setup::prompter::Prompter;
-use crate::setup::prompts::prompt_parsed;
+use crate::setup::prompts::{prompt_optional_parsed, prompt_parsed};
 
 /// Interactively collect a new preset from the user.
 ///
@@ -32,12 +34,28 @@ pub fn collect_new_preset(
 
     let description = prompter.required_text("Description:")?;
     let default_rate = prompter.positive_f64("Default daily rate:")?;
+    let currency = prompt_optional_parsed(
+        prompter,
+        |p| p.optional_text("Currency  (blank to use default)"),
+        |s| {
+            Currency::from_str(s.trim()).map_err(|_| {
+                format!(
+                    "Unsupported currency. Available: {}",
+                    Currency::ALL
+                        .iter()
+                        .map(|c| c.code())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            })
+        },
+    )?;
 
     Ok(Preset {
         key,
         description,
         default_rate,
-        currency: None,
+        currency,
         tax_rate: None,
     })
 }
@@ -45,6 +63,7 @@ pub fn collect_new_preset(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::Currency;
     use crate::setup::mock_prompter::{MockPrompter, MockResponse};
 
     #[test]
@@ -61,6 +80,7 @@ mod tests {
             MockResponse::Text("analytics".into()),
             MockResponse::Text("Data analytics".into()),
             MockResponse::F64(750.0),
+            MockResponse::OptionalText(None),
         ]);
 
         // Act
@@ -88,6 +108,7 @@ mod tests {
             MockResponse::Text("backend".into()),
             MockResponse::Text("Backend work".into()),
             MockResponse::F64(900.0),
+            MockResponse::OptionalText(None),
         ]);
 
         // Act
@@ -130,6 +151,7 @@ mod tests {
             MockResponse::Text("ops".into()),
             MockResponse::Text("Operations".into()),
             MockResponse::F64(500.0),
+            MockResponse::OptionalText(None),
         ]);
 
         // Act
@@ -166,6 +188,7 @@ mod tests {
             MockResponse::Text("ops".into()), // accepted
             MockResponse::Text("Ops services".into()),
             MockResponse::F64(800.0),
+            MockResponse::OptionalText(None),
         ]);
 
         // Act
@@ -189,6 +212,7 @@ mod tests {
             MockResponse::Text("first".into()),
             MockResponse::Text("First preset".into()),
             MockResponse::F64(100.0),
+            MockResponse::OptionalText(None),
         ]);
 
         // Act
@@ -198,6 +222,72 @@ mod tests {
         assert_eq!(preset.key.as_str(), "first");
         assert_eq!(preset.description, "First preset");
         assert!((preset.default_rate - 100.0).abs() < f64::EPSILON);
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn currency_provided_sets_currency_some() {
+        // Arrange
+        let existing: Vec<Preset> = vec![];
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("analytics".into()),
+            MockResponse::Text("Data analytics".into()),
+            MockResponse::F64(750.0),
+            MockResponse::OptionalText(Some("USD".into())),
+        ]);
+
+        // Act
+        let preset = collect_new_preset(&prompter, &existing).unwrap();
+
+        // Assert
+        assert_eq!(preset.key.as_str(), "analytics");
+        assert_eq!(preset.currency, Some(Currency::Usd));
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn currency_blank_leaves_currency_none() {
+        // Arrange — blank means "inherit Defaults.currency at invoice time".
+        let existing: Vec<Preset> = vec![];
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("analytics".into()),
+            MockResponse::Text("Data analytics".into()),
+            MockResponse::F64(750.0),
+            MockResponse::OptionalText(None),
+        ]);
+
+        // Act
+        let preset = collect_new_preset(&prompter, &existing).unwrap();
+
+        // Assert
+        assert_eq!(preset.key.as_str(), "analytics");
+        assert!(preset.currency.is_none());
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn unsupported_currency_reprompts_then_accepts_valid() {
+        // Arrange — CHF is rejected by the closed Currency enum; user retries
+        // with EUR. Mirrors test_collect_defaults_unsupported_currency_reprompts.
+        let existing: Vec<Preset> = vec![];
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("analytics".into()),
+            MockResponse::Text("Data analytics".into()),
+            MockResponse::F64(750.0),
+            MockResponse::OptionalText(Some("CHF".into())),
+            MockResponse::OptionalText(Some("EUR".into())),
+        ]);
+
+        // Act
+        let preset = collect_new_preset(&prompter, &existing).unwrap();
+
+        // Assert
+        assert_eq!(preset.currency, Some(Currency::Eur));
+        let messages = prompter.messages.borrow();
+        assert!(
+            messages.iter().any(|m| m.contains("Unsupported currency")),
+            "Expected 'Unsupported currency' message, got: {messages:?}"
+        );
         prompter.assert_exhausted();
     }
 }
