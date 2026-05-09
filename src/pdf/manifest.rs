@@ -110,14 +110,14 @@ mod tests {
     }
 
     #[test]
-    fn test_bundled_manifest_contains_six_templates() {
+    fn test_bundled_manifest_contains_seven_templates() {
         // Arrange & Act
         let parsed: Manifest = serde_json::from_str(BUNDLED_MANIFEST).unwrap();
 
-        // Assert — six templates: callisto, leda, thebe, amalthea, metis, io.
-        assert_eq!(parsed.templates.len(), 6);
+        // Assert — seven templates: callisto, leda, thebe, amalthea, metis, io, europa.
+        assert_eq!(parsed.templates.len(), 7);
         let names: Vec<&str> = parsed.templates.iter().map(|e| e.name.as_str()).collect();
-        for expected in ["callisto", "leda", "thebe", "amalthea", "metis", "io"] {
+        for expected in ["callisto", "leda", "thebe", "amalthea", "metis", "io", "europa"] {
             assert!(
                 names.contains(&expected),
                 "Expected '{expected}' in bundled manifest, got: {names:?}"
