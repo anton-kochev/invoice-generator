@@ -164,6 +164,7 @@ pub fn handle_sender_add(
         name,
         address,
         email,
+        extras: None,
     };
 
     append_sender(config_path, sender, set_default)?;
@@ -692,6 +693,7 @@ mod tests {
             name: "Carol King".into(),
             address: vec!["19 Birch Road".into()],
             email: "carol@example.com".into(),
+            extras: None,
         });
         config.senders = Some(senders);
         let dir = setup_dir(Some(&config));

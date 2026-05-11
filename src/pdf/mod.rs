@@ -174,6 +174,7 @@ mod tests {
             "Jane Doe".into(),
             vec!["123 Main St".into(), "Vienna, Austria".into()],
             "jane@example.com".into(),
+            None,
         );
         ValidatedConfig::from_validated_parts(
             crate::domain::NonEmpty::try_from_vec(vec![sender]).unwrap(),
@@ -466,6 +467,7 @@ mod tests {
             "Jane Doe".into(),
             vec!["123 Main St".into(), "Vienna, Austria".into()],
             "jane@example.com".into(),
+            None,
         );
         ValidatedConfig::from_validated_parts(
             crate::domain::NonEmpty::try_from_vec(vec![sender]).unwrap(),
@@ -751,6 +753,7 @@ mod tests {
             "Jane Doe".into(),
             vec!["123 Main St".into(), "Vienna, Austria".into()],
             "jane@example.com".into(),
+            None,
         );
         ValidatedConfig::from_validated_parts(
             crate::domain::NonEmpty::try_from_vec(vec![sender]).unwrap(),

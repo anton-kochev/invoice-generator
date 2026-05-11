@@ -684,12 +684,14 @@ mod tests {
             name: "Alice Smith".into(),
             address: vec!["42 Elm Street".into()],
             email: "alice@example.com".into(),
+            extras: None,
         };
         let bob = Sender {
             key: Some(SenderKey::try_new("bob").unwrap()),
             name: "Bob Jones".into(),
             address: vec!["7 Oak Avenue".into()],
             email: "bob@example.com".into(),
+            extras: None,
         };
         let base = crate::setup::test_helpers::v2_config_two_recipients();
         let config = Config {

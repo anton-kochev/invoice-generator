@@ -16,6 +16,7 @@ pub fn synthetic_sender() -> Sender {
         name: "Alice Smith".into(),
         address: vec!["42 Elm Street".into(), "Springfield, IL 62704".into()],
         email: "alice@example.com".into(),
+        extras: None,
     }
 }
 
@@ -163,6 +164,7 @@ pub fn synthetic_validated_alice() -> crate::config::validator::ValidatedSender 
         "Alice Smith".into(),
         vec!["42 Elm St".into(), "Springfield, IL 62704".into()],
         "alice@example.com".into(),
+        None,
     )
 }
 
@@ -174,6 +176,7 @@ pub fn synthetic_validated_bob() -> crate::config::validator::ValidatedSender {
         "Bob Jones".into(),
         vec!["100 Oak Ln".into()],
         "bob@example.com".into(),
+        None,
     )
 }
 
@@ -184,6 +187,7 @@ pub fn synthetic_sender_alice() -> Sender {
         name: "Alice Smith".into(),
         address: vec!["42 Elm St".into(), "Springfield, IL 62704".into()],
         email: "alice@example.com".into(),
+        extras: None,
     }
 }
 
@@ -194,6 +198,7 @@ pub fn synthetic_sender_bob() -> Sender {
         name: "Bob Jones".into(),
         address: vec!["100 Oak Ln".into()],
         email: "bob@example.com".into(),
+        extras: None,
     }
 }
 

@@ -76,6 +76,24 @@ pub struct Sender {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub address: Vec<String>,
     pub email: String,
+    /// Free-form template-specific extension fields.
+    ///
+    /// Carried as an opaque YAML mapping so users can configure template-only
+    /// data (e.g. the bilingual `io` template's Ukrainian translations and
+    /// extended bank details) without forcing every other template to model
+    /// those fields. The validator passes the mapping through untouched; the
+    /// PDF data layer flattens it directly into `data.sender.*` via
+    /// `#[serde(flatten)]`, so an extras key like `name_ua: Антон` appears as
+    /// `data.sender.name_ua` in the Typst template — not nested under
+    /// `extras`.
+    ///
+    /// Collision rule: flattened keys are written *after* the typed fields, so
+    /// an `extras` entry whose key matches a typed field (e.g. `name`) shadows
+    /// the typed value in the rendered JSON. Document this surprise rather
+    /// than guard against it — extras are intentionally an unchecked escape
+    /// hatch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extras: Option<serde_yaml::Mapping>,
 }
 
 /// Information about the invoice recipient.
@@ -316,6 +334,7 @@ mod tests {
                 name: "Alice".into(),
                 address: vec!["42 Elm Street".into()],
                 email: "alice@example.com".into(),
+                extras: None,
             }]),
             default_sender: Some(SenderKey::try_new("alice").unwrap()),
             ..Config::default()
@@ -346,6 +365,7 @@ mod tests {
             name: "Alice".into(),
             address: vec!["42 Elm Street".into()],
             email: "alice@example.com".into(),
+            extras: None,
         };
 
         // Act
@@ -368,6 +388,7 @@ mod tests {
             name: "Alice".into(),
             address: vec![],
             email: "a@b.com".into(),
+            extras: None,
         };
 
         // Act

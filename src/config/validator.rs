@@ -164,6 +164,10 @@ pub struct ValidatedSender {
     pub(super) name: String,
     pub(super) address: Vec<String>,
     pub(super) email: String,
+    /// Free-form template-specific extension fields. Passed through from the
+    /// raw [`Sender`] without validation — see [`Sender::extras`] for the
+    /// design rationale and collision rules.
+    pub(super) extras: Option<serde_yaml::Mapping>,
 }
 
 impl ValidatedSender {
@@ -179,6 +183,7 @@ impl ValidatedSender {
             name: s.name,
             address: s.address,
             email: s.email,
+            extras: s.extras,
         }
     }
 
@@ -202,6 +207,14 @@ impl ValidatedSender {
         &self.email
     }
 
+    /// Borrow the sender's free-form extras mapping, if any.
+    ///
+    /// The PDF data layer flattens this into the `data.sender.*` JSON object,
+    /// so any keys appear as top-level sender fields in the Typst template.
+    pub fn extras(&self) -> Option<&serde_yaml::Mapping> {
+        self.extras.as_ref()
+    }
+
     /// Test-only constructor that bypasses the normal validator path.
     ///
     /// Used by test fixtures in other modules that need to assemble a
@@ -214,12 +227,14 @@ impl ValidatedSender {
         name: String,
         address: Vec<String>,
         email: String,
+        extras: Option<serde_yaml::Mapping>,
     ) -> Self {
         Self {
             key,
             name,
             address,
             email,
+            extras,
         }
     }
 }
@@ -1574,6 +1589,7 @@ mod tests {
             name: name.into(),
             address: vec!["100 Test St".into()],
             email: format!("{key}@example.com"),
+            extras: None,
         }
     }
 
@@ -1667,6 +1683,7 @@ mod tests {
             name: "Alice".into(),
             address: vec!["123 St".into()],
             email: "a@b.com".into(),
+            extras: None,
         }
     }
 

@@ -15,11 +15,25 @@ pub struct InvoiceData<'a> {
 }
 
 /// Sender information for the template.
+///
+/// `extras` carries free-form template-specific fields from
+/// [`ValidatedSender::extras`]. With `#[serde(flatten)]`, every key in the
+/// mapping is emitted at the top level of the `data.sender` JSON object —
+/// e.g. `extras = {"name_ua": "Антон"}` renders as `data.sender.name_ua` in
+/// the Typst template (not nested under `extras`).
+///
+/// Collision rule: flattened keys are written *after* the typed fields, so an
+/// extras key that matches a typed field name (e.g. `name`) shadows the typed
+/// value in `serde_json` output. This is intentional — extras are an unchecked
+/// escape hatch. The `sender_extras_shadow_typed_field` test pins this
+/// behavior so future serde changes are caught.
 #[derive(Debug, Serialize)]
 pub struct SenderData<'a> {
     pub name: &'a str,
     pub address: &'a [String],
     pub email: &'a str,
+    #[serde(flatten, skip_serializing_if = "Option::is_none")]
+    pub extras: Option<&'a serde_yaml::Mapping>,
 }
 
 /// Recipient information for the template.
@@ -115,6 +129,7 @@ impl<'a> InvoiceData<'a> {
                 name: sender.name(),
                 address: sender.address(),
                 email: sender.email(),
+                extras: sender.extras(),
             },
             recipient: RecipientData {
                 name: recipient.name(),
@@ -230,6 +245,7 @@ mod tests {
             "Jane Doe".into(),
             vec!["123 Main St".into(), "Vienna, Austria".into()],
             "jane@example.com".into(),
+            None,
         );
         ValidatedConfig::from_validated_parts(
             crate::domain::NonEmpty::try_from_vec(vec![sender]).unwrap(),
@@ -352,6 +368,7 @@ mod tests {
             "Jane Doe".into(),
             vec!["123 Main St".into()],
             "jane@example.com".into(),
+            None,
         );
         ValidatedConfig::from_validated_parts(
             crate::domain::NonEmpty::try_from_vec(vec![sender]).unwrap(),
@@ -1001,5 +1018,170 @@ mod tests {
         assert_eq!(data.invoice.total, "13.000,00");
         assert_eq!(data.invoice.line_items[0].rate, "800,00");
         assert_eq!(data.invoice.line_items[0].amount, "8.000,00");
+    }
+
+    // ── Sender.extras: flatten-into-sender-JSON tests ──
+
+    /// Build a [`ValidatedConfig`] whose sole sender carries the provided
+    /// `extras` mapping. All other fields match [`make_config`] so existing
+    /// assertions about non-extras shape remain stable.
+    fn config_with_sender_extras(extras: Option<serde_yaml::Mapping>) -> ValidatedConfig {
+        let recipient = ValidatedRecipient::from_validated_parts(
+            crate::domain::RecipientKey::try_new("acme-corp").unwrap(),
+            "Acme Corp".into(),
+            vec!["456 Oak Ave".into(), "Berlin, Germany".into()],
+            Some("DE123456".into()),
+            Some("ATU12345678".into()),
+        );
+        let sender = ValidatedSender::from_validated_parts(
+            crate::domain::SenderKey::try_new("jane-doe").unwrap(),
+            "Jane Doe".into(),
+            vec!["123 Main St".into(), "Vienna, Austria".into()],
+            "jane@example.com".into(),
+            extras,
+        );
+        ValidatedConfig::from_validated_parts(
+            crate::domain::NonEmpty::try_from_vec(vec![sender]).unwrap(),
+            0,
+            crate::domain::NonEmpty::try_from_vec(vec![recipient]).unwrap(),
+            0,
+            crate::domain::NonEmpty::try_from_vec(vec![
+                ValidatedPaymentMethod::from_validated_parts(
+                    crate::domain::PaymentMethodKey::try_new("primary").unwrap(),
+                    Some("Primary Bank Account".into()),
+                    crate::domain::Iban::try_new("DE89 3704 0044 0532 0130 00").unwrap(),
+                    "COBADEFFXXX".into(),
+                ),
+            ])
+            .unwrap(),
+            crate::domain::NonEmpty::try_from_vec(vec![Preset {
+                key: crate::domain::PresetKey::try_new("dev").unwrap(),
+                description: "Software development".into(),
+                default_rate: 800.0,
+                currency: None,
+                tax_rate: None,
+            }])
+            .unwrap(),
+            Defaults::default(),
+            ValidatedBranding::default(),
+            "leda".into(),
+            crate::locale::Locale::EnUs,
+        )
+    }
+
+    #[test]
+    fn sender_extras_flatten_into_sender_json() {
+        // Arrange — synthetic Ukrainian content via the public YAML loader so
+        // the test exercises the exact parse path real users hit.
+        let yaml = "name_ua: Антон Тестовий\n";
+        let extras: serde_yaml::Mapping = serde_yaml::from_str(yaml).unwrap();
+        let summary = make_summary();
+        let config = config_with_sender_extras(Some(extras));
+
+        // Act
+        let data = InvoiceData::from_parts(
+            &summary,
+            &config,
+            config.default_sender(),
+            config.default_recipient(),
+            None,
+            Locale::EnUs,
+        );
+        let json = serde_json::to_value(&data).unwrap();
+
+        // Assert — extras keys appear at the top level of `data.sender`, not
+        // nested under an `extras` object. Typed fields stay present.
+        assert_eq!(json["sender"]["name_ua"], "Антон Тестовий");
+        assert_eq!(json["sender"]["name"], "Jane Doe");
+        assert!(
+            json["sender"].get("extras").is_none(),
+            "expected `extras` to NOT appear as a nested object (flatten should spread keys), got {:?}",
+            json["sender"]
+        );
+    }
+
+    #[test]
+    fn sender_extras_absent_when_none() {
+        // Arrange — no extras configured; existing senders must round-trip
+        // through the JSON layer with zero new keys.
+        let summary = make_summary();
+        let config = config_with_sender_extras(None);
+
+        // Act
+        let data = InvoiceData::from_parts(
+            &summary,
+            &config,
+            config.default_sender(),
+            config.default_recipient(),
+            None,
+            Locale::EnUs,
+        );
+        let json = serde_json::to_value(&data).unwrap();
+
+        // Assert — only the three typed sender fields are present.
+        let sender_obj = json["sender"].as_object().expect("sender is JSON object");
+        let keys: std::collections::HashSet<&str> = sender_obj.keys().map(|s| s.as_str()).collect();
+        assert_eq!(
+            keys,
+            ["name", "address", "email"].iter().copied().collect(),
+            "expected exactly {{name, address, email}} on sender, got {keys:?}"
+        );
+    }
+
+    #[test]
+    fn sender_extras_arrays_serialize_as_arrays() {
+        // Arrange — a YAML Sequence value in extras must come through as a
+        // JSON array (e.g. `address_ua: [a, b]` → `["a", "b"]`), so Typst
+        // templates can iterate over it with a `for` loop.
+        let yaml = "address_ua:\n  - вул. Головна 1\n  - Київ\n";
+        let extras: serde_yaml::Mapping = serde_yaml::from_str(yaml).unwrap();
+        let summary = make_summary();
+        let config = config_with_sender_extras(Some(extras));
+
+        // Act
+        let data = InvoiceData::from_parts(
+            &summary,
+            &config,
+            config.default_sender(),
+            config.default_recipient(),
+            None,
+            Locale::EnUs,
+        );
+        let json = serde_json::to_value(&data).unwrap();
+
+        // Assert
+        let arr = json["sender"]["address_ua"]
+            .as_array()
+            .expect("address_ua serializes as JSON array");
+        assert_eq!(arr.len(), 2);
+        assert_eq!(arr[0], "вул. Головна 1");
+        assert_eq!(arr[1], "Київ");
+    }
+
+    #[test]
+    fn sender_extras_shadow_typed_field() {
+        // Arrange — pinned snapshot of the collision behavior documented on
+        // `Sender::extras`: when extras contains a key that matches a typed
+        // sender field (here, `name`), the flattened value wins. This test
+        // exists so a future serde change that flips ordering is caught
+        // immediately rather than silently corrupting rendered invoices.
+        let yaml = "name: Shadow Name\n";
+        let extras: serde_yaml::Mapping = serde_yaml::from_str(yaml).unwrap();
+        let summary = make_summary();
+        let config = config_with_sender_extras(Some(extras));
+
+        // Act
+        let data = InvoiceData::from_parts(
+            &summary,
+            &config,
+            config.default_sender(),
+            config.default_recipient(),
+            None,
+            Locale::EnUs,
+        );
+        let json = serde_json::to_value(&data).unwrap();
+
+        // Assert — flattened-last wins over the typed field.
+        assert_eq!(json["sender"]["name"], "Shadow Name");
     }
 }

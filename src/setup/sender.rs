@@ -33,6 +33,7 @@ pub fn collect_sender(
         name,
         address,
         email,
+        extras: None,
     };
 
     let mut senders = config.senders.take().unwrap_or_default();

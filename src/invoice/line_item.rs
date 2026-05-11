@@ -124,6 +124,7 @@ mod tests {
                 name: "Alice Smith".into(),
                 address: vec!["42 Elm Street".into(), "Springfield, IL 62704".into()],
                 email: "alice@example.com".into(),
+                extras: None,
             }),
             recipient: Some(Recipient {
                 key: None,

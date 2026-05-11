@@ -419,6 +419,7 @@ mod tests {
                 "Springfield, IL 62704".to_string(),
             ],
             email: "alice@example.com".to_string(),
+            extras: None,
         }
     }
 
@@ -557,6 +558,7 @@ mod tests {
                 name: "Alice".to_string(),
                 address: vec!["Street 1".to_string()],
                 email: "alice@example.com".to_string(),
+                extras: None,
             }),
             ..Config::default()
         };
@@ -568,6 +570,7 @@ mod tests {
                 name: "Bob".to_string(),
                 address: vec!["Street 2".to_string()],
                 email: "bob@example.com".to_string(),
+                extras: None,
             }),
             ..Config::default()
         };
@@ -1555,6 +1558,7 @@ mod tests {
                 "Springfield, IL 62704".to_string(),
             ],
             email: "alice@example.com".to_string(),
+            extras: None,
         }
     }
 
@@ -1567,6 +1571,7 @@ mod tests {
                 "Shelbyville, IL 62565".to_string(),
             ],
             email: "bob@example.com".to_string(),
+            extras: None,
         }
     }
 
@@ -1622,6 +1627,7 @@ mod tests {
             name: "Carol King".to_string(),
             address: vec!["19 Birch Road".to_string()],
             email: "carol@example.com".to_string(),
+            extras: None,
         }
     }
 

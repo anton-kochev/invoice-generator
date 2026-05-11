@@ -358,6 +358,7 @@ mod tests {
             "Test User".into(),
             vec!["456 Dev Ave".into()],
             "test@example.com".into(),
+            None,
         );
         ValidatedConfig::from_validated_parts(
             NonEmpty::try_from_vec(vec![sender]).unwrap(),
