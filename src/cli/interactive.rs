@@ -382,7 +382,7 @@ mod tests {
             .unwrap(),
             Defaults::default(),
             ValidatedBranding::default(),
-            "leda".into(),
+            "amalthea".into(),
             crate::locale::Locale::EnUs,
         )
     }
@@ -391,7 +391,7 @@ mod tests {
     fn test_resolve_default_template_picks_configured_when_present() {
         // Arrange — registry contains both templates; configured slug picks one.
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("leda.typ"), b"// leda").unwrap();
+        std::fs::write(dir.path().join("amalthea.typ"), b"// amalthea").unwrap();
         std::fs::write(dir.path().join("metis.typ"), b"// metis").unwrap();
         let registry = TemplateRegistry::scan_local_in(dir.path(), None).unwrap();
 

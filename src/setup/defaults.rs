@@ -37,7 +37,7 @@ pub fn collect_defaults(
     // loop during initial setup).
     let template = prompt_parsed(
         prompter,
-        |p| p.text_with_default("Template:", "leda"),
+        |p| p.text_with_default("Template:", "amalthea"),
         |input: String| {
             let trimmed = input.trim();
             if trimmed.is_empty() {
@@ -89,7 +89,7 @@ mod tests {
             MockResponse::Text("".into()), // accept default EUR
             MockResponse::U32(9),
             MockResponse::U32(30),
-            MockResponse::Text("leda".into()),
+            MockResponse::Text("amalthea".into()),
             MockResponse::Text("en-US".into()),
         ]);
 
@@ -113,7 +113,7 @@ mod tests {
             MockResponse::Text("USD".into()),
             MockResponse::U32(15),
             MockResponse::U32(14),
-            MockResponse::Text("leda".into()),
+            MockResponse::Text("amalthea".into()),
             MockResponse::Text("en-US".into()),
         ]);
 
@@ -137,7 +137,7 @@ mod tests {
             MockResponse::Text("UAH".into()),
             MockResponse::U32(1),
             MockResponse::U32(60),
-            MockResponse::Text("leda".into()),
+            MockResponse::Text("amalthea".into()),
             MockResponse::Text("en-US".into()),
         ]);
 
@@ -163,7 +163,7 @@ mod tests {
             MockResponse::Text("EUR".into()), // accepted
             MockResponse::U32(9),
             MockResponse::U32(30),
-            MockResponse::Text("leda".into()),
+            MockResponse::Text("amalthea".into()),
             MockResponse::Text("en-US".into()),
         ]);
 
@@ -190,14 +190,14 @@ mod tests {
             MockResponse::Text("EUR".into()),
             MockResponse::U32(9),
             MockResponse::U32(30),
-            MockResponse::Text("leda".into()),
+            MockResponse::Text("amalthea".into()),
             MockResponse::Text("en-US".into()),
         ]);
         // Act
         collect_defaults(&prompter, &mut config, &cfg_path(&dir)).unwrap();
         // Assert
         let defaults = config.defaults.as_ref().unwrap();
-        assert_eq!(defaults.template, "leda");
+        assert_eq!(defaults.template, "amalthea");
         prompter.assert_exhausted();
     }
 
@@ -249,7 +249,7 @@ mod tests {
             MockResponse::Text("EUR".into()),
             MockResponse::U32(9),
             MockResponse::U32(30),
-            MockResponse::Text("leda".into()),
+            MockResponse::Text("amalthea".into()),
             MockResponse::Text("en-US".into()),
         ]);
 
@@ -271,7 +271,7 @@ mod tests {
             MockResponse::Text("EUR".into()),
             MockResponse::U32(9),
             MockResponse::U32(30),
-            MockResponse::Text("leda".into()),
+            MockResponse::Text("amalthea".into()),
             MockResponse::Text("de-DE".into()),
         ]);
 
@@ -293,7 +293,7 @@ mod tests {
             MockResponse::Text("EUR".into()),
             MockResponse::U32(9),
             MockResponse::U32(30),
-            MockResponse::Text("leda".into()),
+            MockResponse::Text("amalthea".into()),
             MockResponse::Text("xx-YY".into()), // invalid — triggers re-prompt
             MockResponse::Text("en-US".into()), // valid on retry
         ]);
@@ -321,7 +321,7 @@ mod tests {
             MockResponse::Text("EUR".into()),
             MockResponse::U32(9),
             MockResponse::U32(30),
-            MockResponse::Text("leda".into()),
+            MockResponse::Text("amalthea".into()),
             MockResponse::Text("fr-FR".into()),
         ]);
 

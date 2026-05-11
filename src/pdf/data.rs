@@ -271,7 +271,7 @@ mod tests {
             .unwrap(),
             Defaults::default(),
             ValidatedBranding::default(),
-            "leda".into(),
+            "amalthea".into(),
             crate::locale::Locale::EnUs,
         )
     }
@@ -394,7 +394,7 @@ mod tests {
             .unwrap(),
             Defaults::default(),
             ValidatedBranding::default(),
-            "leda".into(),
+            "amalthea".into(),
             crate::locale::Locale::EnUs,
         )
     }
@@ -1064,7 +1064,7 @@ mod tests {
             .unwrap(),
             Defaults::default(),
             ValidatedBranding::default(),
-            "leda".into(),
+            "amalthea".into(),
             crate::locale::Locale::EnUs,
         )
     }

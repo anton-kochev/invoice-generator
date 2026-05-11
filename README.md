@@ -199,7 +199,7 @@ defaults:
   currency: "EUR"
   payment_terms_days: 30
   invoice_date_day: 9
-  template: "leda"
+  template: "amalthea"
   locale: "en-US"
 
 branding:
@@ -214,7 +214,7 @@ branding:
 | `currency` | `EUR` | Currency code used in invoice |
 | `payment_terms_days` | `30` | Days until payment is due |
 | `invoice_date_day` | `9` | Day of the month for the invoice date (following month) |
-| `template` | `leda` | PDF template name (any installed template; see [Templates](#templates)) |
+| `template` | `amalthea` | PDF template name (any installed template; see [Templates](#templates)) |
 | `locale` | `en-US` | Locale for date/number formatting in PDF (en-US, en-GB, de-DE, fr-FR, cs-CZ, uk-UA) |
 
 All sections except `defaults` and `branding` are required. The `defaults` section is optional and falls back to the values above. Field aliases are supported for convenience (`bic` for `bic_swift`, `vat` for `vat_number`).
@@ -249,7 +249,6 @@ Templates are stored as `.typ` files (Typst source) in `~/.config/invoice-genera
 | Template | Style |
 |----------|-------|
 | `callisto` | Bold & structured |
-| `leda` | Clean & minimal |
 | `io` | Bilingual UA/EN refined card |
 
 **Installing a remote template:**
@@ -262,8 +261,6 @@ After install, the template is local and works offline. The CLI never makes a ne
 **Adding your own template:** drop a `.typ` file in `~/.config/invoice-generator/templates/`. It'll appear in the prompt on next run.
 
 **Set the default** in config (`defaults.template`) or override per-invoice with `--template` in CLI mode. In interactive mode, you're prompted to change the template before generating.
-
-> **Migration note:** if you're upgrading from a previous version where `leda` was bundled, your config may reference `defaults.template: leda`. Since `leda` is now remote-only, run `invoice-generator template refresh` and install it via the interactive "Browse remote templates…" flow — or change `defaults.template` to one of the bundled three.
 
 ### Locale Formatting
 

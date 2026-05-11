@@ -1389,7 +1389,7 @@ mod tests {
         // Assert
         match result {
             ValidationOutcome::Complete(v) => {
-                assert_eq!(v.template, "leda");
+                assert_eq!(v.template, "amalthea");
             }
             ValidationOutcome::Incomplete { .. } => panic!("Expected Complete"),
         }
@@ -1417,7 +1417,7 @@ mod tests {
     }
 
     #[test]
-    fn test_validated_config_missing_defaults_gets_leda_template() {
+    fn test_validated_config_missing_defaults_gets_amalthea_template() {
         // Arrange
         let mut config = make_complete_config();
         config.defaults = None;
@@ -1428,7 +1428,7 @@ mod tests {
         // Assert
         match result {
             ValidationOutcome::Complete(v) => {
-                assert_eq!(v.template, "leda");
+                assert_eq!(v.template, "amalthea");
             }
             ValidationOutcome::Incomplete { .. } => panic!("Expected Complete"),
         }

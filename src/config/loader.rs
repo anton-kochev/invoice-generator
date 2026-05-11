@@ -36,7 +36,7 @@ pub fn missing_field_hints(yaml_content: &str) -> Vec<&'static str> {
     let mut hints = Vec::new();
     if !yaml_has_field(yaml_content, "template") {
         hints.push(
-            "  template: leda        \u{2014} invoice template style (leda, callisto, thebe, amalthea, metis)",
+            "  template: amalthea    \u{2014} invoice template style (amalthea, thebe, metis, callisto, io, europa)",
         );
     }
     if !yaml_has_field(yaml_content, "locale") {
@@ -369,7 +369,7 @@ defaults:
     }
 
     #[test]
-    fn test_v2_config_defaults_to_leda_template() {
+    fn test_v2_config_defaults_to_amalthea_template() {
         // Arrange — defaults section without template field
         let yaml = r#"
 defaults:
@@ -385,7 +385,7 @@ defaults:
         match result {
             LoadResult::Loaded(config) => {
                 let defaults = config.defaults.unwrap();
-                assert_eq!(defaults.template, "leda");
+                assert_eq!(defaults.template, "amalthea");
             }
             LoadResult::NotFound => panic!("Expected Loaded"),
         }
@@ -457,7 +457,7 @@ defaults:
     #[test]
     fn test_missing_field_hints_missing_locale_only() {
         // Arrange
-        let yaml = "defaults:\n  currency: EUR\n  template: leda\n";
+        let yaml = "defaults:\n  currency: EUR\n  template: amalthea\n";
 
         // Act
         let hints = missing_field_hints(yaml);
@@ -470,7 +470,7 @@ defaults:
     #[test]
     fn test_missing_field_hints_nothing_missing() {
         // Arrange
-        let yaml = "defaults:\n  currency: EUR\n  template: leda\n  locale: en-US\n";
+        let yaml = "defaults:\n  currency: EUR\n  template: amalthea\n  locale: en-US\n";
 
         // Act
         let hints = missing_field_hints(yaml);
@@ -484,7 +484,7 @@ defaults:
     #[test]
     fn test_missing_field_hints_ignores_comment_with_template() {
         // Arrange — template appears only in a comment, not as an actual key
-        let yaml = "# template: leda\ndefaults:\n  currency: EUR\n  locale: en-US\n";
+        let yaml = "# template: amalthea\ndefaults:\n  currency: EUR\n  locale: en-US\n";
 
         // Act
         let hints = missing_field_hints(yaml);
@@ -498,7 +498,7 @@ defaults:
     fn test_missing_field_hints_ignores_string_value_containing_template() {
         // Arrange — "template:" appears inside a string value, not as a key
         let yaml =
-            "defaults:\n  currency: EUR\n  locale: en-US\n  footer_text: \"Use template: leda\"\n";
+            "defaults:\n  currency: EUR\n  locale: en-US\n  footer_text: \"Use template: amalthea\"\n";
 
         // Act
         let hints = missing_field_hints(yaml);

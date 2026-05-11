@@ -1,7 +1,6 @@
 {
   "templates": [
     { "name": "callisto", "file": "callisto.typ", "description": "Bold & structured" },
-    { "name": "leda",     "file": "leda.typ",     "description": "Clean & minimal" },
     { "name": "thebe",    "file": "thebe.typ",    "description": "Compact & dense" },
     { "name": "amalthea", "file": "amalthea.typ", "description": "Editorial & refined" },
     { "name": "metis",    "file": "metis.typ",    "description": "Bare-bones & printable" },

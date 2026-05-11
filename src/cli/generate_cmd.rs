@@ -217,8 +217,8 @@ pub fn handle_generate(
     let sender = resolve_sender(args.sender.as_deref(), &validated)?;
 
     // Build a registry snapshot — seeding bundled templates first so the
-    // first-run UX still resolves the default `leda` template even when the
-    // local templates dir doesn't exist yet.
+    // first-run UX still resolves the default `amalthea` template even when
+    // the local templates dir doesn't exist yet.
     if let Err(e) = TemplateRegistry::write_builtins_if_missing() {
         eprintln!("Warning: could not seed bundled templates: {e}");
     }

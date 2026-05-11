@@ -6,8 +6,8 @@ use crate::domain::{
 use crate::locale::Locale;
 
 /// Default template name baked into [`Defaults`] when the user has not picked
-/// one explicitly. Matches the previous `TemplateKey::Leda` default.
-const DEFAULT_TEMPLATE_NAME: &str = "leda";
+/// one explicitly.
+const DEFAULT_TEMPLATE_NAME: &str = "amalthea";
 
 fn default_template() -> String {
     DEFAULT_TEMPLATE_NAME.to_string()
@@ -711,16 +711,16 @@ mod tests {
     // ── Defaults.template (string slug) ──
 
     #[test]
-    fn test_defaults_default_includes_template_leda() {
+    fn test_defaults_default_includes_template_amalthea() {
         // Arrange & Act
         let defaults = Defaults::default();
 
         // Assert
-        assert_eq!(defaults.template, "leda");
+        assert_eq!(defaults.template, "amalthea");
     }
 
     #[test]
-    fn test_defaults_without_template_field_deserializes_as_leda() {
+    fn test_defaults_without_template_field_deserializes_as_amalthea() {
         // Arrange — existing config YAML with no template field (backwards compat)
         let yaml = "currency: USD\ninvoice_date_day: 5\npayment_terms_days: 14\n";
 
@@ -728,7 +728,7 @@ mod tests {
         let defaults: Defaults = serde_yaml::from_str(yaml).unwrap();
 
         // Assert
-        assert_eq!(defaults.template, "leda");
+        assert_eq!(defaults.template, "amalthea");
     }
 
     #[test]

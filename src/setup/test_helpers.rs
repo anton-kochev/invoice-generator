@@ -351,7 +351,7 @@ pub fn full_setup_responses() -> Vec<MockResponse> {
         MockResponse::Text("EUR".into()),
         MockResponse::U32(9),
         MockResponse::U32(30),
-        MockResponse::Text("leda".into()),  // template
+        MockResponse::Text("amalthea".into()),  // template
         MockResponse::Text("en-US".into()), // locale
         // Branding (decline custom footer)
         MockResponse::OptionalText(None),
@@ -383,7 +383,7 @@ pub fn resume_from_recipient_responses() -> Vec<MockResponse> {
         MockResponse::Text("EUR".into()),
         MockResponse::U32(9),
         MockResponse::U32(30),
-        MockResponse::Text("leda".into()),  // template
+        MockResponse::Text("amalthea".into()),  // template
         MockResponse::Text("en-US".into()), // locale
         // Branding (decline custom footer)
         MockResponse::OptionalText(None),

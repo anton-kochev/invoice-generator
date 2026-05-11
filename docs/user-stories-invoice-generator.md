@@ -846,10 +846,10 @@ The application compiles to a single static binary with no runtime dependencies.
 
 **Acceptance Criteria:**
 - [ ] New optional `template` field in `defaults` section of `invoice_config.yaml`
-- [ ] If absent, defaults to `"leda"`
-- [ ] Valid values: `callisto`, `leda`, `thebe`, `amalthea`, `metis`
+- [ ] If absent, defaults to `"amalthea"`
+- [ ] Valid values: `callisto`, `thebe`, `amalthea`, `metis`, `io`, `europa`
 - [ ] Invalid template key in config prints error listing available templates and exits with non-zero code
-- [ ] Existing v2.0 configs without `template` field work unchanged (default `leda`)
+- [ ] Existing v2.0 configs without `template` field work unchanged (default `amalthea`)
 
 **Dependencies:** Story 1.1
 
@@ -944,7 +944,7 @@ The application compiles to a single static binary with no runtime dependencies.
 **So that** I can pick the right look for each invoice without changing my config.
 
 **Acceptance Criteria:**
-- [ ] After the confirmation summary (Story 3.6) and before `Generate PDF? (Y/n):`, shows: `Template: leda (Clean & minimal)` followed by `Change template? (y/N):`
+- [ ] After the confirmation summary (Story 3.6) and before `Generate PDF? (Y/n):`, shows: `Template: amalthea (Editorial & refined)` followed by `Change template? (y/N):`
 - [ ] On "N" or Enter, uses the config default template
 - [ ] On "y", displays numbered list of all 5 templates with descriptions, marking the current default
 - [ ] User selects by number; invalid numbers re-prompt
@@ -976,8 +976,8 @@ The application compiles to a single static binary with no runtime dependencies.
 **So that** my preferred layout is set from the start.
 
 **Acceptance Criteria:**
-- [ ] After the payment terms prompt (Story 2.6), shows: `Template [leda]:`
-- [ ] Pressing Enter accepts `leda` as default
+- [ ] After the payment terms prompt (Story 2.6), shows: `Template [amalthea]:`
+- [ ] Pressing Enter accepts `amalthea` as default
 - [ ] Typing a valid template key sets that as the default
 - [ ] Invalid keys re-prompt with the list of available templates
 - [ ] Selected template is saved to `defaults.template` in `invoice_config.yaml`
@@ -1067,9 +1067,9 @@ The application compiles to a single static binary with no runtime dependencies.
 
 **Acceptance Criteria:**
 - [ ] v3.0 reads and works with unmodified v2.0 config files
-- [ ] Missing `template` field defaults to `leda` — no error
+- [ ] Missing `template` field defaults to `amalthea` — no error
 - [ ] Missing `locale` field defaults to `en-US` — no error
-- [ ] Running `invoice` on a v2.0 config produces visually identical output to v2.0 (leda = current template, en-US = current formatting)
+- [ ] Running `invoice` on a v2.0 config produces visually identical output to v2.0 (amalthea = current default template, en-US = current formatting)
 - [ ] No deprecation warnings for v2.0 config format
 - [ ] Application detects missing `template`/`locale` fields and prints clear guidance on what can be added (info message, not error)
 

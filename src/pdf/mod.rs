@@ -130,8 +130,8 @@ mod tests {
 
     /// All shipped template names. Tests iterate over this in lieu of the
     /// removed `TemplateKey::ALL`.
-    const ALL_TEMPLATE_NAMES: [&str; 7] = [
-        "callisto", "leda", "thebe", "amalthea", "metis", "io", "europa",
+    const ALL_TEMPLATE_NAMES: [&str; 6] = [
+        "callisto", "thebe", "amalthea", "metis", "io", "europa",
     ];
 
     fn make_summary() -> InvoiceSummary {
@@ -200,16 +200,16 @@ mod tests {
             .unwrap(),
             Defaults::default(),
             ValidatedBranding::default(),
-            "leda".into(),
+            "amalthea".into(),
             crate::locale::Locale::EnUs,
         )
     }
 
     #[test]
-    fn test_read_template_source_leda_returns_nonempty() {
+    fn test_read_template_source_amalthea_returns_nonempty() {
         // Arrange & Act
-        let template = repo_template("leda");
-        let source = read_template_source(&template).expect("leda source readable");
+        let template = repo_template("amalthea");
+        let source = read_template_source(&template).expect("amalthea source readable");
         // Assert
         assert!(!source.is_empty());
         assert!(source.contains("#"), "Should contain Typst syntax");
@@ -227,11 +227,11 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_pdf_with_explicit_leda_template() {
+    fn test_generate_pdf_with_explicit_amalthea_template() {
         // Arrange
         let summary = make_summary();
         let config = make_config();
-        let template = repo_template("leda");
+        let template = repo_template("amalthea");
         // Act
         let result = generate_pdf(
             &summary,
@@ -255,7 +255,7 @@ mod tests {
         // Arrange
         let summary = make_summary();
         let config = make_config();
-        let template = repo_template("leda");
+        let template = repo_template("amalthea");
         // Act
         let pdf1 = generate_pdf(
             &summary,
@@ -282,7 +282,7 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_pdf_with_non_leda_key_succeeds() {
+    fn test_generate_pdf_with_non_amalthea_key_succeeds() {
         // Arrange
         let summary = make_summary();
         let config = make_config();
@@ -363,7 +363,7 @@ mod tests {
         // Arrange
         let summary = make_summary();
         let config = make_config(); // branding.logo is None
-        let template = repo_template("leda");
+        let template = repo_template("amalthea");
         // Act
         let result = generate_pdf(
             &summary,
@@ -386,7 +386,7 @@ mod tests {
         config.branding.accent_color = crate::domain::HexColor::try_new("#ff5500").unwrap();
         config.branding.font = Some("Arial".into());
         config.branding.footer_text = Some("Custom footer text".into());
-        let template = repo_template("leda");
+        let template = repo_template("amalthea");
         // Act
         let result = generate_pdf(
             &summary,
@@ -408,7 +408,7 @@ mod tests {
         let summary = make_summary();
         let mut config = make_config();
         config.branding.footer_text = Some("".into());
-        let template = repo_template("leda");
+        let template = repo_template("amalthea");
         // Act
         let result = generate_pdf(
             &summary,
@@ -493,7 +493,7 @@ mod tests {
             .unwrap(),
             Defaults::default(),
             ValidatedBranding::default(),
-            "leda".into(),
+            "amalthea".into(),
             crate::locale::Locale::EnUs,
         )
     }
@@ -502,8 +502,8 @@ mod tests {
     /// `InvoiceData::from_parts`. The `io` template requires a hand-crafted
     /// bilingual data blob and is exercised separately via
     /// [`regen_io_sample`].
-    const STANDARD_TEMPLATE_NAMES: [&str; 6] =
-        ["callisto", "leda", "thebe", "amalthea", "metis", "europa"];
+    const STANDARD_TEMPLATE_NAMES: [&str; 5] =
+        ["callisto", "thebe", "amalthea", "metis", "europa"];
 
     #[test]
     fn test_template_source_each_key_returns_distinct_content() {
@@ -779,7 +779,7 @@ mod tests {
             .unwrap(),
             Defaults::default(),
             ValidatedBranding::default(),
-            "leda".into(),
+            "amalthea".into(),
             crate::locale::Locale::EnUs,
         )
     }

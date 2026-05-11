@@ -25,7 +25,7 @@ const BUILTIN_TEMPLATES: &[(&str, &str)] = &[
 /// A locally-installed template, ready to render.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Template {
-    /// Slug used in the config file and on the CLI (e.g. `"leda"`).
+    /// Slug used in the config file and on the CLI (e.g. `"amalthea"`).
     pub name: String,
     /// Human-readable one-liner from the manifest, when known.
     pub description: Option<String>,
@@ -266,11 +266,11 @@ mod tests {
     fn test_scan_local_in_attaches_descriptions_from_manifest() {
         // Arrange
         let dir = TempDir::new().unwrap();
-        std::fs::write(dir.path().join("leda.typ"), b"// leda").unwrap();
+        std::fs::write(dir.path().join("test-tpl.typ"), b"// test-tpl").unwrap();
         let manifest = Manifest {
             templates: vec![manifest::ManifestEntry {
-                name: "leda".into(),
-                file: "leda.typ".into(),
+                name: "test-tpl".into(),
+                file: "test-tpl.typ".into(),
                 description: "Clean & minimal".into(),
             }],
         };
@@ -280,8 +280,8 @@ mod tests {
             TemplateRegistry::scan_local_in(dir.path(), Some(&manifest)).unwrap();
 
         // Assert
-        let leda = registry.find_by_name("leda").unwrap();
-        assert_eq!(leda.description.as_deref(), Some("Clean & minimal"));
+        let entry = registry.find_by_name("test-tpl").unwrap();
+        assert_eq!(entry.description.as_deref(), Some("Clean & minimal"));
     }
 
     #[test]
