@@ -193,8 +193,8 @@ mod tests {
         // Act
         run_setup(&prompter, &mut config, &all_missing, &cfg_path(&dir)).unwrap();
 
-        // Assert
-        assert!(config.sender.is_some());
+        // Assert — collect_sender now writes to `senders` (not legacy `sender`).
+        assert!(config.senders.is_some());
         assert!(config.recipients.is_some());
         assert!(config.payment.is_some());
         assert!(config.presets.is_some());

@@ -35,6 +35,11 @@ pub enum ConfigError {
     #[error("default recipient \"{0}\" not found in recipients list")]
     InvalidDefaultRecipient(String),
 
+    /// `default_sender` references a key not found in senders list,
+    /// or the key value itself failed validation.
+    #[error("default sender \"{0}\" not found in senders list")]
+    InvalidDefaultSender(String),
+
     /// `default_recipient` is missing but recipients are defined.
     #[error("default_recipient is required when recipients are defined")]
     MissingDefaultRecipient,
@@ -42,6 +47,10 @@ pub enum ConfigError {
     /// Two recipients share the same key.
     #[error("duplicate recipient key: \"{0}\"")]
     DuplicateRecipientKey(String),
+
+    /// Two senders share the same key.
+    #[error("duplicate sender key: \"{0}\"")]
+    DuplicateSenderKey(String),
 
     /// A payment method is invalid: missing both `key` and `label`, or its
     /// `label` slugifies to nothing, or some other key-derivation failure.
@@ -56,6 +65,10 @@ pub enum ConfigError {
     #[error("cannot delete \u{2014} at least one recipient must exist.")]
     LastRecipient,
 
+    /// Cannot delete the last remaining sender.
+    #[error("cannot delete \u{2014} at least one sender must exist.")]
+    LastSender,
+
     /// Cannot delete the last remaining preset.
     #[error("cannot delete \u{2014} at least one preset must exist.")]
     LastPreset,
@@ -63,6 +76,10 @@ pub enum ConfigError {
     /// Requested recipient key does not exist.
     #[error("unknown recipient: \"{key}\". Available: {}", available.join(", "))]
     RecipientNotFound { key: String, available: Vec<String> },
+
+    /// Requested sender key does not exist.
+    #[error("unknown sender: \"{key}\". Available: {}", available.join(", "))]
+    SenderNotFound { key: String, available: Vec<String> },
 
     /// Requested preset key does not exist.
     #[error("unknown preset: \"{0}\"")]
@@ -113,6 +130,18 @@ mod tests {
     }
 
     #[test]
+    fn test_invalid_default_sender_displays_key() {
+        // Arrange
+        let err = ConfigError::InvalidDefaultSender("bogus".into());
+
+        // Act
+        let msg = format!("{err}");
+
+        // Assert
+        assert!(msg.contains("bogus"), "Expected 'bogus' in: {msg}");
+    }
+
+    #[test]
     fn test_duplicate_recipient_key_displays_key() {
         // Arrange
         let err = ConfigError::DuplicateRecipientKey("acme".into());
@@ -142,6 +171,25 @@ mod tests {
     }
 
     #[test]
+    fn test_sender_not_found_displays_key() {
+        // Arrange
+        let err = ConfigError::SenderNotFound {
+            key: "missing".into(),
+            available: vec!["alice".into(), "bob".into()],
+        };
+
+        // Act
+        let msg = format!("{err}");
+
+        // Assert
+        assert!(msg.contains("missing"), "Expected 'missing' in: {msg}");
+        assert!(msg.contains("alice"), "Expected 'alice' in: {msg}");
+        assert!(msg.contains("bob"), "Expected 'bob' in: {msg}");
+        assert!(msg.contains("unknown sender"), "Expected 'unknown sender' in: {msg}");
+        assert!(msg.contains("Available:"), "Expected 'Available:' in: {msg}");
+    }
+
+    #[test]
     fn test_missing_default_recipient_displays_message() {
         // Arrange
         let err = ConfigError::MissingDefaultRecipient;
@@ -163,6 +211,21 @@ mod tests {
         assert!(
             msg.contains("at least one recipient"),
             "Expected 'at least one recipient' in: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_last_sender_displays_message() {
+        // Arrange
+        let err = ConfigError::LastSender;
+
+        // Act
+        let msg = format!("{err}");
+
+        // Assert
+        assert!(
+            msg.contains("at least one sender"),
+            "Expected 'at least one sender' in: {msg}"
         );
     }
 }

@@ -21,6 +21,7 @@ A CLI tool that generates professional PDF invoices through an interactive promp
 - **YAML-based configuration** — sender, recipients, payment methods, line-item presets, and invoice defaults
 - **Config validation** — clear reporting of missing or malformed sections with guidance on how to fix
 - **Multiple recipients** — define several client profiles and select by key; set a default for quick invoicing
+- **Multiple senders** — define several sender identities (e.g. business entities) and select by key; set a default for quick invoicing
 - **Reusable presets** — define common billable items (description + default daily rate + optional currency and tax rate) and select them by number during invoicing
 - **Inline preset creation** — add new presets on the fly during invoice generation without editing the config file
 - **Per-preset currency and tax** — each preset can carry its own currency and tax rate, overriding the global default
@@ -28,7 +29,7 @@ A CLI tool that generates professional PDF invoices through an interactive promp
 - **Decoupled template system** — 3 templates (amalthea, metis, thebe) ship in the binary; additional templates are fetched on demand from a remote GitHub repo without needing a new binary release
 - **Locale-aware formatting** — dates and numbers in the PDF follow locale rules (en-US, en-GB, de-DE, fr-FR, cs-CZ, uk-UA)
 - **Non-interactive CLI mode** — `invoice generate` for scripting and CI; supports single-item (`--preset`/`--days`) or multi-item (`--items` JSON)
-- **Preset, recipient, and template management** — `invoice preset list|delete`, `invoice recipient list|add|delete`, and `invoice template refresh` subcommands
+- **Preset, recipient, sender, and template management** — `invoice preset list|delete`, `invoice recipient list|add|delete`, `invoice sender list|add|delete`, and `invoice template refresh` subcommands
 - **Professional PDF output** — clean A4 layout rendered via Typst with line-item table, payment details, and formatted totals
 - **Overwrite protection** — prompts before overwriting an existing PDF; standardized filenames (`Invoice_Name_MonYYYY.pdf`)
 
@@ -82,6 +83,9 @@ invoice-generator generate --month 3 --year 2026 --preset dev --days 10 --templa
 # Target a specific client
 invoice-generator generate --month 3 --year 2026 --preset dev --days 10 --client acme
 
+# Target a specific sender
+invoice-generator generate --month 3 --year 2026 --preset dev --days 10 --sender me-llc
+
 # Manage presets
 invoice-generator preset list
 invoice-generator preset delete old-key
@@ -90,6 +94,11 @@ invoice-generator preset delete old-key
 invoice-generator recipient list
 invoice-generator recipient add
 invoice-generator recipient delete old-key
+
+# Manage senders
+invoice-generator sender list
+invoice-generator sender add
+invoice-generator sender delete old-key
 
 # Refresh the remote template manifest
 invoice-generator template refresh
@@ -145,12 +154,15 @@ PDF saved: /path/to/Invoice_Jane_Doe_Mar2026.pdf
 The tool stores all static data in a YAML config file (default: `~/.config/invoice-generator/config.yaml` — see [Configuration](#configuration) for overrides). You can edit it by hand or let the setup wizard generate it.
 
 ```yaml
-sender:
-  name: "Jane Doe"
-  address:
-    - "123 Main Street"
-    - "Springfield, IL 62704"
-  email: "jane@example.com"
+senders:
+  - key: "jane"
+    name: "Jane Doe"
+    address:
+      - "123 Main Street"
+      - "Springfield, IL 62704"
+    email: "jane@example.com"
+
+default_sender: "jane"
 
 recipients:
   - key: "acme"
@@ -207,7 +219,7 @@ branding:
 
 All sections except `defaults` and `branding` are required. The `defaults` section is optional and falls back to the values above. Field aliases are supported for convenience (`bic` for `bic_swift`, `vat` for `vat_number`).
 
-Older configs with a single `recipient` field (instead of `recipients` list) are still supported and automatically handled.
+Older configs with a single `recipient` field (instead of `recipients` list) — and likewise a single `sender` field (instead of `senders` list) — are still supported and automatically migrated on the next write.
 
 ## PDF Output
 

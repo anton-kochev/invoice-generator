@@ -4,7 +4,7 @@ use std::str::FromStr;
 
 use crate::config::ConfigError;
 use crate::config::types::Preset;
-use crate::config::validator::{ValidatedConfig, ValidatedRecipient};
+use crate::config::validator::{ValidatedConfig, ValidatedRecipient, ValidatedSender};
 use crate::domain::Currency;
 use crate::error::AppError;
 use crate::invoice::InvoiceError;
@@ -155,6 +155,32 @@ fn resolve_recipient<'a>(
     }
 }
 
+/// Resolve which sender to use based on the --sender flag.
+///
+/// If no sender is specified, returns the default sender.
+/// If a sender key is provided, looks it up in the validated senders list.
+/// Mirrors [`resolve_recipient`].
+fn resolve_sender<'a>(
+    sender_key: Option<&str>,
+    validated: &'a ValidatedConfig,
+) -> Result<&'a ValidatedSender, ConfigError> {
+    match sender_key {
+        None => Ok(validated.default_sender()),
+        Some(k) => validated
+            .senders
+            .iter()
+            .find(|s| s.key().as_str() == k)
+            .ok_or_else(|| ConfigError::SenderNotFound {
+                key: k.to_string(),
+                available: validated
+                    .senders
+                    .iter()
+                    .map(|s| s.key().as_str().to_string())
+                    .collect(),
+            }),
+    }
+}
+
 /// Resolve the template to use for this invoice.
 ///
 /// Priority: explicit `--template <name>` flag, then config-default. The
@@ -188,6 +214,7 @@ pub fn handle_generate(
 ) -> Result<(), AppError> {
     let validated = load_validated_config(config_path)?;
     let recipient = resolve_recipient(args.client.as_deref(), &validated)?;
+    let sender = resolve_sender(args.sender.as_deref(), &validated)?;
 
     // Build a registry snapshot — seeding bundled templates first so the
     // first-run UX still resolves the default `leda` template even when the
@@ -213,9 +240,9 @@ pub fn handle_generate(
     let summary = build_summary(period, line_items, &validated.defaults)?;
     let config_dir = config_path.parent().unwrap_or_else(|| Path::new("."));
     let pdf_bytes = generate_pdf(
-        &summary, &validated, recipient, config_dir, &template, locale,
+        &summary, &validated, sender, recipient, config_dir, &template, locale,
     )?;
-    let output_path = pdf_output_path(&validated.sender.name, &period, output_dir);
+    let output_path = pdf_output_path(sender.name(), &period, output_dir);
     std::fs::write(&output_path, &pdf_bytes).map_err(crate::pdf::PdfError::Write)?;
     writeln!(writer, "PDF saved: {}", output_path.display())
         .map_err(crate::pdf::PdfError::Write)?;
@@ -237,6 +264,7 @@ mod tests {
             days: Some(days),
             items: None,
             client: None,
+            sender: None,
             template: None,
             locale: None,
         }
@@ -250,6 +278,7 @@ mod tests {
             days: None,
             items: Some(json.to_string()),
             client: None,
+            sender: None,
             template: None,
             locale: None,
         }
@@ -638,6 +667,84 @@ mod tests {
                 assert!(available.contains(&"globex".to_string()));
             }
             other => panic!("Expected RecipientNotFound, got {other:?}"),
+        }
+    }
+
+    // ── Phase: resolve_sender tests (pure) ──
+
+    /// Build a `ValidatedConfig` with two keyed senders (`alice` default, `bob`
+    /// extra), reusing the recipient v2 fixture for everything else. Lives
+    /// locally in this test module to avoid mutating `test_helpers.rs` ahead
+    /// of step 9 (which is where the shared sender fixtures land).
+    fn validated_two_senders() -> crate::config::validator::ValidatedConfig {
+        use crate::config::types::{Config, Sender};
+        use crate::domain::SenderKey;
+        let alice = Sender {
+            key: Some(SenderKey::try_new("alice").unwrap()),
+            name: "Alice Smith".into(),
+            address: vec!["42 Elm Street".into()],
+            email: "alice@example.com".into(),
+        };
+        let bob = Sender {
+            key: Some(SenderKey::try_new("bob").unwrap()),
+            name: "Bob Jones".into(),
+            address: vec!["7 Oak Avenue".into()],
+            email: "bob@example.com".into(),
+        };
+        let base = crate::setup::test_helpers::v2_config_two_recipients();
+        let config = Config {
+            sender: None,
+            senders: Some(vec![alice, bob]),
+            default_sender: Some(SenderKey::try_new("alice").unwrap()),
+            ..base
+        };
+        crate::setup::test_helpers::validated(config)
+    }
+
+    #[test]
+    fn test_resolve_sender_default_used_when_flag_absent() {
+        // Arrange
+        let validated = validated_two_senders();
+
+        // Act
+        let result = resolve_sender(None, &validated);
+
+        // Assert
+        let sender = result.unwrap();
+        assert_eq!(sender.key().as_str(), "alice");
+        assert_eq!(sender.name(), "Alice Smith");
+    }
+
+    #[test]
+    fn test_resolve_sender_flag_overrides_default() {
+        // Arrange
+        let validated = validated_two_senders();
+
+        // Act
+        let result = resolve_sender(Some("bob"), &validated);
+
+        // Assert
+        let sender = result.unwrap();
+        assert_eq!(sender.key().as_str(), "bob");
+        assert_eq!(sender.name(), "Bob Jones");
+    }
+
+    #[test]
+    fn test_resolve_sender_unknown_key_returns_error() {
+        // Arrange
+        let validated = validated_two_senders();
+
+        // Act
+        let result = resolve_sender(Some("nonexistent"), &validated);
+
+        // Assert
+        match result {
+            Err(ConfigError::SenderNotFound { key, available }) => {
+                assert_eq!(key, "nonexistent");
+                assert!(available.contains(&"alice".to_string()));
+                assert!(available.contains(&"bob".to_string()));
+            }
+            other => panic!("Expected SenderNotFound, got {other:?}"),
         }
     }
 

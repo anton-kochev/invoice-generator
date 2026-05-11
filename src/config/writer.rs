@@ -2,7 +2,7 @@ use std::io::Write;
 use std::path::Path;
 
 use super::error::ConfigError;
-use super::types::{Config, Preset, Recipient};
+use super::types::{Config, Preset, Recipient, Sender};
 
 /// Serialize `config` to YAML and atomically write it to `path`.
 ///
@@ -245,6 +245,155 @@ pub fn set_default_recipient(path: &Path, key: &str) -> Result<(), ConfigError> 
     save_config(path, &config)
 }
 
+/// Migrate a v1 Config (single `sender:`) to v2 (`senders:` list).
+/// No-op if already v2. Consumes the `sender` field via `.take()`.
+fn ensure_senders_v2(config: &mut Config) -> Result<(), ConfigError> {
+    use crate::domain::SenderKey;
+
+    if config.senders.is_some() {
+        return Ok(());
+    }
+    if let Some(mut legacy) = config.sender.take() {
+        let key = match legacy.key.clone() {
+            Some(k) => k,
+            None => SenderKey::from_name(&legacy.name)
+                .map_err(|e| ConfigError::InvalidDefaultSender(e.to_string()))?,
+        };
+        legacy.key = Some(key.clone());
+        config.senders = Some(vec![legacy]);
+        if config.default_sender.is_none() {
+            config.default_sender = Some(key);
+        }
+    }
+    Ok(())
+}
+
+/// Append a sender to the config file at `path`.
+///
+/// If `set_default` is true, also sets `default_sender` to the new sender's key.
+pub fn append_sender(
+    path: &Path,
+    sender: Sender,
+    set_default: bool,
+) -> Result<(), ConfigError> {
+    use super::loader::{LoadResult, load_config};
+
+    let config = match load_config(path)? {
+        LoadResult::Loaded(config) => *config,
+        LoadResult::NotFound => {
+            return Err(ConfigError::Io(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("config file not found at {}", path.display()),
+            )));
+        }
+    };
+
+    let mut config = config;
+    ensure_senders_v2(&mut config)?;
+    let mut senders = config.senders.take().unwrap_or_default();
+
+    if set_default {
+        config.default_sender = sender.key.clone();
+    }
+
+    senders.push(sender);
+    config.senders = Some(senders);
+
+    save_config(path, &config)
+}
+
+/// Remove a sender by key from the config file at `path`.
+///
+/// Returns the removed sender on success.
+/// If the removed sender was the default, clears `default_sender` (caller handles reassignment).
+pub fn remove_sender(path: &Path, key: &str) -> Result<Sender, ConfigError> {
+    use super::loader::{LoadResult, load_config};
+
+    let config = match load_config(path)? {
+        LoadResult::Loaded(config) => *config,
+        LoadResult::NotFound => {
+            return Err(ConfigError::Io(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("config file not found at {}", path.display()),
+            )));
+        }
+    };
+
+    let mut config = config;
+    ensure_senders_v2(&mut config)?;
+    let mut senders = config.senders.take().unwrap_or_default();
+
+    if senders.len() <= 1 {
+        return Err(ConfigError::LastSender);
+    }
+
+    let pos = senders
+        .iter()
+        .position(|s| s.key.as_ref().is_some_and(|k| k.as_str() == key))
+        .ok_or_else(|| ConfigError::SenderNotFound {
+            key: key.to_string(),
+            available: senders
+                .iter()
+                .filter_map(|s| s.key.as_ref().map(|k| k.as_str().to_string()))
+                .collect(),
+        })?;
+
+    let removed = senders.remove(pos);
+    config.senders = Some(senders);
+
+    // Clear default if it was the removed sender
+    if config
+        .default_sender
+        .as_ref()
+        .is_some_and(|k| k.as_str() == key)
+    {
+        config.default_sender = None;
+    }
+
+    save_config(path, &config)?;
+    Ok(removed)
+}
+
+/// Set the default sender key in the config file at `path`.
+///
+/// Verifies the key exists in the senders list before updating.
+pub fn set_default_sender(path: &Path, key: &str) -> Result<(), ConfigError> {
+    use super::loader::{LoadResult, load_config};
+
+    let config = match load_config(path)? {
+        LoadResult::Loaded(config) => *config,
+        LoadResult::NotFound => {
+            return Err(ConfigError::Io(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("config file not found at {}", path.display()),
+            )));
+        }
+    };
+
+    let mut config = config;
+    ensure_senders_v2(&mut config)?;
+    let senders = config.senders.as_deref().unwrap_or_default();
+
+    if !senders
+        .iter()
+        .any(|s| s.key.as_ref().is_some_and(|k| k.as_str() == key))
+    {
+        return Err(ConfigError::SenderNotFound {
+            key: key.to_string(),
+            available: senders
+                .iter()
+                .filter_map(|s| s.key.as_ref().map(|k| k.as_str().to_string()))
+                .collect(),
+        });
+    }
+
+    config.default_sender = Some(
+        crate::domain::SenderKey::try_new(key)
+            .map_err(|e| ConfigError::InvalidDefaultSender(e.to_string()))?,
+    );
+    save_config(path, &config)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -263,6 +412,7 @@ mod tests {
 
     fn synthetic_sender() -> Sender {
         Sender {
+            key: None,
             name: "Alice Smith".to_string(),
             address: vec![
                 "42 Elm Street".to_string(),
@@ -319,6 +469,8 @@ mod tests {
             recipient: None,
             recipients: Some(vec![synthetic_recipient()]),
             default_recipient: Some(crate::domain::RecipientKey::try_new("bob-corp").unwrap()),
+            senders: None,
+            default_sender: None,
             payment: Some(synthetic_payment()),
             presets: Some(synthetic_presets()),
             defaults: Some(synthetic_defaults()),
@@ -401,6 +553,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let alice = Config {
             sender: Some(Sender {
+                key: None,
                 name: "Alice".to_string(),
                 address: vec!["Street 1".to_string()],
                 email: "alice@example.com".to_string(),
@@ -411,6 +564,7 @@ mod tests {
 
         let bob = Config {
             sender: Some(Sender {
+                key: None,
                 name: "Bob".to_string(),
                 address: vec!["Street 2".to_string()],
                 email: "bob@example.com".to_string(),
@@ -739,6 +893,8 @@ mod tests {
                 vat_number: None,
             }]),
             default_recipient: Some(crate::domain::RecipientKey::try_new("acme").unwrap()),
+            senders: None,
+            default_sender: None,
             payment: Some(synthetic_payment()),
             presets: Some(synthetic_presets()),
             defaults: Some(synthetic_defaults()),
@@ -776,6 +932,8 @@ mod tests {
                 vat_number: None,
             }]),
             default_recipient: Some(crate::domain::RecipientKey::try_new("bob").unwrap()),
+            senders: None,
+            default_sender: None,
             payment: Some(synthetic_payment()),
             presets: Some(synthetic_presets()),
             defaults: Some(synthetic_defaults()),
@@ -807,6 +965,8 @@ mod tests {
                 vat_number: None,
             }]),
             default_recipient: Some(crate::domain::RecipientKey::try_new("acme").unwrap()),
+            senders: None,
+            default_sender: None,
             payment: Some(synthetic_payment()),
             presets: Some(synthetic_presets()),
             defaults: Some(synthetic_defaults()),
@@ -835,6 +995,8 @@ mod tests {
                 },
             ]),
             default_recipient: Some(crate::domain::RecipientKey::try_new("acme").unwrap()),
+            senders: None,
+            default_sender: None,
             payment: Some(synthetic_payment()),
             presets: Some(synthetic_presets()),
             defaults: Some(synthetic_defaults()),
@@ -1121,6 +1283,8 @@ mod tests {
             }),
             recipients: None,
             default_recipient: None,
+            senders: None,
+            default_sender: None,
             payment: Some(synthetic_payment()),
             presets: Some(synthetic_presets()),
             defaults: Some(Defaults::default()),
@@ -1378,5 +1542,390 @@ mod tests {
             final_bytes == yaml_a || final_bytes == yaml_b,
             "Concurrent saves produced corrupted output:\n{final_bytes}"
         );
+    }
+
+    // ── Sender v2 fixtures ──
+
+    fn synthetic_sender_alice() -> Sender {
+        Sender {
+            key: Some(crate::domain::SenderKey::try_new("alice").unwrap()),
+            name: "Alice Smith".to_string(),
+            address: vec![
+                "42 Elm Street".to_string(),
+                "Springfield, IL 62704".to_string(),
+            ],
+            email: "alice@example.com".to_string(),
+        }
+    }
+
+    fn synthetic_sender_bob() -> Sender {
+        Sender {
+            key: Some(crate::domain::SenderKey::try_new("bob").unwrap()),
+            name: "Bob Jones".to_string(),
+            address: vec![
+                "77 Maple Avenue".to_string(),
+                "Shelbyville, IL 62565".to_string(),
+            ],
+            email: "bob@example.com".to_string(),
+        }
+    }
+
+    fn v2_complete_config_with_senders() -> Config {
+        Config {
+            sender: None,
+            recipient: None,
+            recipients: Some(vec![synthetic_recipient()]),
+            default_recipient: Some(crate::domain::RecipientKey::try_new("bob-corp").unwrap()),
+            senders: Some(vec![synthetic_sender_alice()]),
+            default_sender: Some(crate::domain::SenderKey::try_new("alice").unwrap()),
+            payment: Some(synthetic_payment()),
+            presets: Some(synthetic_presets()),
+            defaults: Some(synthetic_defaults()),
+            branding: None,
+        }
+    }
+
+    fn v2_config_two_senders() -> Config {
+        Config {
+            sender: None,
+            recipient: None,
+            recipients: Some(vec![synthetic_recipient()]),
+            default_recipient: Some(crate::domain::RecipientKey::try_new("bob-corp").unwrap()),
+            senders: Some(vec![synthetic_sender_alice(), synthetic_sender_bob()]),
+            default_sender: Some(crate::domain::SenderKey::try_new("alice").unwrap()),
+            payment: Some(synthetic_payment()),
+            presets: Some(synthetic_presets()),
+            defaults: Some(synthetic_defaults()),
+            branding: None,
+        }
+    }
+
+    fn v1_config_with_sender() -> Config {
+        Config {
+            // Legacy v1 single sender (no key).
+            sender: Some(synthetic_sender()),
+            recipient: None,
+            recipients: Some(vec![synthetic_recipient()]),
+            default_recipient: Some(crate::domain::RecipientKey::try_new("bob-corp").unwrap()),
+            senders: None,
+            default_sender: None,
+            payment: Some(synthetic_payment()),
+            presets: Some(synthetic_presets()),
+            defaults: Some(synthetic_defaults()),
+            branding: None,
+        }
+    }
+
+    fn new_sender() -> Sender {
+        Sender {
+            key: Some(crate::domain::SenderKey::try_new("carol").unwrap()),
+            name: "Carol King".to_string(),
+            address: vec!["19 Birch Road".to_string()],
+            email: "carol@example.com".to_string(),
+        }
+    }
+
+    // ── append_sender tests ──
+
+    #[test]
+    fn test_append_sender_to_config_without_senders() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        let config = Config {
+            sender: Some(synthetic_sender()),
+            ..Config::default()
+        };
+        save_config(&cfg_path(&dir), &config).unwrap();
+
+        // Act — append a keyed v2 sender with set_default = true. Because the
+        // legacy v1 sender migrates first (becoming "alice-smith" and default),
+        // the new sender then overwrites the default to "alice".
+        append_sender(&cfg_path(&dir), synthetic_sender_alice(), true).unwrap();
+
+        // Assert
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
+        let senders = loaded.senders.unwrap();
+        assert_eq!(senders.len(), 2);
+        assert_eq!(
+            senders[0].key.as_ref().map(|k| k.as_str()),
+            Some("alice-smith")
+        );
+        assert_eq!(senders[1].key.as_ref().map(|k| k.as_str()), Some("alice"));
+        assert_eq!(
+            loaded.default_sender.as_ref().map(|k| k.as_str()),
+            Some("alice")
+        );
+        assert!(
+            loaded.sender.is_none(),
+            "v1 sender field should be cleared after migration"
+        );
+    }
+
+    #[test]
+    fn test_append_sender_to_existing_senders() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        save_config(&cfg_path(&dir), &v2_complete_config_with_senders()).unwrap();
+
+        // Act
+        append_sender(&cfg_path(&dir), synthetic_sender_bob(), false).unwrap();
+
+        // Assert
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
+        let senders = loaded.senders.unwrap();
+        assert_eq!(senders.len(), 2);
+        assert_eq!(senders[1].key.as_ref().map(|k| k.as_str()), Some("bob"));
+        assert_eq!(
+            loaded.default_sender.as_ref().map(|k| k.as_str()),
+            Some("alice"),
+            "default_sender should be unchanged when set_default = false"
+        );
+    }
+
+    #[test]
+    fn test_append_sender_set_default_updates_key() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        save_config(&cfg_path(&dir), &v2_complete_config_with_senders()).unwrap();
+
+        // Act
+        append_sender(&cfg_path(&dir), synthetic_sender_bob(), true).unwrap();
+
+        // Assert
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
+        assert_eq!(
+            loaded.default_sender.as_ref().map(|k| k.as_str()),
+            Some("bob")
+        );
+    }
+
+    #[test]
+    fn test_append_sender_preserves_other_sections() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        let original = v2_complete_config_with_senders();
+        save_config(&cfg_path(&dir), &original).unwrap();
+
+        // Act
+        append_sender(&cfg_path(&dir), synthetic_sender_bob(), false).unwrap();
+
+        // Assert
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
+        assert_eq!(loaded.recipient, original.recipient);
+        assert_eq!(loaded.recipients, original.recipients);
+        assert_eq!(loaded.payment, original.payment);
+        assert_eq!(loaded.presets, original.presets);
+        assert_eq!(loaded.defaults, original.defaults);
+    }
+
+    #[test]
+    fn test_append_sender_no_config_returns_error() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+
+        // Act
+        let result = append_sender(&cfg_path(&dir), synthetic_sender_alice(), true);
+
+        // Assert
+        assert!(matches!(result, Err(ConfigError::Io(_))));
+    }
+
+    // ── remove_sender tests ──
+
+    #[test]
+    fn test_remove_sender_deletes_matching_key() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        save_config(&cfg_path(&dir), &v2_config_two_senders()).unwrap();
+
+        // Act
+        let removed = remove_sender(&cfg_path(&dir), "bob").unwrap();
+
+        // Assert
+        assert_eq!(removed.name, "Bob Jones");
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
+        let senders = loaded.senders.unwrap();
+        assert_eq!(senders.len(), 1);
+        assert_eq!(senders[0].key.as_ref().map(|k| k.as_str()), Some("alice"));
+        assert_eq!(
+            loaded.default_sender.as_ref().map(|k| k.as_str()),
+            Some("alice"),
+            "default_sender should be preserved when removing a non-default sender"
+        );
+    }
+
+    #[test]
+    fn test_remove_sender_unknown_key_returns_error() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        save_config(&cfg_path(&dir), &v2_config_two_senders()).unwrap();
+
+        // Act
+        let result = remove_sender(&cfg_path(&dir), "nope");
+
+        // Assert
+        assert!(matches!(result, Err(ConfigError::SenderNotFound { .. })));
+    }
+
+    #[test]
+    fn test_remove_sender_last_returns_error() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        save_config(&cfg_path(&dir), &v2_complete_config_with_senders()).unwrap();
+
+        // Act
+        let result = remove_sender(&cfg_path(&dir), "alice");
+
+        // Assert
+        assert!(matches!(result, Err(ConfigError::LastSender)));
+    }
+
+    #[test]
+    fn test_remove_sender_preserves_other_sections() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        let original = v2_config_two_senders();
+        save_config(&cfg_path(&dir), &original).unwrap();
+
+        // Act
+        remove_sender(&cfg_path(&dir), "bob").unwrap();
+
+        // Assert
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
+        assert_eq!(loaded.recipient, original.recipient);
+        assert_eq!(loaded.recipients, original.recipients);
+        assert_eq!(loaded.payment, original.payment);
+        assert_eq!(loaded.presets, original.presets);
+        assert_eq!(loaded.defaults, original.defaults);
+    }
+
+    #[test]
+    fn test_remove_sender_no_config_returns_error() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+
+        // Act
+        let result = remove_sender(&cfg_path(&dir), "alice");
+
+        // Assert
+        assert!(matches!(result, Err(ConfigError::Io(_))));
+    }
+
+    // ── set_default_sender tests ──
+
+    #[test]
+    fn test_set_default_sender_updates_key() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        save_config(&cfg_path(&dir), &v2_config_two_senders()).unwrap();
+
+        // Act
+        set_default_sender(&cfg_path(&dir), "bob").unwrap();
+
+        // Assert
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
+        assert_eq!(
+            loaded.default_sender.as_ref().map(|k| k.as_str()),
+            Some("bob")
+        );
+    }
+
+    #[test]
+    fn test_set_default_sender_unknown_key_returns_error() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        save_config(&cfg_path(&dir), &v2_config_two_senders()).unwrap();
+
+        // Act
+        let result = set_default_sender(&cfg_path(&dir), "nope");
+
+        // Assert
+        assert!(matches!(result, Err(ConfigError::SenderNotFound { .. })));
+    }
+
+    // ── v1→v2 sender migration tests ──
+
+    #[test]
+    fn test_append_sender_v1_no_key_set_default_false_migrates() {
+        // Arrange — v1 config: sender has no key; ensure_senders_v2 derives
+        // one from the name ("Alice Smith" -> "alice-smith").
+        let dir = TempDir::new().unwrap();
+        save_config(&cfg_path(&dir), &v1_config_with_sender()).unwrap();
+
+        // Act
+        append_sender(&cfg_path(&dir), new_sender(), false).unwrap();
+
+        // Assert
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
+        let senders = loaded.senders.unwrap();
+        assert_eq!(senders.len(), 2);
+        assert_eq!(
+            senders[0].key,
+            Some(crate::domain::SenderKey::try_new("alice-smith").unwrap())
+        );
+        assert_eq!(
+            senders[1].key,
+            Some(crate::domain::SenderKey::try_new("carol").unwrap())
+        );
+        // Migration sets the *existing* sender as default; set_default = false
+        // means the newly appended one does not override it.
+        assert_eq!(
+            loaded.default_sender,
+            Some(crate::domain::SenderKey::try_new("alice-smith").unwrap())
+        );
+    }
+
+    #[test]
+    fn test_append_sender_v1_set_default_true_new_becomes_default() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        save_config(&cfg_path(&dir), &v1_config_with_sender()).unwrap();
+
+        // Act
+        append_sender(&cfg_path(&dir), new_sender(), true).unwrap();
+
+        // Assert
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
+        let senders = loaded.senders.unwrap();
+        assert_eq!(senders.len(), 2);
+        assert_eq!(
+            loaded.default_sender,
+            Some(crate::domain::SenderKey::try_new("carol").unwrap())
+        );
+    }
+
+    #[test]
+    fn test_append_sender_v1_clears_v1_field() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        save_config(&cfg_path(&dir), &v1_config_with_sender()).unwrap();
+
+        // Act
+        append_sender(&cfg_path(&dir), new_sender(), false).unwrap();
+
+        // Assert
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
+        assert!(
+            loaded.sender.is_none(),
+            "v1 sender field should be cleared after migration"
+        );
+    }
+
+    #[test]
+    fn test_append_sender_v1_preserves_sender_data() {
+        // Arrange
+        let dir = TempDir::new().unwrap();
+        save_config(&cfg_path(&dir), &v1_config_with_sender()).unwrap();
+
+        // Act
+        append_sender(&cfg_path(&dir), new_sender(), false).unwrap();
+
+        // Assert
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
+        let migrated = &loaded.senders.unwrap()[0];
+        let original = synthetic_sender();
+        assert_eq!(migrated.name, original.name);
+        assert_eq!(migrated.address, original.address);
+        assert_eq!(migrated.email, original.email);
     }
 }

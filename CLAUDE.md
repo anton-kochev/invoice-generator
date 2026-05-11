@@ -17,6 +17,8 @@
 - `cargo run -- generate --month 3 --year 2026 --preset dev --days 10`: Non-interactive single-item generation
 - `cargo run -- preset list|delete <key>`: Manage presets
 - `cargo run -- recipient list|add|delete <key>`: Manage recipients
+- `cargo run -- sender list|add|delete <key>`: Manage senders
+- `cargo run -- generate --month 3 --year 2026 --preset dev --days 10 --sender <key>`: Generate using an explicit sender (defaults to `default_sender`)
 
 ## Code Conventions
 - AAA comments (`// Arrange`, `// Act`, `// Assert`) in all test functions
@@ -30,7 +32,7 @@
 - `src/main.rs` — entry point, clap CLI parsing, dispatches to interactive or subcommand handlers
 - `src/error.rs` — AppError enum with variants for config, setup, invoice, PDF, preset, recipient, template, and locale errors
 - `src/config/` — YAML config: types (Config, Sender, Recipient, PaymentMethod, Preset, Defaults, Branding, TemplateKey), loader, validator, writer
-- `src/cli/` — clap subcommands: generate (non-interactive), preset list/delete, recipient list/add/delete, interactive flow
+- `src/cli/` — clap subcommands: generate (non-interactive), preset list/delete, recipient list/add/delete, sender list/add/delete, interactive flow
 - `src/setup/` — interactive setup wizard: sender, recipient, payment, presets, defaults, prompter
 - `src/invoice/` — invoice generation: line items, period, currency, preset selection/creation, summary, display
 - `src/locale.rs` — Locale enum (en-US, en-GB, de-DE, fr-FR, cs-CZ, uk-UA) with date/number formatting

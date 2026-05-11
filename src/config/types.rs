@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-use crate::domain::{Currency, HexColor, Iban, PaymentMethodKey, PresetKey, RecipientKey};
+use crate::domain::{
+    Currency, HexColor, Iban, PaymentMethodKey, PresetKey, RecipientKey, SenderKey,
+};
 use crate::locale::Locale;
 
 /// Default template name baked into [`Defaults`] when the user has not picked
@@ -46,6 +48,12 @@ pub struct Config {
     /// Key of the default recipient profile.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_recipient: Option<RecipientKey>,
+    /// v2 multi-sender list.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub senders: Option<Vec<Sender>>,
+    /// Key of the default sender profile.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_sender: Option<SenderKey>,
     /// Invoice presets (e.g. hourly-rate templates).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub presets: Option<Vec<Preset>>,
@@ -60,7 +68,12 @@ pub struct Config {
 /// Information about the invoice sender.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Sender {
+    /// Validated slug. Optional in raw config (v1 configs may lack it),
+    /// auto-derived during validation when missing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<SenderKey>,
     pub name: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub address: Vec<String>,
     pub email: String,
 }
@@ -238,6 +251,149 @@ mod tests {
             loaded.default_recipient,
             Some(RecipientKey::try_new("acme").unwrap())
         );
+    }
+
+    // ── Sender: v1/v2 key field ──
+
+    #[test]
+    fn v1_sender_yaml_deserializes_with_key_none() {
+        // Arrange — legacy v1 sender YAML with no `key:` field.
+        let yaml = "name: Alice\naddress:\n  - 42 Elm Street\nemail: alice@example.com\n";
+
+        // Act
+        let s: Sender = serde_yaml::from_str(yaml).unwrap();
+
+        // Assert
+        assert!(s.key.is_none());
+        assert_eq!(s.name, "Alice");
+        assert_eq!(s.address, vec!["42 Elm Street"]);
+        assert_eq!(s.email, "alice@example.com");
+    }
+
+    #[test]
+    fn v2_sender_yaml_with_key_deserializes() {
+        // Arrange
+        let yaml =
+            "key: alice\nname: Alice\naddress:\n  - 42 Elm Street\nemail: alice@example.com\n";
+
+        // Act
+        let s: Sender = serde_yaml::from_str(yaml).unwrap();
+
+        // Assert
+        assert_eq!(s.key, Some(SenderKey::try_new("alice").unwrap()));
+        assert_eq!(s.name, "Alice");
+    }
+
+    #[test]
+    fn config_senders_none_omitted_from_yaml() {
+        // Arrange
+        let config = Config {
+            senders: None,
+            default_sender: None,
+            ..Config::default()
+        };
+
+        // Act
+        let yaml = serde_yaml::to_string(&config).unwrap();
+
+        // Assert
+        assert!(
+            !yaml.contains("senders"),
+            "None senders should be omitted from YAML"
+        );
+        assert!(
+            !yaml.contains("default_sender"),
+            "None default_sender should be omitted"
+        );
+    }
+
+    #[test]
+    fn v2_config_with_senders_round_trips() {
+        // Arrange
+        let config = Config {
+            senders: Some(vec![Sender {
+                key: Some(SenderKey::try_new("alice").unwrap()),
+                name: "Alice".into(),
+                address: vec!["42 Elm Street".into()],
+                email: "alice@example.com".into(),
+            }]),
+            default_sender: Some(SenderKey::try_new("alice").unwrap()),
+            ..Config::default()
+        };
+
+        // Act
+        let yaml = serde_yaml::to_string(&config).unwrap();
+        let loaded: Config = serde_yaml::from_str(&yaml).unwrap();
+
+        // Assert
+        assert_eq!(loaded.senders.as_ref().unwrap().len(), 1);
+        assert_eq!(
+            loaded.default_sender,
+            Some(SenderKey::try_new("alice").unwrap())
+        );
+        let s = &loaded.senders.as_ref().unwrap()[0];
+        assert_eq!(s.key, Some(SenderKey::try_new("alice").unwrap()));
+        assert_eq!(s.name, "Alice");
+        assert_eq!(s.address, vec!["42 Elm Street"]);
+        assert_eq!(s.email, "alice@example.com");
+    }
+
+    #[test]
+    fn sender_key_none_omitted_from_yaml() {
+        // Arrange — keyless v1-style Sender literal.
+        let sender = Sender {
+            key: None,
+            name: "Alice".into(),
+            address: vec!["42 Elm Street".into()],
+            email: "alice@example.com".into(),
+        };
+
+        // Act
+        let yaml = serde_yaml::to_string(&sender).unwrap();
+        let value: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap();
+        let map = value.as_mapping().expect("sender serializes as map");
+
+        // Assert
+        assert!(
+            !map.contains_key(serde_yaml::Value::String("key".into())),
+            "Expected `key` field to be absent, got YAML: {yaml}"
+        );
+    }
+
+    #[test]
+    fn test_sender_empty_address_omits_field_in_yaml() {
+        // Arrange — sender with no address lines; synthetic identity data.
+        let sender = Sender {
+            key: None,
+            name: "Alice".into(),
+            address: vec![],
+            email: "a@b.com".into(),
+        };
+
+        // Act
+        let yaml = serde_yaml::to_string(&sender).unwrap();
+
+        // Assert
+        assert!(
+            !yaml.contains("address:"),
+            "Empty address should be omitted from YAML, got: {yaml}"
+        );
+    }
+
+    #[test]
+    fn test_sender_deserializes_when_address_field_absent() {
+        // Arrange — YAML omits the `address:` field entirely (this is the shape
+        // `skip_serializing_if = "Vec::is_empty"` will produce in practice).
+        let yaml = "name: Alice\nemail: a@b.com\n";
+
+        // Act
+        let result: Result<Sender, _> = serde_yaml::from_str(yaml);
+
+        // Assert — currently fails to parse (no `#[serde(default)]` on `address`).
+        // After step 4, this passes with an empty vec.
+        let loaded = result.unwrap();
+        assert!(loaded.address.is_empty());
+        assert_eq!(loaded.name, "Alice");
     }
 
     #[test]

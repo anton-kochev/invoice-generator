@@ -11,6 +11,7 @@ pub mod non_empty;
 pub mod payment_method_key;
 pub mod preset_key;
 pub mod recipient_key;
+pub mod sender_key;
 
 pub use currency::Currency;
 pub use hex_color::HexColor;
@@ -19,3 +20,4 @@ pub use non_empty::NonEmpty;
 pub use payment_method_key::PaymentMethodKey;
 pub use preset_key::PresetKey;
 pub use recipient_key::RecipientKey;
+pub use sender_key::SenderKey;

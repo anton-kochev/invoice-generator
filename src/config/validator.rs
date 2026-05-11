@@ -2,7 +2,7 @@ use std::fmt;
 
 use super::error::ConfigError;
 use super::types::*;
-use crate::domain::{HexColor, Iban, NonEmpty, PaymentMethodKey, RecipientKey};
+use crate::domain::{HexColor, Iban, NonEmpty, PaymentMethodKey, RecipientKey, SenderKey};
 use crate::locale::Locale;
 
 const DEFAULT_ACCENT_COLOR: &str = "#2c3e50";
@@ -148,6 +148,82 @@ impl ValidatedRecipient {
     }
 }
 
+/// A sender with all post-validation invariants encoded in the type.
+///
+/// Compared to the raw [`Sender`], `key` is non-`Option`: the validator
+/// either supplies a derived key (v1 configs) or asserts the user-provided
+/// one is well-formed. Mirrors [`ValidatedRecipient`].
+///
+/// Fields are `pub(super)` so only the [`crate::config`] module can construct
+/// instances directly. External callers — including tests in other modules —
+/// must go through [`ValidatedSender::from_validated_parts`] (test-only) or
+/// obtain instances by validating a [`Config`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct ValidatedSender {
+    pub(super) key: SenderKey,
+    pub(super) name: String,
+    pub(super) address: Vec<String>,
+    pub(super) email: String,
+}
+
+impl ValidatedSender {
+    /// Convert from a raw [`Sender`] whose `key` is known to be `Some`.
+    ///
+    /// Panics if `key` is `None`. Only the validator should call this — it is
+    /// responsible for filling in derived keys before invoking `from_partial`.
+    fn from_partial(s: Sender) -> Self {
+        Self {
+            key: s.key.expect(
+                "validator must populate Sender.key before constructing ValidatedSender",
+            ),
+            name: s.name,
+            address: s.address,
+            email: s.email,
+        }
+    }
+
+    /// Borrow the sender's key.
+    pub fn key(&self) -> &SenderKey {
+        &self.key
+    }
+
+    /// Borrow the sender's display name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Borrow the sender's address lines.
+    pub fn address(&self) -> &[String] {
+        &self.address
+    }
+
+    /// Borrow the sender's email.
+    pub fn email(&self) -> &str {
+        &self.email
+    }
+
+    /// Test-only constructor that bypasses the normal validator path.
+    ///
+    /// Used by test fixtures in other modules that need to assemble a
+    /// [`ValidatedSender`] without round-tripping through [`Config::validate`].
+    /// Production code paths construct via [`ValidatedSender::from_partial`]
+    /// inside the validator.
+    #[cfg(test)]
+    pub(crate) fn from_validated_parts(
+        key: SenderKey,
+        name: String,
+        address: Vec<String>,
+        email: String,
+    ) -> Self {
+        Self {
+            key,
+            name,
+            address,
+            email,
+        }
+    }
+}
+
 /// A payment method with all post-validation invariants encoded in the type.
 ///
 /// Compared to the raw [`PaymentMethod`], `key` is non-`Option`: the validator
@@ -234,6 +310,10 @@ impl ValidatedPaymentMethod {
 /// A fully validated configuration with all required sections present.
 ///
 /// Invariants encoded in the type system (post-validation):
+/// - `senders` has at least one entry.
+/// - The default-sender index is in-bounds for `senders` (encapsulated
+///   as a private field; use [`default_sender`](Self::default_sender)
+///   to dereference safely).
 /// - `recipients` has at least one entry.
 /// - The default-recipient index is in-bounds for `recipients` (encapsulated
 ///   as a private field; use [`default_recipient`](Self::default_recipient)
@@ -242,9 +322,18 @@ impl ValidatedPaymentMethod {
 /// - `presets` has at least one entry.
 /// - Every recipient's key is `Some` (encoded as a non-`Option` field on
 ///   [`ValidatedRecipient`]).
+/// - Every sender's key is `Some` (encoded as a non-`Option` field on
+///   [`ValidatedSender`]).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ValidatedConfig {
-    pub sender: Sender,
+    /// All available senders (guaranteed non-empty).
+    pub senders: NonEmpty<ValidatedSender>,
+    /// Index of the default sender within `senders`.
+    /// Invariant: `< senders.len()` (validator enforces). Private so the
+    /// invariant cannot be violated by external construction; access via
+    /// [`default_sender`](Self::default_sender) /
+    /// [`default_sender_key`](Self::default_sender_key).
+    default_sender_idx: usize,
     /// All available recipients (guaranteed non-empty).
     pub recipients: NonEmpty<ValidatedRecipient>,
     /// Index of the default recipient within `recipients`.
@@ -267,6 +356,18 @@ pub struct ValidatedConfig {
 }
 
 impl ValidatedConfig {
+    /// Borrow the default sender — the one referenced by the (private)
+    /// default-sender index.
+    pub fn default_sender(&self) -> &ValidatedSender {
+        // Safe by construction: validator guarantees the index is in-bounds.
+        &self.senders[self.default_sender_idx]
+    }
+
+    /// Borrow the default sender's key.
+    pub fn default_sender_key(&self) -> &SenderKey {
+        &self.default_sender().key
+    }
+
     /// Borrow the default recipient — the one referenced by the (private)
     /// default-recipient index.
     pub fn default_recipient(&self) -> &ValidatedRecipient {
@@ -281,7 +382,7 @@ impl ValidatedConfig {
     }
 
     /// Test-only constructor that assembles a [`ValidatedConfig`] directly,
-    /// asserting the index invariant rather than re-validating from scratch.
+    /// asserting the index invariants rather than re-validating from scratch.
     ///
     /// External tests use this to build fixtures without round-tripping
     /// through [`Config::validate`]. Production code paths assemble inline at
@@ -289,7 +390,8 @@ impl ValidatedConfig {
     #[cfg(test)]
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_validated_parts(
-        sender: Sender,
+        senders: NonEmpty<ValidatedSender>,
+        default_sender_idx: usize,
         recipients: NonEmpty<ValidatedRecipient>,
         default_recipient_idx: usize,
         payment: NonEmpty<ValidatedPaymentMethod>,
@@ -300,11 +402,16 @@ impl ValidatedConfig {
         locale: Locale,
     ) -> Self {
         assert!(
+            default_sender_idx < senders.len(),
+            "default_sender_idx must be in bounds"
+        );
+        assert!(
             default_recipient_idx < recipients.len(),
             "default_recipient_idx must be in bounds"
         );
         Self {
-            sender,
+            senders,
+            default_sender_idx,
             recipients,
             default_recipient_idx,
             payment,
@@ -400,6 +507,82 @@ fn validate_recipient_invariants(
     Ok(())
 }
 
+/// Outcome of sender normalization: collapse v1 + v2 inputs to a single
+/// `(list, default_key)` pair, signaling whether the section is fully missing.
+enum SendersNormalized {
+    /// A non-empty sender list and (optionally) a default-sender key.
+    /// The list is guaranteed non-empty; every sender's `key` is `Some`.
+    Present(Vec<Sender>, Option<SenderKey>),
+    /// No senders configured (or an empty v2 list). Caller should push
+    /// [`ConfigSection::Sender`] onto its `missing` accumulator.
+    Missing,
+}
+
+/// Normalize the v1 (`sender`) + v2 (`senders` + `default_sender`) inputs to a
+/// single canonical pair.
+///
+/// v2 wins when both are present. v1 inputs without a key get one derived
+/// from the sender name; if that derivation fails, returns
+/// [`ConfigError::InvalidDefaultSender`].
+fn normalize_senders(
+    v1: Option<Sender>,
+    v2: Option<Vec<Sender>>,
+    default_key: Option<SenderKey>,
+) -> Result<SendersNormalized, ConfigError> {
+    match (v1, v2, default_key) {
+        (_, Some(list), dk) if !list.is_empty() => {
+            // Derive missing keys (parallels recipient v2 behavior — a v2 list
+            // may still contain entries without explicit keys).
+            let mut normalized = Vec::with_capacity(list.len());
+            for mut s in list {
+                if s.key.is_none() {
+                    let derived = SenderKey::from_name(&s.name)
+                        .map_err(|e| ConfigError::InvalidDefaultSender(e.to_string()))?;
+                    s.key = Some(derived);
+                }
+                normalized.push(s);
+            }
+            Ok(SendersNormalized::Present(normalized, dk))
+        }
+        (_, Some(_), _) => Ok(SendersNormalized::Missing), // empty v2 list
+        (Some(mut s), None, _) => {
+            let key = match s.key.clone() {
+                Some(k) => k,
+                None => SenderKey::from_name(&s.name)
+                    .map_err(|e| ConfigError::InvalidDefaultSender(e.to_string()))?,
+            };
+            s.key = Some(key.clone());
+            Ok(SendersNormalized::Present(vec![s], Some(key)))
+        }
+        (None, None, _) => Ok(SendersNormalized::Missing),
+    }
+}
+
+/// Verify sender-list invariants: every sender has a key, no duplicate
+/// keys, and the `default_key` (when present) references one of them.
+///
+/// Pure check — does not mutate inputs.
+fn validate_sender_invariants(
+    list: &[Sender],
+    default_key: Option<&SenderKey>,
+) -> Result<(), ConfigError> {
+    let mut seen = std::collections::HashSet::new();
+    for s in list {
+        let k = s.key.as_ref().ok_or_else(|| {
+            ConfigError::InvalidDefaultSender("sender has missing key".into())
+        })?;
+        if !seen.insert(k.clone()) {
+            return Err(ConfigError::DuplicateSenderKey(k.as_str().to_string()));
+        }
+    }
+    if let Some(dk) = default_key
+        && !list.iter().any(|s| s.key.as_ref() == Some(dk))
+    {
+        return Err(ConfigError::InvalidDefaultSender(dk.as_str().to_string()));
+    }
+    Ok(())
+}
+
 /// Phase A of the payment pipeline: fill in missing keys (deriving from
 /// `label` when needed) and verify uniqueness across the resulting set.
 ///
@@ -481,6 +664,8 @@ impl Config {
             recipient,
             recipients: v2_recipients,
             default_recipient,
+            senders,
+            default_sender,
             payment,
             presets,
             defaults,
@@ -490,9 +675,21 @@ impl Config {
         // Order matters: `missing` is asserted on by tests in the exact sequence
         // Sender → Recipient → Payment → Presets.
         let mut missing = Vec::new();
-        if sender.is_none() {
-            missing.push(ConfigSection::Sender);
-        }
+
+        // Normalize v1/v2 sender inputs and validate invariants on the
+        // resulting list. Hard errors short-circuit; a missing section is
+        // recorded for the partial-config path.
+        let (senders_list, sender_default_key) =
+            match normalize_senders(sender, senders, default_sender)? {
+                SendersNormalized::Present(list, dk) => {
+                    validate_sender_invariants(&list, dk.as_ref())?;
+                    (Some(list), dk)
+                }
+                SendersNormalized::Missing => {
+                    missing.push(ConfigSection::Sender);
+                    (None, None)
+                }
+            };
 
         // Normalize v1/v2 recipient inputs and validate invariants on the
         // resulting list. Hard errors short-circuit; a missing section is
@@ -519,10 +716,12 @@ impl Config {
         if !missing.is_empty() {
             return Ok(ValidationOutcome::Incomplete {
                 config: Config {
-                    sender,
+                    sender: None, // already consumed by normalization
                     recipient: None, // already consumed by normalization
                     recipients,
                     default_recipient: default_key,
+                    senders: senders_list,
+                    default_sender: sender_default_key,
                     payment,
                     presets,
                     defaults,
@@ -533,6 +732,31 @@ impl Config {
         }
 
         // All sections present. Assemble the validated config.
+        let senders_vec = senders_list.expect("senders present when no missing sections");
+        let sdk = sender_default_key.unwrap_or_else(|| {
+            // Single-sender list with no explicit default: use the (sole) entry's key.
+            // Invariant: validate_sender_invariants guarantees every sender has a key.
+            senders_vec[0]
+                .key
+                .clone()
+                .expect("sender key populated by normalization")
+        });
+
+        // Locate the default sender's index before consuming the vec, so the
+        // resulting NonEmpty + idx pair is invariant-by-construction.
+        let default_sender_idx = senders_vec
+            .iter()
+            .position(|s| s.key.as_ref() == Some(&sdk))
+            .expect("default sender key validated against senders above");
+
+        // Tighten Sender (Option<SenderKey>) → ValidatedSender.
+        let validated_senders: Vec<ValidatedSender> = senders_vec
+            .into_iter()
+            .map(ValidatedSender::from_partial)
+            .collect();
+        let senders_ne =
+            NonEmpty::try_from_vec(validated_senders).expect("senders non-empty checked above");
+
         let recipients_vec = recipients.expect("recipients present when no missing sections");
         let dk = default_key.expect("default key validated above");
 
@@ -574,7 +798,8 @@ impl Config {
         let locale = resolved_defaults.locale;
 
         Ok(ValidationOutcome::Complete(ValidatedConfig {
-            sender: sender.expect("sender present when no missing sections"),
+            senders: senders_ne,
+            default_sender_idx,
             recipients: recipients_ne,
             default_recipient_idx,
             payment: payment_ne,
@@ -590,6 +815,7 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::setup::test_helpers::sender_for_test;
 
     #[test]
     fn test_config_section_display() {
@@ -633,7 +859,7 @@ mod tests {
         // Assert
         match result {
             ValidationOutcome::Complete(v) => {
-                assert_eq!(v.sender.name, "Alice");
+                assert_eq!(sender_for_test(&v).name, "Alice");
                 assert_eq!(v.default_recipient().name, "Bob Corp");
                 assert_eq!(v.recipients.len(), 1);
                 assert_eq!(v.default_recipient_key().as_str(), "bob-corp");
@@ -776,6 +1002,8 @@ mod tests {
             recipient: Some(make_recipient()),
             recipients: None,
             default_recipient: None,
+            senders: None,
+            default_sender: None,
             payment: Some(make_payment()),
             presets: Some(make_presets()),
             defaults: Some(Defaults::default()),
@@ -823,6 +1051,8 @@ mod tests {
                 },
             ]),
             default_recipient: Some(RecipientKey::try_new("globex").unwrap()),
+            senders: None,
+            default_sender: None,
             payment: Some(make_payment()),
             presets: Some(make_presets()),
             defaults: Some(Defaults::default()),
@@ -851,6 +1081,8 @@ mod tests {
             recipient: None,
             recipients: None,
             default_recipient: None,
+            senders: None,
+            default_sender: None,
             payment: Some(make_payment()),
             presets: Some(make_presets()),
             defaults: Some(Defaults::default()),
@@ -877,6 +1109,8 @@ mod tests {
             recipient: None,
             recipients: Some(vec![]),
             default_recipient: None,
+            senders: None,
+            default_sender: None,
             payment: Some(make_payment()),
             presets: Some(make_presets()),
             defaults: Some(Defaults::default()),
@@ -903,6 +1137,8 @@ mod tests {
             recipient: None,
             recipients: Some(vec![make_recipient_with_key()]),
             default_recipient: Some(RecipientKey::try_new("nonexistent").unwrap()),
+            senders: None,
+            default_sender: None,
             payment: Some(make_payment()),
             presets: Some(make_presets()),
             defaults: Some(Defaults::default()),
@@ -927,6 +1163,8 @@ mod tests {
             recipient: None,
             recipients: Some(vec![make_recipient_with_key()]),
             default_recipient: None,
+            senders: None,
+            default_sender: None,
             payment: Some(make_payment()),
             presets: Some(make_presets()),
             defaults: Some(Defaults::default()),
@@ -963,6 +1201,8 @@ mod tests {
                 },
             ]),
             default_recipient: Some(RecipientKey::try_new("acme").unwrap()),
+            senders: None,
+            default_sender: None,
             payment: Some(make_payment()),
             presets: Some(make_presets()),
             defaults: Some(Defaults::default()),
@@ -1003,6 +1243,8 @@ mod tests {
             }),
             recipients: Some(vec![make_recipient_with_key()]),
             default_recipient: Some(RecipientKey::try_new("bob-corp").unwrap()),
+            senders: None,
+            default_sender: None,
             payment: Some(make_payment()),
             presets: Some(make_presets()),
             defaults: Some(Defaults::default()),
@@ -1047,6 +1289,8 @@ mod tests {
                 },
             ]),
             default_recipient: Some(RecipientKey::try_new("globex").unwrap()),
+            senders: None,
+            default_sender: None,
             payment: Some(make_payment()),
             presets: Some(make_presets()),
             defaults: Some(Defaults::default()),
@@ -1088,6 +1332,8 @@ mod tests {
             recipient: Some(make_recipient()),
             recipients: None,
             default_recipient: None,
+            senders: None,
+            default_sender: None,
             payment: Some(make_payment()),
             presets: Some(make_presets()),
             defaults: Some(Defaults::default()),
@@ -1320,10 +1566,104 @@ mod tests {
         }
     }
 
+    // ── Sender v2-input validation ──
+
+    fn make_sender_with_key(key: &str, name: &str) -> Sender {
+        Sender {
+            key: Some(SenderKey::try_new(key).unwrap()),
+            name: name.into(),
+            address: vec!["100 Test St".into()],
+            email: format!("{key}@example.com"),
+        }
+    }
+
+    #[test]
+    fn test_validate_with_v2_senders_complete() {
+        // Arrange — explicit v2 senders list with a chosen default.
+        let config = Config {
+            sender: None,
+            recipient: None,
+            recipients: Some(vec![make_recipient_with_key()]),
+            default_recipient: Some(RecipientKey::try_new("bob-corp").unwrap()),
+            senders: Some(vec![
+                make_sender_with_key("alice", "Alice"),
+                make_sender_with_key("bob", "Bob"),
+            ]),
+            default_sender: Some(SenderKey::try_new("alice").unwrap()),
+            payment: Some(make_payment()),
+            presets: Some(make_presets()),
+            defaults: Some(Defaults::default()),
+            branding: None,
+        };
+
+        // Act
+        let result = config.validate().unwrap();
+
+        // Assert
+        match result {
+            ValidationOutcome::Complete(v) => {
+                assert_eq!(v.senders.len(), 2);
+                assert_eq!(v.default_sender_key().as_str(), "alice");
+                assert_eq!(v.default_sender().name(), "Alice");
+            }
+            ValidationOutcome::Incomplete { .. } => panic!("Expected Complete"),
+        }
+    }
+
+    #[test]
+    fn test_validate_v2_default_sender_unknown_key_is_error() {
+        // Arrange — default_sender references a key not in the senders list.
+        let config = Config {
+            sender: None,
+            recipient: None,
+            recipients: Some(vec![make_recipient_with_key()]),
+            default_recipient: Some(RecipientKey::try_new("bob-corp").unwrap()),
+            senders: Some(vec![make_sender_with_key("alice", "Alice")]),
+            default_sender: Some(SenderKey::try_new("nope").unwrap()),
+            payment: Some(make_payment()),
+            presets: Some(make_presets()),
+            defaults: Some(Defaults::default()),
+            branding: None,
+        };
+
+        // Act
+        let result = config.validate();
+
+        // Assert
+        assert!(matches!(result, Err(ConfigError::InvalidDefaultSender(_))));
+    }
+
+    #[test]
+    fn test_validate_v2_duplicate_sender_keys_is_error() {
+        // Arrange — two senders share the same key.
+        let config = Config {
+            sender: None,
+            recipient: None,
+            recipients: Some(vec![make_recipient_with_key()]),
+            default_recipient: Some(RecipientKey::try_new("bob-corp").unwrap()),
+            senders: Some(vec![
+                make_sender_with_key("alice", "Alice"),
+                make_sender_with_key("alice", "Alice Two"),
+            ]),
+            default_sender: Some(SenderKey::try_new("alice").unwrap()),
+            payment: Some(make_payment()),
+            presets: Some(make_presets()),
+            defaults: Some(Defaults::default()),
+            branding: None,
+        };
+
+        // Act
+        let result = config.validate();
+
+        // Assert
+        assert!(matches!(result, Err(ConfigError::DuplicateSenderKey(_))));
+    }
+
     // ── Helpers ──
 
     fn make_sender() -> Sender {
         Sender {
+            key: None,
             name: "Alice".into(),
             address: vec!["123 St".into()],
             email: "a@b.com".into(),
@@ -1393,6 +1733,8 @@ mod tests {
             recipient: None,
             recipients: Some(vec![make_recipient_with_key()]),
             default_recipient: Some(RecipientKey::try_new("bob-corp").unwrap()),
+            senders: None,
+            default_sender: None,
             payment: Some(make_payment()),
             presets: Some(make_presets()),
             defaults: Some(Defaults::default()),

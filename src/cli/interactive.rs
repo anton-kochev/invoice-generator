@@ -3,7 +3,7 @@ use std::path::Path;
 use crate::config::loader::{LoadResult, load_config, missing_field_hints};
 use crate::config::types::Config;
 use crate::config::validator::{
-    ConfigSection, ValidatedConfig, ValidatedRecipient, ValidationOutcome,
+    ConfigSection, ValidatedConfig, ValidatedRecipient, ValidatedSender, ValidationOutcome,
 };
 use crate::error::AppError;
 use crate::pdf::manifest::{self, ManifestEntry};
@@ -14,6 +14,7 @@ use crate::setup::prompter::Prompter;
 use crate::{invoice, pdf, setup};
 
 use super::recipient_selection::select_recipient;
+use super::sender_selection::select_sender;
 
 /// The full v1.0 interactive flow: load config → maybe setup → invoice → PDF.
 pub fn run_interactive(
@@ -63,8 +64,6 @@ pub fn run_interactive(
             match (*config).validate()? {
                 ValidationOutcome::Complete(v) => {
                     println!("Config loaded successfully.");
-                    println!("Sender: {}", v.sender.name);
-                    println!("Recipient: {}", v.default_recipient().name());
                     v
                 }
                 ValidationOutcome::Incomplete {
@@ -83,12 +82,24 @@ pub fn run_interactive(
         }
     };
 
+    let sender = select_sender(
+        prompter,
+        &validated.senders,
+        validated.default_sender_key().as_str(),
+    )?;
     let recipient = select_recipient(
         prompter,
         &validated.recipients,
         validated.default_recipient_key().as_str(),
     )?;
-    run_invoice_flow(prompter, &validated, &recipient, config_path, output_dir)
+    run_invoice_flow(
+        prompter,
+        &validated,
+        &sender,
+        &recipient,
+        config_path,
+        output_dir,
+    )
 }
 
 /// Resolve the configured default template name to an installed [`Template`],
@@ -225,6 +236,7 @@ fn pick_remote_template(
 pub fn run_invoice_flow(
     prompter: &dyn Prompter,
     validated: &ValidatedConfig,
+    sender: &ValidatedSender,
     recipient: &ValidatedRecipient,
     config_path: &Path,
     output_dir: &Path,
@@ -297,13 +309,14 @@ pub fn run_invoice_flow(
             let pdf_bytes = pdf::generate_pdf(
                 &summary,
                 validated,
+                sender,
                 recipient,
                 config_dir,
                 &template,
                 validated.locale,
             )?;
             let output_path =
-                super::common::pdf_output_path(&validated.sender.name, &summary.period, output_dir);
+                super::common::pdf_output_path(sender.name(), &summary.period, output_dir);
 
             if output_path.exists()
                 && !prompter.confirm("File already exists. Overwrite?", false)?
@@ -332,6 +345,7 @@ mod tests {
     use crate::setup::mock_prompter::{MockPrompter, MockResponse};
 
     fn make_validated_config() -> ValidatedConfig {
+        use crate::config::validator::ValidatedSender;
         let recipient = ValidatedRecipient::from_validated_parts(
             crate::domain::RecipientKey::try_new("acme").unwrap(),
             "Acme Corp".into(),
@@ -339,12 +353,15 @@ mod tests {
             None,
             None,
         );
+        let sender = ValidatedSender::from_validated_parts(
+            crate::domain::SenderKey::try_new("test-user").unwrap(),
+            "Test User".into(),
+            vec!["456 Dev Ave".into()],
+            "test@example.com".into(),
+        );
         ValidatedConfig::from_validated_parts(
-            Sender {
-                name: "Test User".into(),
-                address: vec!["456 Dev Ave".into()],
-                email: "test@example.com".into(),
-            },
+            NonEmpty::try_from_vec(vec![sender]).unwrap(),
+            0,
             NonEmpty::try_from_vec(vec![recipient]).unwrap(),
             0,
             NonEmpty::try_from_vec(vec![ValidatedPaymentMethod::from_validated_parts(
@@ -420,5 +437,64 @@ mod tests {
         let cfg = make_validated_config();
         let _: &str = &cfg.template;
         let _ = MockPrompter::new(vec![MockResponse::Confirm(true)]);
+    }
+
+    /// Wiring guard: confirm `select_sender` is the gate that runs **before**
+    /// `select_recipient` when the user has multiple senders configured. We
+    /// can't drive the full `run_interactive` loop in a unit test (it touches
+    /// the filesystem, scans templates, etc.), but we can replay the exact two
+    /// calls the production flow makes and assert that:
+    ///   1. the sender prompt fires first (consuming a U32),
+    ///   2. the recipient prompt fires next (consuming a U32),
+    ///   3. the picked sender is the one threaded into downstream calls.
+    #[test]
+    fn test_interactive_flow_prompts_for_sender_when_multiple() {
+        // Arrange — multi-sender, single-recipient config from the shared
+        // fixture; the recipient auto-selects so only the sender prompt
+        // actually fires.
+        use crate::setup::test_helpers::{v2_config_two_senders, validated};
+        let v = validated(v2_config_two_senders());
+        // Pick the *non-default* sender (Bob, index 2) so we know the choice
+        // came from the prompter and not from the default fallback.
+        let prompter = MockPrompter::new(vec![MockResponse::U32(2)]);
+
+        // Act — replay the production wiring: sender first, recipient second.
+        let sender = select_sender(
+            &prompter,
+            &v.senders,
+            v.default_sender_key().as_str(),
+        )
+        .unwrap();
+        let recipient = select_recipient(
+            &prompter,
+            &v.recipients,
+            v.default_recipient_key().as_str(),
+        )
+        .unwrap();
+
+        // Assert — picked sender threads through; auto-select message proves
+        // the recipient was resolved without an extra prompt.
+        assert_eq!(sender.name(), "Bob Jones");
+        assert_eq!(recipient.name(), "Acme Corp");
+        let messages = prompter.messages.borrow();
+        let all = messages.join("\n");
+        assert!(
+            all.contains("Select a sender:"),
+            "Expected sender prompt to fire first, got: {all}"
+        );
+        assert!(
+            all.contains("Using recipient: Acme Corp"),
+            "Expected recipient auto-select message, got: {all}"
+        );
+        // The sender prompt header must appear *before* the recipient
+        // auto-select message in the output stream — this is the ordering
+        // invariant the plan calls out.
+        let sender_pos = all.find("Select a sender:").unwrap();
+        let recipient_pos = all.find("Using recipient: Acme Corp").unwrap();
+        assert!(
+            sender_pos < recipient_pos,
+            "Sender selection must precede recipient selection; got sender at {sender_pos}, recipient at {recipient_pos}"
+        );
+        prompter.assert_exhausted();
     }
 }

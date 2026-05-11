@@ -10,6 +10,7 @@ pub enum MockResponse {
     Text(String),
     OptionalText(Option<String>),
     Lines(Vec<String>),
+    OptionalLines(Vec<String>),
     Confirm(bool),
     F64(f64),
     U32(u32),
@@ -71,8 +72,21 @@ impl Prompter for MockPrompter {
 
     fn multi_line(&self, _prompt: &str) -> Result<Vec<String>, AppError> {
         match self.pop("Lines") {
-            MockResponse::Lines(v) => Ok(v),
+            MockResponse::Lines(v) => {
+                assert!(
+                    !v.is_empty(),
+                    "MockPrompter::multi_line received empty Lines; prod InquirePrompter rejects empty input — use OptionalLines for skip-allowed flows"
+                );
+                Ok(v)
+            }
             other => panic!("MockPrompter: expected Lines, got {other:?}"),
+        }
+    }
+
+    fn optional_multi_line(&self, _prompt: &str) -> Result<Vec<String>, AppError> {
+        match self.pop("OptionalLines") {
+            MockResponse::OptionalLines(v) => Ok(v),
+            other => panic!("MockPrompter: expected OptionalLines, got {other:?}"),
         }
     }
 
@@ -226,6 +240,35 @@ mod tests {
 
         // Assert
         assert!((result - 750.0).abs() < f64::EPSILON);
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_mock_prompter_optional_multi_line_returns_empty_vec() {
+        // Arrange
+        let prompter = MockPrompter::new(vec![MockResponse::OptionalLines(vec![])]);
+
+        // Act
+        let result = prompter.optional_multi_line("Address").unwrap();
+
+        // Assert
+        assert_eq!(result, Vec::<String>::new());
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_mock_prompter_optional_multi_line_returns_lines() {
+        // Arrange
+        let prompter = MockPrompter::new(vec![MockResponse::OptionalLines(vec![
+            "A".into(),
+            "B".into(),
+        ])]);
+
+        // Act
+        let result = prompter.optional_multi_line("Address").unwrap();
+
+        // Assert
+        assert_eq!(result, vec!["A".to_string(), "B".to_string()]);
         prompter.assert_exhausted();
     }
 }

@@ -12,7 +12,7 @@ use std::path::Path;
 
 use typst::layout::PagedDocument;
 
-use crate::config::validator::{ValidatedConfig, ValidatedRecipient};
+use crate::config::validator::{ValidatedConfig, ValidatedRecipient, ValidatedSender};
 use crate::invoice::types::InvoiceSummary;
 
 /// Read the on-disk Typst source for a template.
@@ -66,6 +66,7 @@ fn resolve_logo(raw_path: &str, config_dir: &Path) -> Option<(String, Vec<u8>)> 
 pub fn generate_pdf(
     summary: &InvoiceSummary,
     config: &ValidatedConfig,
+    sender: &ValidatedSender,
     recipient: &ValidatedRecipient,
     config_dir: &Path,
     template: &Template,
@@ -77,7 +78,8 @@ pub fn generate_pdf(
         .as_deref()
         .and_then(|p| resolve_logo(p, config_dir));
     let logo_file = logo.as_ref().map(|(name, _)| name.clone());
-    let invoice_data = data::InvoiceData::from_parts(summary, config, recipient, logo_file, locale);
+    let invoice_data =
+        data::InvoiceData::from_parts(summary, config, sender, recipient, logo_file, locale);
 
     let json = serde_json::to_vec(&invoice_data)
         .map_err(|e| PdfError::Compile(format!("JSON serialization failed: {e}")))?;
@@ -167,12 +169,15 @@ mod tests {
             Some("DE123456".into()),
             Some("ATU12345678".into()),
         );
+        let sender = ValidatedSender::from_validated_parts(
+            crate::domain::SenderKey::try_new("jane-doe").unwrap(),
+            "Jane Doe".into(),
+            vec!["123 Main St".into(), "Vienna, Austria".into()],
+            "jane@example.com".into(),
+        );
         ValidatedConfig::from_validated_parts(
-            Sender {
-                name: "Jane Doe".into(),
-                address: vec!["123 Main St".into(), "Vienna, Austria".into()],
-                email: "jane@example.com".into(),
-            },
+            crate::domain::NonEmpty::try_from_vec(vec![sender]).unwrap(),
+            0,
             crate::domain::NonEmpty::try_from_vec(vec![recipient]).unwrap(),
             0,
             crate::domain::NonEmpty::try_from_vec(vec![
@@ -230,6 +235,7 @@ mod tests {
         let result = generate_pdf(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             Path::new("."),
             &template,
@@ -253,6 +259,7 @@ mod tests {
         let pdf1 = generate_pdf(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             Path::new("."),
             &template,
@@ -262,6 +269,7 @@ mod tests {
         let pdf2 = generate_pdf(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             Path::new("."),
             &template,
@@ -282,6 +290,7 @@ mod tests {
         let result = generate_pdf(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             Path::new("."),
             &template,
@@ -358,6 +367,7 @@ mod tests {
         let result = generate_pdf(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             Path::new("."),
             &template,
@@ -380,6 +390,7 @@ mod tests {
         let result = generate_pdf(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             Path::new("."),
             &template,
@@ -401,6 +412,7 @@ mod tests {
         let result = generate_pdf(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             Path::new("."),
             &template,
@@ -449,12 +461,15 @@ mod tests {
             None,
             None,
         );
+        let sender = ValidatedSender::from_validated_parts(
+            crate::domain::SenderKey::try_new("jane-doe").unwrap(),
+            "Jane Doe".into(),
+            vec!["123 Main St".into(), "Vienna, Austria".into()],
+            "jane@example.com".into(),
+        );
         ValidatedConfig::from_validated_parts(
-            Sender {
-                name: "Jane Doe".into(),
-                address: vec!["123 Main St".into(), "Vienna, Austria".into()],
-                email: "jane@example.com".into(),
-            },
+            crate::domain::NonEmpty::try_from_vec(vec![sender]).unwrap(),
+            0,
             crate::domain::NonEmpty::try_from_vec(vec![recipient]).unwrap(),
             0,
             crate::domain::NonEmpty::try_from_vec(vec![
@@ -523,6 +538,7 @@ mod tests {
         let result = generate_pdf(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             Path::new("."),
             &template,
@@ -548,6 +564,7 @@ mod tests {
         let result = generate_pdf(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             Path::new("."),
             &template,
@@ -573,6 +590,7 @@ mod tests {
         let result = generate_pdf(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             Path::new("."),
             &template,
@@ -598,6 +616,7 @@ mod tests {
         let result = generate_pdf(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             Path::new("."),
             &template,
@@ -624,6 +643,7 @@ mod tests {
             let result = generate_pdf(
                 &summary,
                 &config,
+                config.default_sender(),
                 config.default_recipient(),
                 Path::new("."),
                 &template,
@@ -648,6 +668,7 @@ mod tests {
             let result = generate_pdf(
                 &summary,
                 &config,
+                config.default_sender(),
                 config.default_recipient(),
                 Path::new("."),
                 &template,
@@ -675,6 +696,7 @@ mod tests {
             let result = generate_pdf(
                 &summary,
                 &config,
+                config.default_sender(),
                 config.default_recipient(),
                 Path::new("."),
                 &template,
@@ -700,6 +722,7 @@ mod tests {
             let result = generate_pdf(
                 &summary,
                 &config,
+                config.default_sender(),
                 config.default_recipient(),
                 Path::new("."),
                 &template,
@@ -723,12 +746,15 @@ mod tests {
             None,
             None,
         );
+        let sender = ValidatedSender::from_validated_parts(
+            crate::domain::SenderKey::try_new("jane-doe").unwrap(),
+            "Jane Doe".into(),
+            vec!["123 Main St".into(), "Vienna, Austria".into()],
+            "jane@example.com".into(),
+        );
         ValidatedConfig::from_validated_parts(
-            Sender {
-                name: "Jane Doe".into(),
-                address: vec!["123 Main St".into(), "Vienna, Austria".into()],
-                email: "jane@example.com".into(),
-            },
+            crate::domain::NonEmpty::try_from_vec(vec![sender]).unwrap(),
+            0,
             crate::domain::NonEmpty::try_from_vec(vec![recipient]).unwrap(),
             0,
             crate::domain::NonEmpty::try_from_vec(vec![
@@ -859,6 +885,7 @@ mod tests {
             let result = generate_pdf(
                 &summary,
                 &config,
+                config.default_sender(),
                 config.default_recipient(),
                 Path::new("."),
                 &template,

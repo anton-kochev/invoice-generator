@@ -1,11 +1,19 @@
 use std::path::Path;
 
 use super::prompter::Prompter;
+use crate::config::ConfigError;
 use crate::config::types::{Config, Sender};
 use crate::config::writer::save_config;
+use crate::domain::SenderKey;
 use crate::error::AppError;
 
 /// Collect sender information interactively and persist it to disk.
+///
+/// Pushes the new sender onto `config.senders` (initializing the vec if
+/// needed) and sets `config.default_sender` when no default is configured
+/// yet. The legacy `config.sender` field is intentionally left untouched —
+/// callers loading old v1 configs see the legacy data migrated to v2 by the
+/// validator / writer-side `ensure_senders_v2`.
 pub fn collect_sender(
     prompter: &dyn Prompter,
     config: &mut Config,
@@ -17,11 +25,23 @@ pub fn collect_sender(
     let address = prompter.multi_line("Address")?;
     let email = prompter.required_text("Email:")?;
 
-    config.sender = Some(Sender {
+    let key = SenderKey::from_name(&name)
+        .map_err(|e| AppError::from(ConfigError::InvalidDefaultSender(e.to_string())))?;
+
+    let sender = Sender {
+        key: Some(key.clone()),
         name,
         address,
         email,
-    });
+    };
+
+    let mut senders = config.senders.take().unwrap_or_default();
+    senders.push(sender);
+    config.senders = Some(senders);
+
+    if config.default_sender.is_none() {
+        config.default_sender = Some(key);
+    }
 
     save_config(config_path, config)?;
 
@@ -49,14 +69,29 @@ mod tests {
         // Act
         collect_sender(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
-        // Assert
-        let sender = config.sender.as_ref().unwrap();
+        // Assert — in-memory state lands on v2 senders, not legacy field.
+        let senders = config.senders.as_ref().unwrap();
+        assert_eq!(senders.len(), 1);
+        let sender = &senders[0];
         assert_eq!(sender.name, "Alice Smith");
         assert_eq!(sender.address, vec!["42 Elm St"]);
         assert_eq!(sender.email, "alice@example.com");
+        assert_eq!(
+            sender.key.as_ref().map(|k| k.as_str()),
+            Some("alice-smith")
+        );
+        assert_eq!(
+            config.default_sender.as_ref().map(|k| k.as_str()),
+            Some("alice-smith")
+        );
 
         let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
-        assert_eq!(loaded.sender.unwrap().name, "Alice Smith");
+        let loaded_senders = loaded.senders.as_ref().unwrap();
+        assert_eq!(loaded_senders[0].name, "Alice Smith");
+        assert_eq!(
+            loaded.default_sender.as_ref().map(|k| k.as_str()),
+            Some("alice-smith")
+        );
 
         prompter.assert_exhausted();
     }
@@ -80,7 +115,8 @@ mod tests {
         collect_sender(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
         // Assert
-        let sender = config.sender.unwrap();
+        let senders = config.senders.unwrap();
+        let sender = &senders[0];
         assert_eq!(sender.address.len(), 3);
         assert_eq!(sender.address[1], "Suite 400");
         prompter.assert_exhausted();
@@ -101,7 +137,8 @@ mod tests {
         collect_sender(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
         // Assert
-        let sender = config.sender.unwrap();
+        let senders = config.senders.unwrap();
+        let sender = &senders[0];
         assert_eq!(sender.address.len(), 1);
         assert_eq!(sender.address[0], "1 Short St");
         prompter.assert_exhausted();
@@ -148,7 +185,7 @@ mod tests {
         collect_sender(&prompter, &mut config, &cfg_path(&dir)).unwrap();
 
         // Assert
-        assert!(config.sender.is_some());
+        assert!(config.senders.is_some());
         assert!(config.recipient.is_some());
         let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
         assert_eq!(loaded.recipient.unwrap().name, "Bob Corp");

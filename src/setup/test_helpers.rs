@@ -12,6 +12,7 @@ use crate::config::writer::save_config;
 
 pub fn synthetic_sender() -> Sender {
     Sender {
+        key: None,
         name: "Alice Smith".into(),
         address: vec!["42 Elm Street".into(), "Springfield, IL 62704".into()],
         email: "alice@example.com".into(),
@@ -78,6 +79,8 @@ pub fn complete_config() -> Config {
         recipient: Some(synthetic_recipient()),
         recipients: None,
         default_recipient: None,
+        senders: None,
+        default_sender: None,
         payment: Some(synthetic_payment()),
         presets: Some(synthetic_presets()),
         defaults: Some(synthetic_defaults()),
@@ -151,12 +154,90 @@ pub fn synthetic_validated_globex() -> crate::config::validator::ValidatedRecipi
     )
 }
 
+/// Synthetic [`ValidatedSender`] for tests that exercise validated-only call
+/// sites (e.g. `select_sender`, `format_sender_table`). Mirrors the
+/// `synthetic_validated_acme` recipient fixture.
+pub fn synthetic_validated_alice() -> crate::config::validator::ValidatedSender {
+    crate::config::validator::ValidatedSender::from_validated_parts(
+        crate::domain::SenderKey::try_new("alice").unwrap(),
+        "Alice Smith".into(),
+        vec!["42 Elm St".into(), "Springfield, IL 62704".into()],
+        "alice@example.com".into(),
+    )
+}
+
+/// Synthetic [`ValidatedSender`] mirroring [`synthetic_validated_globex`] for
+/// the second-sender slot.
+pub fn synthetic_validated_bob() -> crate::config::validator::ValidatedSender {
+    crate::config::validator::ValidatedSender::from_validated_parts(
+        crate::domain::SenderKey::try_new("bob").unwrap(),
+        "Bob Jones".into(),
+        vec!["100 Oak Ln".into()],
+        "bob@example.com".into(),
+    )
+}
+
+/// Synthetic v2-keyed [`Sender`] mirroring [`synthetic_validated_alice`].
+pub fn synthetic_sender_alice() -> Sender {
+    Sender {
+        key: Some(crate::domain::SenderKey::try_new("alice").unwrap()),
+        name: "Alice Smith".into(),
+        address: vec!["42 Elm St".into(), "Springfield, IL 62704".into()],
+        email: "alice@example.com".into(),
+    }
+}
+
+/// Synthetic v2-keyed [`Sender`] mirroring [`synthetic_validated_bob`].
+pub fn synthetic_sender_bob() -> Sender {
+    Sender {
+        key: Some(crate::domain::SenderKey::try_new("bob").unwrap()),
+        name: "Bob Jones".into(),
+        address: vec!["100 Oak Ln".into()],
+        email: "bob@example.com".into(),
+    }
+}
+
+/// v2 config with exactly one keyed sender (`alice`), recipient `acme` default.
+pub fn v2_complete_config_with_senders() -> Config {
+    Config {
+        sender: None,
+        recipient: None,
+        recipients: Some(vec![synthetic_recipient_acme()]),
+        default_recipient: Some(crate::domain::RecipientKey::try_new("acme").unwrap()),
+        senders: Some(vec![synthetic_sender_alice()]),
+        default_sender: Some(crate::domain::SenderKey::try_new("alice").unwrap()),
+        payment: Some(synthetic_payment()),
+        presets: Some(synthetic_presets()),
+        defaults: Some(synthetic_defaults()),
+        branding: None,
+    }
+}
+
+/// v2 config with two keyed senders (`alice` default, `bob` extra), recipient
+/// `acme` default. Mirrors [`v2_config_two_recipients`].
+pub fn v2_config_two_senders() -> Config {
+    Config {
+        sender: None,
+        recipient: None,
+        recipients: Some(vec![synthetic_recipient_acme()]),
+        default_recipient: Some(crate::domain::RecipientKey::try_new("acme").unwrap()),
+        senders: Some(vec![synthetic_sender_alice(), synthetic_sender_bob()]),
+        default_sender: Some(crate::domain::SenderKey::try_new("alice").unwrap()),
+        payment: Some(synthetic_payment()),
+        presets: Some(synthetic_presets()),
+        defaults: Some(synthetic_defaults()),
+        branding: None,
+    }
+}
+
 pub fn v2_complete_config() -> Config {
     Config {
         sender: Some(synthetic_sender()),
         recipient: None,
         recipients: Some(vec![synthetic_recipient_acme()]),
         default_recipient: Some(crate::domain::RecipientKey::try_new("acme").unwrap()),
+        senders: None,
+        default_sender: None,
         payment: Some(synthetic_payment()),
         presets: Some(synthetic_presets()),
         defaults: Some(synthetic_defaults()),
@@ -173,6 +254,8 @@ pub fn v2_config_two_recipients() -> Config {
             synthetic_recipient_globex(),
         ]),
         default_recipient: Some(crate::domain::RecipientKey::try_new("acme").unwrap()),
+        senders: None,
+        default_sender: None,
         payment: Some(synthetic_payment()),
         presets: Some(synthetic_presets()),
         defaults: Some(synthetic_defaults()),
@@ -188,6 +271,22 @@ pub fn validated(config: Config) -> crate::config::validator::ValidatedConfig {
             panic!("Expected Complete, got Incomplete with missing: {missing:?}")
         }
     }
+}
+
+/// Test-only indirection over `ValidatedConfig`'s sender.
+///
+/// Step 5a of the sender-CRUD plan introduced this helper so that step 5b's
+/// field-swap — `ValidatedConfig.sender: Sender` →
+/// `senders: NonEmpty<ValidatedSender>` + `default_sender_idx` — only needs
+/// to change this function's body rather than every test assertion that
+/// reads `v.sender.*`. The return type is now `&ValidatedSender`; the
+/// `.name`, `.address`, `.email` field-access pattern in tests still works
+/// because those fields are `pub(super)` and the helper lives in the same
+/// crate.
+pub(crate) fn sender_for_test(
+    v: &crate::config::validator::ValidatedConfig,
+) -> &crate::config::validator::ValidatedSender {
+    v.default_sender()
 }
 
 // ── Tempdir Helper ──

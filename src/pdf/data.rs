@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::config::validator::{ValidatedConfig, ValidatedRecipient};
+use crate::config::validator::{ValidatedConfig, ValidatedRecipient, ValidatedSender};
 use crate::invoice::types::InvoiceSummary;
 use crate::locale::Locale;
 
@@ -93,9 +93,15 @@ pub struct BrandingData {
 
 impl<'a> InvoiceData<'a> {
     /// Build template data from a computed summary and validated config.
+    ///
+    /// `sender` is taken as a separate `&ValidatedSender` (rather than read
+    /// from `config.default_sender()` directly) so future flag-routing —
+    /// `--sender <key>` overriding the default — can pass the resolved sender
+    /// without callers having to mutate `config`.
     pub fn from_parts(
         summary: &'a InvoiceSummary,
         config: &'a ValidatedConfig,
+        sender: &'a ValidatedSender,
         recipient: &'a ValidatedRecipient,
         logo_file: Option<String>,
         locale: Locale,
@@ -106,9 +112,9 @@ impl<'a> InvoiceData<'a> {
 
         Self {
             sender: SenderData {
-                name: &config.sender.name,
-                address: &config.sender.address,
-                email: &config.sender.email,
+                name: sender.name(),
+                address: sender.address(),
+                email: sender.email(),
             },
             recipient: RecipientData {
                 name: recipient.name(),
@@ -219,12 +225,15 @@ mod tests {
             Some("DE123456".into()),
             Some("ATU12345678".into()),
         );
+        let sender = ValidatedSender::from_validated_parts(
+            crate::domain::SenderKey::try_new("jane-doe").unwrap(),
+            "Jane Doe".into(),
+            vec!["123 Main St".into(), "Vienna, Austria".into()],
+            "jane@example.com".into(),
+        );
         ValidatedConfig::from_validated_parts(
-            Sender {
-                name: "Jane Doe".into(),
-                address: vec!["123 Main St".into(), "Vienna, Austria".into()],
-                email: "jane@example.com".into(),
-            },
+            crate::domain::NonEmpty::try_from_vec(vec![sender]).unwrap(),
+            0,
             crate::domain::NonEmpty::try_from_vec(vec![recipient]).unwrap(),
             0,
             crate::domain::NonEmpty::try_from_vec(vec![
@@ -261,6 +270,7 @@ mod tests {
         let data = InvoiceData::from_parts(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             None,
             Locale::EnUs,
@@ -287,6 +297,7 @@ mod tests {
         let data = InvoiceData::from_parts(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             None,
             Locale::EnUs,
@@ -311,6 +322,7 @@ mod tests {
         let data = InvoiceData::from_parts(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             None,
             Locale::EnUs,
@@ -335,12 +347,15 @@ mod tests {
             None,
             None,
         );
+        let sender = ValidatedSender::from_validated_parts(
+            crate::domain::SenderKey::try_new("jane-doe").unwrap(),
+            "Jane Doe".into(),
+            vec!["123 Main St".into()],
+            "jane@example.com".into(),
+        );
         ValidatedConfig::from_validated_parts(
-            Sender {
-                name: "Jane Doe".into(),
-                address: vec!["123 Main St".into()],
-                email: "jane@example.com".into(),
-            },
+            crate::domain::NonEmpty::try_from_vec(vec![sender]).unwrap(),
+            0,
             crate::domain::NonEmpty::try_from_vec(vec![recipient]).unwrap(),
             0,
             crate::domain::NonEmpty::try_from_vec(vec![
@@ -377,6 +392,7 @@ mod tests {
         let data = InvoiceData::from_parts(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             None,
             Locale::EnUs,
@@ -399,6 +415,7 @@ mod tests {
         let data = InvoiceData::from_parts(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             None,
             Locale::EnUs,
@@ -425,6 +442,7 @@ mod tests {
         let data = InvoiceData::from_parts(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             None,
             Locale::EnUs,
@@ -449,6 +467,7 @@ mod tests {
         let data = InvoiceData::from_parts(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             None,
             Locale::EnUs,
@@ -474,6 +493,7 @@ mod tests {
         let data = InvoiceData::from_parts(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             None,
             Locale::EnUs,
@@ -529,6 +549,7 @@ mod tests {
         let data = InvoiceData::from_parts(
             &summary,
             &validated,
+            validated.default_sender(),
             validated.default_recipient(),
             None,
             Locale::EnUs,
@@ -565,6 +586,7 @@ mod tests {
         let data = InvoiceData::from_parts(
             &summary,
             &validated,
+            validated.default_sender(),
             validated.default_recipient(),
             None,
             Locale::EnUs,
@@ -616,6 +638,7 @@ mod tests {
         let data = InvoiceData::from_parts(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             None,
             Locale::EnUs,
@@ -635,6 +658,7 @@ mod tests {
         let data = InvoiceData::from_parts(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             None,
             Locale::EnUs,
@@ -654,6 +678,7 @@ mod tests {
         let data = InvoiceData::from_parts(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             None,
             Locale::EnUs,
@@ -674,6 +699,7 @@ mod tests {
         let data = InvoiceData::from_parts(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             None,
             Locale::EnUs,
@@ -693,6 +719,7 @@ mod tests {
         let data = InvoiceData::from_parts(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             None,
             Locale::EnUs,
@@ -712,6 +739,7 @@ mod tests {
         let data = InvoiceData::from_parts(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             None,
             Locale::EnUs,
@@ -736,7 +764,8 @@ mod tests {
         );
 
         // Act
-        let data = InvoiceData::from_parts(&summary, &config, &bare, None, Locale::EnUs);
+        let data =
+            InvoiceData::from_parts(&summary, &config, config.default_sender(), &bare, None, Locale::EnUs);
         let json = serde_json::to_value(&data).unwrap();
 
         // Assert
@@ -755,6 +784,7 @@ mod tests {
         let data = InvoiceData::from_parts(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             None,
             Locale::EnUs,
@@ -777,6 +807,7 @@ mod tests {
         let data = InvoiceData::from_parts(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             None,
             Locale::EnUs,
@@ -796,6 +827,7 @@ mod tests {
         let data = InvoiceData::from_parts(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             None,
             Locale::EnUs,
@@ -817,6 +849,7 @@ mod tests {
         let data = InvoiceData::from_parts(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             None,
             Locale::EnUs,
@@ -838,6 +871,7 @@ mod tests {
         let data = InvoiceData::from_parts(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             None,
             Locale::EnUs,
@@ -856,6 +890,7 @@ mod tests {
         let data = InvoiceData::from_parts(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             None,
             Locale::EnUs,
@@ -874,6 +909,7 @@ mod tests {
         let data = InvoiceData::from_parts(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             Some("logo.png".into()),
             Locale::EnUs,
@@ -892,6 +928,7 @@ mod tests {
         let data = InvoiceData::from_parts(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             None,
             Locale::EnUs,
@@ -913,6 +950,7 @@ mod tests {
         let data = InvoiceData::from_parts(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             None,
             Locale::DeDe,
@@ -932,6 +970,7 @@ mod tests {
         let data = InvoiceData::from_parts(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             None,
             Locale::DeDe,
@@ -952,6 +991,7 @@ mod tests {
         let data = InvoiceData::from_parts(
             &summary,
             &config,
+            config.default_sender(),
             config.default_recipient(),
             None,
             Locale::DeDe,

@@ -120,6 +120,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let config = Config {
             sender: Some(Sender {
+                key: None,
                 name: "Alice Smith".into(),
                 address: vec!["42 Elm Street".into(), "Springfield, IL 62704".into()],
                 email: "alice@example.com".into(),
@@ -133,6 +134,8 @@ mod tests {
             }),
             recipients: None,
             default_recipient: None,
+            senders: None,
+            default_sender: None,
             payment: Some(vec![PaymentMethod {
                 key: Some(crate::domain::PaymentMethodKey::try_new("sepa-transfer").unwrap()),
                 label: Some("SEPA Transfer".into()),

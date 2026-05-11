@@ -18,6 +18,10 @@ pub trait Prompter {
     /// Collect lines until a blank line. At least one line required.
     fn multi_line(&self, prompt: &str) -> Result<Vec<String>, AppError>;
 
+    /// Collect lines until a blank line. Blank first line returns `Ok(vec![])`.
+    /// Otherwise identical to [`multi_line`](Self::multi_line).
+    fn optional_multi_line(&self, prompt: &str) -> Result<Vec<String>, AppError>;
+
     /// Prompt for text with a default value. Enter accepts default.
     fn text_with_default(&self, prompt: &str, default: &str) -> Result<String, AppError>;
 
@@ -102,6 +106,32 @@ impl Prompter for InquirePrompter {
             if line.trim().is_empty() {
                 if lines.is_empty() {
                     continue;
+                }
+                break;
+            }
+            lines.push(line.trim().to_string());
+        }
+        Ok(lines)
+    }
+
+    fn optional_multi_line(&self, prompt: &str) -> Result<Vec<String>, AppError> {
+        let mut lines = Vec::new();
+        loop {
+            let label = format!("{prompt} line {}:", lines.len() + 1);
+            let mut text = inquire::Text::new(&label);
+
+            if lines.is_empty() {
+                text = text
+                    .with_help_message("Blank line to skip. Otherwise, blank line to finish.");
+            } else {
+                text = text.with_help_message("Blank line to finish.");
+            }
+
+            let line = text.prompt().map_err(|_| AppError::SetupCancelled)?;
+
+            if line.trim().is_empty() {
+                if lines.is_empty() {
+                    return Ok(vec![]);
                 }
                 break;
             }

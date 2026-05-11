@@ -5,6 +5,8 @@ pub mod interactive;
 pub mod preset_cmd;
 pub mod recipient_cmd;
 pub mod recipient_selection;
+pub mod sender_cmd;
+pub mod sender_selection;
 pub mod template;
 
 pub use error::CliError;
@@ -44,6 +46,11 @@ pub enum Command {
         #[command(subcommand)]
         action: RecipientAction,
     },
+    /// Manage sender profiles
+    Sender {
+        #[command(subcommand)]
+        action: SenderAction,
+    },
     /// Manage invoice templates (manifest refresh, etc.)
     Template {
         #[command(subcommand)]
@@ -77,6 +84,9 @@ pub struct GenerateArgs {
     /// Recipient profile key (defaults to default_recipient)
     #[arg(long)]
     pub client: Option<String>,
+    /// Sender profile key (defaults to default_sender)
+    #[arg(long)]
+    pub sender: Option<String>,
     /// Template to use for PDF generation (overrides config default)
     #[arg(long)]
     pub template: Option<String>,
@@ -94,6 +104,19 @@ pub enum RecipientAction {
     /// Delete a recipient by key
     Delete {
         /// The recipient key to delete
+        key: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SenderAction {
+    /// List all configured senders
+    List,
+    /// Add a new sender
+    Add,
+    /// Delete a sender by key
+    Delete {
+        /// The sender key to delete
         key: String,
     },
 }
@@ -524,5 +547,112 @@ mod tests {
 
         // Assert
         assert!(result.is_err());
+    }
+
+    // ── Sender subcommand tests ──
+
+    #[test]
+    fn test_sender_list_parses() {
+        // Arrange
+        let args = ["invoice", "sender", "list"];
+
+        // Act
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        // Assert
+        assert!(matches!(
+            cli.command,
+            Some(Command::Sender {
+                action: SenderAction::List
+            })
+        ));
+    }
+
+    #[test]
+    fn test_sender_add_parses() {
+        // Arrange
+        let args = ["invoice", "sender", "add"];
+
+        // Act
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        // Assert
+        assert!(matches!(
+            cli.command,
+            Some(Command::Sender {
+                action: SenderAction::Add
+            })
+        ));
+    }
+
+    #[test]
+    fn test_sender_delete_parses_key() {
+        // Arrange
+        let args = ["invoice", "sender", "delete", "alice"];
+
+        // Act
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        // Assert
+        match cli.command {
+            Some(Command::Sender {
+                action: SenderAction::Delete { key },
+            }) => assert_eq!(key, "alice"),
+            other => panic!("Expected Sender Delete, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_sender_delete_missing_key_is_error() {
+        // Arrange
+        let args = ["invoice", "sender", "delete"];
+
+        // Act
+        let result = Cli::try_parse_from(args);
+
+        // Assert
+        assert!(result.is_err());
+    }
+
+    // ── --sender flag tests on `generate` ──
+
+    #[test]
+    fn test_generate_sender_flag_parses() {
+        // Arrange
+        let args = [
+            "invoice", "generate", "--month", "3", "--year", "2026", "--preset", "dev", "--days",
+            "10", "--sender", "alice",
+        ];
+
+        // Act
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        // Assert
+        match cli.command {
+            Some(Command::Generate(g)) => {
+                assert_eq!(g.sender.as_deref(), Some("alice"));
+            }
+            other => panic!("Expected Generate, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_generate_without_sender_flag_defaults_to_none() {
+        // Arrange
+        let args = [
+            "invoice", "generate", "--month", "3", "--year", "2026", "--preset", "dev", "--days",
+            "10",
+        ];
+
+        // Act
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        // Assert
+        match cli.command {
+            Some(Command::Generate(g)) => {
+                assert!(g.sender.is_none());
+            }
+            other => panic!("Expected Generate, got {other:?}"),
+        }
     }
 }
