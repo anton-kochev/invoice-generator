@@ -1,5 +1,9 @@
 # invoice-generator
 
+[![CI](https://github.com/anton-kochev/invoice-generator/actions/workflows/ci.yml/badge.svg)](https://github.com/anton-kochev/invoice-generator/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/anton-kochev/invoice-generator?sort=semver)](https://github.com/anton-kochev/invoice-generator/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A CLI tool that generates professional PDF invoices through an interactive prompt session. Built for freelance developers who send monthly invoices and need a fast, repeatable workflow with minimal manual input.
 
 ![Sample invoice rendered with the amalthea template](samples/sample_amalthea.png)
@@ -35,9 +39,19 @@ A CLI tool that generates professional PDF invoices through an interactive promp
 
 ## Prerequisites
 
+Installing via Homebrew needs no toolchain. To build from source you need:
+
 - [Rust](https://www.rust-lang.org/tools/install) 1.85+ (edition 2024)
 
 ## Installation
+
+### Homebrew (recommended)
+
+```sh
+brew install anton-kochev/tap/invoice-generator
+```
+
+### From source
 
 ```sh
 git clone https://github.com/anton-kochev/invoice-generator.git
@@ -161,6 +175,8 @@ senders:
       - "123 Main Street"
       - "Springfield, IL 62704"
     email: "jane@example.com"
+    # Optional free-form fields consumed by specific templates (see below)
+    name_ua: "Джейн Доу"
 
 default_sender: "jane"
 
@@ -221,6 +237,10 @@ All sections except `defaults` and `branding` are required. The `defaults` secti
 
 Older configs with a single `recipient` field (instead of `recipients` list) — and likewise a single `sender` field (instead of `senders` list) — are still supported and automatically migrated on the next write.
 
+### Sender extras (template-specific fields)
+
+A sender entry may carry arbitrary extra fields beyond the typed ones (`name`, `address`, `email`). These are an unchecked escape hatch for template-only data — for example, the bilingual `io` template reads a Ukrainian `name_ua` and extended bank details. Any extra key is flattened directly onto the sender in the template, so `name_ua: "Джейн Доу"` becomes `sender.name_ua` in the Typst source. Templates that don't reference a given key simply ignore it. Note: an extra key that collides with a typed field (e.g. `name`) shadows the typed value in the rendered output.
+
 ## PDF Output
 
 The generated PDF is a single-page A4 document with:
@@ -249,6 +269,7 @@ Templates are stored as `.typ` files (Typst source) in `~/.config/invoice-genera
 | Template | Style |
 |----------|-------|
 | `callisto` | Bold & structured |
+| `europa` | Minimal & clean |
 | `io` | Bilingual UA/EN refined card |
 
 **Installing a remote template:**
@@ -279,4 +300,4 @@ Filenames follow the pattern `Invoice_{Name}_{MonthAbbrev}{Year}.pdf` (e.g., `In
 
 ## License
 
-TBD
+MIT © Anton — see [LICENSE](LICENSE).
