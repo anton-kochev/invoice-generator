@@ -177,9 +177,9 @@ impl ValidatedSender {
     /// responsible for filling in derived keys before invoking `from_partial`.
     fn from_partial(s: Sender) -> Self {
         Self {
-            key: s.key.expect(
-                "validator must populate Sender.key before constructing ValidatedSender",
-            ),
+            key: s
+                .key
+                .expect("validator must populate Sender.key before constructing ValidatedSender"),
             name: s.name,
             address: s.address,
             email: s.email,
@@ -440,7 +440,13 @@ impl ValidatedConfig {
 }
 
 /// Result of validating a [`Config`].
+///
+/// Both variants carry a large, roughly equal-sized payload (a fully validated
+/// config vs. a partial one), so the size disparity `large_enum_variant` flags
+/// is not meaningful here — boxing either side would only add indirection and
+/// ripple through every consumer without shrinking the common case.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum ValidationOutcome {
     /// All required sections are present.
     Complete(ValidatedConfig),
@@ -583,9 +589,10 @@ fn validate_sender_invariants(
 ) -> Result<(), ConfigError> {
     let mut seen = std::collections::HashSet::new();
     for s in list {
-        let k = s.key.as_ref().ok_or_else(|| {
-            ConfigError::InvalidDefaultSender("sender has missing key".into())
-        })?;
+        let k = s
+            .key
+            .as_ref()
+            .ok_or_else(|| ConfigError::InvalidDefaultSender("sender has missing key".into()))?;
         if !seen.insert(k.clone()) {
             return Err(ConfigError::DuplicateSenderKey(k.as_str().to_string()));
         }
@@ -731,7 +738,7 @@ impl Config {
         if !missing.is_empty() {
             return Ok(ValidationOutcome::Incomplete {
                 config: Config {
-                    sender: None, // already consumed by normalization
+                    sender: None,    // already consumed by normalization
                     recipient: None, // already consumed by normalization
                     recipients,
                     default_recipient: default_key,

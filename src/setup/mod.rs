@@ -159,8 +159,8 @@ mod tests {
             MockResponse::Text("EUR".into()),
             MockResponse::U32(9),
             MockResponse::U32(30),
-            MockResponse::Text("amalthea".into()),  // template
-            MockResponse::Text("en-US".into()), // locale
+            MockResponse::Text("amalthea".into()), // template
+            MockResponse::Text("en-US".into()),    // locale
             // Branding (decline custom footer)
             MockResponse::OptionalText(None),
         ]);

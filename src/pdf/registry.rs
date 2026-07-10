@@ -100,10 +100,7 @@ impl TemplateRegistry {
 
     /// Same as [`scan_local`], but operates on an explicit directory and an
     /// explicit manifest. Used by tests.
-    pub(crate) fn scan_local_in(
-        dir: &Path,
-        manifest: Option<&Manifest>,
-    ) -> Result<Self, PdfError> {
+    pub(crate) fn scan_local_in(dir: &Path, manifest: Option<&Manifest>) -> Result<Self, PdfError> {
         let mut templates = Vec::new();
         if !dir.exists() {
             return Ok(Self { templates });
@@ -276,8 +273,7 @@ mod tests {
         };
 
         // Act
-        let registry =
-            TemplateRegistry::scan_local_in(dir.path(), Some(&manifest)).unwrap();
+        let registry = TemplateRegistry::scan_local_in(dir.path(), Some(&manifest)).unwrap();
 
         // Assert
         let entry = registry.find_by_name("test-tpl").unwrap();

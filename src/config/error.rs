@@ -185,8 +185,14 @@ mod tests {
         assert!(msg.contains("missing"), "Expected 'missing' in: {msg}");
         assert!(msg.contains("alice"), "Expected 'alice' in: {msg}");
         assert!(msg.contains("bob"), "Expected 'bob' in: {msg}");
-        assert!(msg.contains("unknown sender"), "Expected 'unknown sender' in: {msg}");
-        assert!(msg.contains("Available:"), "Expected 'Available:' in: {msg}");
+        assert!(
+            msg.contains("unknown sender"),
+            "Expected 'unknown sender' in: {msg}"
+        );
+        assert!(
+            msg.contains("Available:"),
+            "Expected 'Available:' in: {msg}"
+        );
     }
 
     #[test]

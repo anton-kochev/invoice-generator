@@ -121,8 +121,8 @@ impl Prompter for InquirePrompter {
             let mut text = inquire::Text::new(&label);
 
             if lines.is_empty() {
-                text = text
-                    .with_help_message("Blank line to skip. Otherwise, blank line to finish.");
+                text =
+                    text.with_help_message("Blank line to skip. Otherwise, blank line to finish.");
             } else {
                 text = text.with_help_message("Blank line to finish.");
             }

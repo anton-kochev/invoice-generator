@@ -42,7 +42,10 @@ pub enum PdfError {
     /// User asked for a template that is neither installed locally nor known
     /// to the manifest cache.
     #[error("template '{name}' not found locally. Available: {}", available.join(", "))]
-    TemplateNotFound { name: String, available: Vec<String> },
+    TemplateNotFound {
+        name: String,
+        available: Vec<String>,
+    },
 }
 
 #[cfg(test)]

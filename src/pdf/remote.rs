@@ -41,9 +41,8 @@ pub fn fetch_manifest() -> Result<Manifest, PdfError> {
         .map_err(|e| PdfError::Remote(friendly_manifest_error(&e, MANIFEST_URL)))?
         .into_string()
         .map_err(|e| PdfError::Remote(format!("could not read response body: {e}")))?;
-    serde_json::from_str(&body).map_err(|e| {
-        PdfError::Remote(format!("parse manifest from {MANIFEST_URL}: {e}"))
-    })
+    serde_json::from_str(&body)
+        .map_err(|e| PdfError::Remote(format!("parse manifest from {MANIFEST_URL}: {e}")))
 }
 
 /// Fetch a single template's `.typ` source from the upstream repository.

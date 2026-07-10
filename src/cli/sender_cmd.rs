@@ -102,10 +102,7 @@ pub fn handle_sender_list(
     validated: &ValidatedConfig,
     writer: &mut dyn Write,
 ) -> Result<(), AppError> {
-    let table = format_sender_table(
-        &validated.senders,
-        validated.default_sender_key().as_str(),
-    );
+    let table = format_sender_table(&validated.senders, validated.default_sender_key().as_str());
     writer
         .write_all(table.as_bytes())
         .map_err(CliError::OutputWrite)?;
@@ -416,7 +413,7 @@ mod tests {
         let config = v2_complete_config_with_senders();
         let dir = setup_dir(Some(&config));
         let prompter = MockPrompter::new(vec![
-            MockResponse::Text("alice".into()), // duplicate!
+            MockResponse::Text("alice".into()),  // duplicate!
             MockResponse::Text("alice2".into()), // unique
             MockResponse::Text("Alice Two".into()),
             MockResponse::OptionalLines(vec!["Street".into()]),

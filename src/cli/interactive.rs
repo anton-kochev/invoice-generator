@@ -6,10 +6,10 @@ use crate::config::validator::{
     ConfigSection, ValidatedConfig, ValidatedRecipient, ValidatedSender, ValidationOutcome,
 };
 use crate::error::AppError;
+use crate::pdf::PdfError;
 use crate::pdf::manifest::{self, ManifestEntry};
 use crate::pdf::registry::{Template, TemplateRegistry};
 use crate::pdf::remote;
-use crate::pdf::PdfError;
 use crate::setup::prompter::Prompter;
 use crate::{invoice, pdf, setup};
 
@@ -105,10 +105,7 @@ pub fn run_interactive(
 /// Resolve the configured default template name to an installed [`Template`],
 /// or fall back to the first installed template if the configured slug is
 /// missing.
-fn resolve_default_template(
-    registry: &TemplateRegistry,
-    configured: &str,
-) -> Option<Template> {
+fn resolve_default_template(registry: &TemplateRegistry, configured: &str) -> Option<Template> {
     registry
         .find_by_name(configured)
         .cloned()
@@ -139,9 +136,7 @@ fn pick_local_template(
         list.push_str(&format!("  [{}] {}{}{}\n", i + 1, t.name, desc, marker));
     }
     let browse_idx = templates.len() + 1;
-    list.push_str(&format!(
-        "  [{browse_idx}] Browse remote templates…\n"
-    ));
+    list.push_str(&format!("  [{browse_idx}] Browse remote templates…\n"));
     prompter.message(&list);
 
     let choice = prompter.u32_with_default("Select template:", 1)?;
@@ -253,8 +248,8 @@ pub fn run_invoice_flow(
     // fall back to the first available template; if none are installed, the
     // configured name is preserved as a synthetic placeholder so the flow can
     // still drive the user to "Browse remote templates…".
-    let default_template = resolve_default_template(&registry, &validated.template)
-        .ok_or_else(|| {
+    let default_template =
+        resolve_default_template(&registry, &validated.template).ok_or_else(|| {
             PdfError::TemplateNotFound {
                 name: validated.template.clone(),
                 available: registry.names(),
@@ -460,18 +455,9 @@ mod tests {
         let prompter = MockPrompter::new(vec![MockResponse::U32(2)]);
 
         // Act — replay the production wiring: sender first, recipient second.
-        let sender = select_sender(
-            &prompter,
-            &v.senders,
-            v.default_sender_key().as_str(),
-        )
-        .unwrap();
-        let recipient = select_recipient(
-            &prompter,
-            &v.recipients,
-            v.default_recipient_key().as_str(),
-        )
-        .unwrap();
+        let sender = select_sender(&prompter, &v.senders, v.default_sender_key().as_str()).unwrap();
+        let recipient =
+            select_recipient(&prompter, &v.recipients, v.default_recipient_key().as_str()).unwrap();
 
         // Assert — picked sender threads through; auto-select message proves
         // the recipient was resolved without an extra prompt.

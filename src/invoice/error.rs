@@ -77,5 +77,4 @@ mod tests {
         assert!(msg.contains("-5.0"), "Expected '-5.0' in: {msg}");
         assert!(msg.contains(">= 0"), "Expected '>= 0' in: {msg}");
     }
-
 }

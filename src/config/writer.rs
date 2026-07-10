@@ -271,11 +271,7 @@ fn ensure_senders_v2(config: &mut Config) -> Result<(), ConfigError> {
 /// Append a sender to the config file at `path`.
 ///
 /// If `set_default` is true, also sets `default_sender` to the new sender's key.
-pub fn append_sender(
-    path: &Path,
-    sender: Sender,
-    set_default: bool,
-) -> Result<(), ConfigError> {
+pub fn append_sender(path: &Path, sender: Sender, set_default: bool) -> Result<(), ConfigError> {
     use super::loader::{LoadResult, load_config};
 
     let config = match load_config(path)? {

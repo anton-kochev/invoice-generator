@@ -33,7 +33,11 @@ fn handle_refresh(writer: &mut dyn Write) -> Result<(), AppError> {
         writer,
         "Refreshed template manifest. {} template{} available remotely.",
         manifest.templates.len(),
-        if manifest.templates.len() == 1 { "" } else { "s" }
+        if manifest.templates.len() == 1 {
+            ""
+        } else {
+            "s"
+        }
     )
     .map_err(crate::cli::CliError::OutputWrite)?;
     Ok(())

@@ -77,10 +77,7 @@ mod tests {
         assert_eq!(sender.name, "Alice Smith");
         assert_eq!(sender.address, vec!["42 Elm St"]);
         assert_eq!(sender.email, "alice@example.com");
-        assert_eq!(
-            sender.key.as_ref().map(|k| k.as_str()),
-            Some("alice-smith")
-        );
+        assert_eq!(sender.key.as_ref().map(|k| k.as_str()), Some("alice-smith"));
         assert_eq!(
             config.default_sender.as_ref().map(|k| k.as_str()),
             Some("alice-smith")

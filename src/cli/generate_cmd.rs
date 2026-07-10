@@ -12,7 +12,7 @@ use crate::invoice::summary::build_summary;
 use crate::invoice::types::{InvoicePeriod, LineItem};
 use crate::locale::Locale;
 use crate::pdf::registry::{Template, TemplateRegistry};
-use crate::pdf::{generate_pdf, PdfError};
+use crate::pdf::{PdfError, generate_pdf};
 
 use crate::invoice::currency::effective_currency;
 

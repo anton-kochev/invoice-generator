@@ -781,8 +781,14 @@ mod tests {
         );
 
         // Act
-        let data =
-            InvoiceData::from_parts(&summary, &config, config.default_sender(), &bare, None, Locale::EnUs);
+        let data = InvoiceData::from_parts(
+            &summary,
+            &config,
+            config.default_sender(),
+            &bare,
+            None,
+            Locale::EnUs,
+        );
         let json = serde_json::to_value(&data).unwrap();
 
         // Assert

@@ -497,8 +497,7 @@ defaults:
     #[test]
     fn test_missing_field_hints_ignores_string_value_containing_template() {
         // Arrange — "template:" appears inside a string value, not as a key
-        let yaml =
-            "defaults:\n  currency: EUR\n  locale: en-US\n  footer_text: \"Use template: amalthea\"\n";
+        let yaml = "defaults:\n  currency: EUR\n  locale: en-US\n  footer_text: \"Use template: amalthea\"\n";
 
         // Act
         let hints = missing_field_hints(yaml);

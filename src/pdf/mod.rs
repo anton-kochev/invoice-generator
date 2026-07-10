@@ -130,9 +130,8 @@ mod tests {
 
     /// All shipped template names. Tests iterate over this in lieu of the
     /// removed `TemplateKey::ALL`.
-    const ALL_TEMPLATE_NAMES: [&str; 6] = [
-        "callisto", "thebe", "amalthea", "metis", "io", "europa",
-    ];
+    const ALL_TEMPLATE_NAMES: [&str; 6] =
+        ["callisto", "thebe", "amalthea", "metis", "io", "europa"];
 
     fn make_summary() -> InvoiceSummary {
         InvoiceSummary {
@@ -220,8 +219,8 @@ mod tests {
         // Arrange & Act & Assert
         for name in ALL_TEMPLATE_NAMES {
             let template = repo_template(name);
-            let source = read_template_source(&template)
-                .unwrap_or_else(|e| panic!("read {name}: {e}"));
+            let source =
+                read_template_source(&template).unwrap_or_else(|e| panic!("read {name}: {e}"));
             assert!(!source.is_empty(), "{name} should be non-empty");
         }
     }
@@ -502,14 +501,15 @@ mod tests {
     /// `InvoiceData::from_parts`. The `io` template requires a hand-crafted
     /// bilingual data blob and is exercised separately via
     /// [`regen_io_sample`].
-    const STANDARD_TEMPLATE_NAMES: [&str; 5] =
-        ["callisto", "thebe", "amalthea", "metis", "europa"];
+    const STANDARD_TEMPLATE_NAMES: [&str; 5] = ["callisto", "thebe", "amalthea", "metis", "europa"];
 
     #[test]
     fn test_template_source_each_key_returns_distinct_content() {
         // Arrange
-        let templates: Vec<Template> =
-            ALL_TEMPLATE_NAMES.iter().map(|n| repo_template(n)).collect();
+        let templates: Vec<Template> = ALL_TEMPLATE_NAMES
+            .iter()
+            .map(|n| repo_template(n))
+            .collect();
 
         // Act
         let sources: Vec<String> = templates
@@ -871,7 +871,10 @@ mod tests {
             .expect("PDF export should succeed");
 
         // Assert + write artifact
-        assert!(pdf.starts_with(b"%PDF"), "Output should start with PDF header");
+        assert!(
+            pdf.starts_with(b"%PDF"),
+            "Output should start with PDF header"
+        );
         std::fs::write("samples/sample_io.pdf", &pdf).expect("write sample PDF");
     }
 

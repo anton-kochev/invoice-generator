@@ -83,11 +83,9 @@ fn run(cli: Cli) -> Result<(), error::AppError> {
                 let validated = cli::load_validated_config(&config_path)?;
                 cli::sender_cmd::handle_sender_list(&validated, &mut std::io::stdout())
             }
-            SenderAction::Add => cli::sender_cmd::handle_sender_add(
-                &prompter,
-                &config_path,
-                &mut std::io::stdout(),
-            ),
+            SenderAction::Add => {
+                cli::sender_cmd::handle_sender_add(&prompter, &config_path, &mut std::io::stdout())
+            }
             SenderAction::Delete { key } => cli::sender_cmd::handle_sender_delete(
                 &prompter,
                 &config_path,
