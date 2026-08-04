@@ -6,8 +6,29 @@
 
 use std::ops::RangeInclusive;
 
+use crate::domain::BillingUnit;
 use crate::error::AppError;
 use crate::setup::prompter::Prompter;
+
+/// Prompt for a [`BillingUnit`] as a numbered list, defaulting to the first
+/// entry (`days`).
+///
+/// Rendered as a numbered list rather than a native select so it matches the
+/// existing preset-selection prompt and needs no new [`Prompter`] method.
+/// The default of `1` keeps "just press Enter" meaning days, which is what
+/// every pre-existing preset is.
+pub fn prompt_billing_unit(prompter: &dyn Prompter) -> Result<BillingUnit, AppError> {
+    prompter.message("Billing unit:");
+
+    for (i, unit) in BillingUnit::ALL.iter().enumerate() {
+        prompter.message(&format!("  [{}] {}", i + 1, unit.plural()));
+    }
+
+    let max = BillingUnit::ALL.len() as u32;
+    let choice = prompt_u32_in_range(prompter, "Select unit number:", 1..=max, 1)?;
+
+    Ok(BillingUnit::ALL[choice as usize - 1])
+}
 
 /// Prompt for a `u32` until the user enters a value inside `range`.
 ///
@@ -100,7 +121,77 @@ pub fn prompt_optional_parsed<U>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::BillingUnit;
     use crate::setup::mock_prompter::{MockPrompter, MockResponse};
+
+    // ── prompt_billing_unit ──
+
+    #[test]
+    fn test_prompt_billing_unit_returns_day_for_first_choice() {
+        // Arrange
+        let prompter = MockPrompter::new(vec![MockResponse::U32(1)]);
+
+        // Act
+        let unit = prompt_billing_unit(&prompter).unwrap();
+
+        // Assert
+        assert_eq!(unit, BillingUnit::Day);
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_prompt_billing_unit_returns_hour_for_second_choice() {
+        // Arrange
+        let prompter = MockPrompter::new(vec![MockResponse::U32(2)]);
+
+        // Act
+        let unit = prompt_billing_unit(&prompter).unwrap();
+
+        // Assert
+        assert_eq!(unit, BillingUnit::Hour);
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_prompt_billing_unit_renders_numbered_list() {
+        // Arrange
+        let prompter = MockPrompter::new(vec![MockResponse::U32(1)]);
+
+        // Act
+        let _ = prompt_billing_unit(&prompter).unwrap();
+
+        // Assert
+        let messages = prompter.messages.borrow();
+        assert_eq!(messages[0], "Billing unit:");
+        assert_eq!(messages[1], "  [1] days");
+        assert_eq!(messages[2], "  [2] hours");
+    }
+
+    #[test]
+    fn test_prompt_billing_unit_reprompts_on_out_of_range() {
+        // Arrange
+        let prompter = MockPrompter::new(vec![
+            MockResponse::U32(3), // above range
+            MockResponse::U32(0), // below range
+            MockResponse::U32(2), // valid
+        ]);
+
+        // Act
+        let unit = prompt_billing_unit(&prompter).unwrap();
+
+        // Assert
+        assert_eq!(unit, BillingUnit::Hour);
+        let messages = prompter.messages.borrow();
+        assert_eq!(
+            messages
+                .iter()
+                .filter(|m| m.contains("Please enter a number between 1 and 2"))
+                .count(),
+            2,
+            "Expected 2 range messages, got: {messages:?}"
+        );
+        prompter.assert_exhausted();
+    }
 
     // ── prompt_u32_in_range ──
 

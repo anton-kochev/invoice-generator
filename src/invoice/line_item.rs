@@ -56,6 +56,9 @@ pub fn collect_all_line_items(
 }
 
 /// Interactively collect line item details for a given preset.
+///
+/// All quantity/rate wording is derived from the preset's [`BillingUnit`], so a
+/// daily preset asks for "Days worked" and an hourly one for "Hours worked".
 pub fn collect_line_item_details(
     prompter: &dyn Prompter,
     preset: &Preset,
@@ -67,10 +70,12 @@ pub fn collect_line_item_details(
         item_number, preset.description
     ));
 
-    let days = prompter.positive_f64("Days worked:")?;
+    let unit = preset.unit;
+
+    let quantity = prompter.positive_f64(&format!("{} worked:", unit.label()))?;
 
     let rate = prompter.positive_f64_with_default(
-        &format!("Rate per day [{}]:", preset.default_rate),
+        &format!("Rate per {} [{}]:", unit.singular(), preset.default_rate),
         preset.default_rate,
     )?;
 
@@ -83,16 +88,20 @@ pub fn collect_line_item_details(
 
     let item = LineItem::new(
         preset.description.clone(),
-        days,
-        preset.unit,
+        quantity,
+        unit,
         rate,
         currency,
         tax_rate,
     );
 
     prompter.message(&format!(
-        "  => {:.2} days x {:.2}/day = {:.2}",
-        item.quantity, item.rate, item.amount
+        "  => {:.2} {} x {:.2}/{} = {:.2}",
+        item.quantity,
+        unit.plural(),
+        item.rate,
+        unit.singular(),
+        item.amount
     ));
 
     if item.tax_rate > 0.0 {
@@ -449,6 +458,7 @@ mod tests {
             MockResponse::U32(3),                     // select "Create new" (2 presets + 1)
             MockResponse::Text("design".into()),      // key
             MockResponse::Text("Design work".into()), // description
+            MockResponse::U32(1),                     // billing unit: days
             MockResponse::F64(500.0),                 // rate
             MockResponse::OptionalText(None),         // currency (blank → inherit)
             MockResponse::F64(5.0),                   // days worked
@@ -483,6 +493,7 @@ mod tests {
             MockResponse::U32(3), // Create new
             MockResponse::Text("design".into()),
             MockResponse::Text("Design work".into()),
+            MockResponse::U32(1), // billing unit: days
             MockResponse::F64(500.0),
             MockResponse::OptionalText(None), // currency (blank → inherit)
             MockResponse::F64(5.0),           // days
@@ -516,6 +527,7 @@ mod tests {
             MockResponse::U32(3), // Create new
             MockResponse::Text("ops".into()),
             MockResponse::Text("Ops work".into()),
+            MockResponse::U32(1), // billing unit: days
             MockResponse::F64(300.0),
             MockResponse::OptionalText(None), // currency (blank → inherit)
             MockResponse::F64(10.0),          // days
@@ -550,6 +562,7 @@ mod tests {
             MockResponse::U32(3), // Create new
             MockResponse::Text("design".into()),
             MockResponse::Text("Design work".into()),
+            MockResponse::U32(1), // billing unit: days
             MockResponse::F64(500.0),
             MockResponse::OptionalText(None), // currency (blank → inherit)
             MockResponse::F64(5.0),
@@ -580,6 +593,7 @@ mod tests {
             MockResponse::U32(3),
             MockResponse::Text("design".into()),
             MockResponse::Text("Design work".into()),
+            MockResponse::U32(1), // billing unit: days
             MockResponse::F64(500.0),
             MockResponse::OptionalText(None), // currency (blank → inherit)
             MockResponse::F64(5.0),
@@ -895,6 +909,101 @@ mod tests {
 
         // Assert
         assert_eq!(item.currency, Currency::Eur);
+        prompter.assert_exhausted();
+    }
+
+    // --- Unit-aware wording tests ---
+
+    #[test]
+    fn daily_preset_wording_is_byte_identical_to_pre_unit_behaviour() {
+        // Arrange — regression pin: these exact strings shipped before billing
+        // units existed and must not drift for daily presets.
+        let preset = make_preset(); // BillingUnit::Day, rate 800
+        let prompter = MockPrompter::new(vec![MockResponse::F64(10.0), MockResponse::F64(800.0)]);
+
+        // Act
+        let _ = collect_line_item_details(&prompter, &preset, 1, Currency::Eur).unwrap();
+
+        // Assert
+        let prompts = prompter.prompts.borrow();
+        assert_eq!(prompts[0], "Days worked:");
+        assert_eq!(prompts[1], "Rate per day [800]:");
+        let messages = prompter.messages.borrow();
+        assert_eq!(messages[1], "  => 10.00 days x 800.00/day = 8000.00");
+    }
+
+    #[test]
+    fn hourly_preset_prompts_use_hour_wording() {
+        // Arrange
+        let preset = Preset {
+            key: PresetKey::try_new("support").unwrap(),
+            description: "Support retainer".into(),
+            default_rate: 95.0,
+            currency: None,
+            tax_rate: None,
+            unit: BillingUnit::Hour,
+        };
+        let prompter = MockPrompter::new(vec![MockResponse::F64(8.0), MockResponse::F64(95.0)]);
+
+        // Act
+        let _ = collect_line_item_details(&prompter, &preset, 1, Currency::Eur).unwrap();
+
+        // Assert
+        let prompts = prompter.prompts.borrow();
+        assert_eq!(prompts[0], "Hours worked:");
+        assert_eq!(prompts[1], "Rate per hour [95]:");
+    }
+
+    #[test]
+    fn hourly_preset_echo_line_uses_hour_wording() {
+        // Arrange
+        let preset = Preset {
+            key: PresetKey::try_new("support").unwrap(),
+            description: "Support retainer".into(),
+            default_rate: 95.0,
+            currency: None,
+            tax_rate: None,
+            unit: BillingUnit::Hour,
+        };
+        let prompter = MockPrompter::new(vec![MockResponse::F64(8.0), MockResponse::F64(100.0)]);
+
+        // Act
+        let _ = collect_line_item_details(&prompter, &preset, 1, Currency::Eur).unwrap();
+
+        // Assert
+        let messages = prompter.messages.borrow();
+        assert_eq!(messages[1], "  => 8.00 hours x 100.00/hour = 800.00");
+    }
+
+    #[test]
+    fn collect_all_create_new_hourly_preset_drives_hourly_line_item() {
+        // Arrange — the unit chosen during inline preset creation must reach
+        // the line-item prompts of the very item being collected.
+        let dir = setup_test_dir();
+        let presets = make_presets();
+        let prompter = MockPrompter::new(vec![
+            MockResponse::U32(3),                          // Create new
+            MockResponse::Text("support".into()),          // key
+            MockResponse::Text("Support retainer".into()), // description
+            MockResponse::U32(2),                          // billing unit: hours
+            MockResponse::F64(95.0),                       // default rate
+            MockResponse::OptionalText(None),              // currency
+            MockResponse::F64(8.0),                        // hours worked
+            MockResponse::F64(95.0),                       // rate
+            MockResponse::Confirm(false),                  // add another? no
+        ]);
+
+        // Act
+        let items =
+            collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
+
+        // Assert
+        assert_eq!(items[0].unit, BillingUnit::Hour);
+        let prompts = prompter.prompts.borrow();
+        assert!(
+            prompts.iter().any(|p| p == "Hours worked:"),
+            "Expected hourly quantity prompt, got: {prompts:?}"
+        );
         prompter.assert_exhausted();
     }
 

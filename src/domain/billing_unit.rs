@@ -38,8 +38,6 @@ pub enum BillingUnit {
 
 impl BillingUnit {
     /// All supported billing units, in declaration order.
-    // Consumed by the interactive billing-unit prompt (phase 5).
-    #[allow(dead_code)]
     pub const ALL: [BillingUnit; 2] = [BillingUnit::Day, BillingUnit::Hour];
 
     /// Lowercase plural key (`"days"`, `"hours"`).
@@ -53,10 +51,8 @@ impl BillingUnit {
         }
     }
 
-    /// Capitalized plural label (`"Days"`, `"Hours"`) for the PDF quantity
-    /// column header.
-    // Consumed by the PDF data layer's `unit_label` (phase 8).
-    #[allow(dead_code)]
+    /// Capitalized plural label (`"Days"`, `"Hours"`), used for the PDF
+    /// quantity column header and prompts such as `{label} worked:`.
     pub fn label(&self) -> &'static str {
         match self {
             Self::Day => "Days",
@@ -64,14 +60,34 @@ impl BillingUnit {
         }
     }
 
+    /// Lowercase plural noun (`"days"`, `"hours"`) for prose such as the
+    /// line-item echo `8.00 hours x 100.00/hour`.
+    ///
+    /// Coincides with [`BillingUnit::key`] today, but is deliberately a
+    /// separate accessor: `key` is the wire format, and user-facing prose must
+    /// not silently follow a change to how the unit is serialized.
+    pub fn plural(&self) -> &'static str {
+        match self {
+            Self::Day => "days",
+            Self::Hour => "hours",
+        }
+    }
+
     /// Lowercase singular noun (`"day"`, `"hour"`), used in prompts and
     /// summaries such as `Rate per {singular}`.
-    // Consumed by prompts (phase 5) and display surfaces (phase 6).
-    #[allow(dead_code)]
     pub fn singular(&self) -> &'static str {
         match self {
             Self::Day => "day",
             Self::Hour => "hour",
+        }
+    }
+
+    /// Adjectival form (`"daily"`, `"hourly"`) for phrases that qualify a
+    /// noun, such as `Default {adjective} rate:`.
+    pub fn adjective(&self) -> &'static str {
+        match self {
+            Self::Day => "daily",
+            Self::Hour => "hourly",
         }
     }
 }
@@ -117,7 +133,7 @@ impl<'de> serde::Deserialize<'de> for BillingUnit {
 mod tests {
     use super::*;
 
-    // ── key / label / singular ──
+    // ── key / label / plural / singular / adjective ──
 
     #[test]
     fn test_key_returns_plural_lowercase() {
@@ -134,10 +150,24 @@ mod tests {
     }
 
     #[test]
+    fn test_plural_returns_lowercase_plural() {
+        // Arrange & Act & Assert
+        assert_eq!(BillingUnit::Day.plural(), "days");
+        assert_eq!(BillingUnit::Hour.plural(), "hours");
+    }
+
+    #[test]
     fn test_singular_returns_lowercase_singular() {
         // Arrange & Act & Assert
         assert_eq!(BillingUnit::Day.singular(), "day");
         assert_eq!(BillingUnit::Hour.singular(), "hour");
+    }
+
+    #[test]
+    fn test_adjective_returns_rate_adjective() {
+        // Arrange & Act & Assert
+        assert_eq!(BillingUnit::Day.adjective(), "daily");
+        assert_eq!(BillingUnit::Hour.adjective(), "hourly");
     }
 
     #[test]

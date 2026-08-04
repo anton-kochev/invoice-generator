@@ -348,6 +348,7 @@ pub fn full_setup_responses() -> Vec<MockResponse> {
         // Presets (1 preset, decline more)
         MockResponse::Text("dev".into()),
         MockResponse::Text("Development Services".into()),
+        MockResponse::U32(1), // billing unit: days
         MockResponse::F64(100.0),
         MockResponse::OptionalText(None),
         MockResponse::Confirm(false),
@@ -380,6 +381,7 @@ pub fn resume_from_recipient_responses() -> Vec<MockResponse> {
         // Presets
         MockResponse::Text("dev".into()),
         MockResponse::Text("Dev".into()),
+        MockResponse::U32(1), // billing unit: days
         MockResponse::F64(100.0),
         MockResponse::OptionalText(None),
         MockResponse::Confirm(false),

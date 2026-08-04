@@ -21,7 +21,8 @@ pub struct MockPrompter {
     responses: RefCell<VecDeque<MockResponse>>,
     /// Captured messages sent via [`Prompter::message`].
     pub messages: RefCell<Vec<String>>,
-    /// Captured prompt strings from confirm() calls.
+    /// Captured prompt strings from every prompting call, in order. Lets tests
+    /// assert on wording that varies with context (e.g. `Rate per hour [95]:`).
     pub prompts: RefCell<Vec<String>>,
 }
 
@@ -49,6 +50,10 @@ impl MockPrompter {
             .pop_front()
             .unwrap_or_else(|| panic!("MockPrompter exhausted; expected {expected}"))
     }
+
+    fn record(&self, prompt: &str) {
+        self.prompts.borrow_mut().push(prompt.to_string());
+    }
 }
 
 impl Prompter for MockPrompter {
@@ -56,21 +61,24 @@ impl Prompter for MockPrompter {
         self.messages.borrow_mut().push(text.to_string());
     }
 
-    fn required_text(&self, _prompt: &str) -> Result<String, AppError> {
+    fn required_text(&self, prompt: &str) -> Result<String, AppError> {
+        self.record(prompt);
         match self.pop("Text") {
             MockResponse::Text(s) => Ok(s),
             other => panic!("MockPrompter: expected Text, got {other:?}"),
         }
     }
 
-    fn optional_text(&self, _prompt: &str) -> Result<Option<String>, AppError> {
+    fn optional_text(&self, prompt: &str) -> Result<Option<String>, AppError> {
+        self.record(prompt);
         match self.pop("OptionalText") {
             MockResponse::OptionalText(s) => Ok(s),
             other => panic!("MockPrompter: expected OptionalText, got {other:?}"),
         }
     }
 
-    fn multi_line(&self, _prompt: &str) -> Result<Vec<String>, AppError> {
+    fn multi_line(&self, prompt: &str) -> Result<Vec<String>, AppError> {
+        self.record(prompt);
         match self.pop("Lines") {
             MockResponse::Lines(v) => {
                 assert!(
@@ -83,14 +91,16 @@ impl Prompter for MockPrompter {
         }
     }
 
-    fn optional_multi_line(&self, _prompt: &str) -> Result<Vec<String>, AppError> {
+    fn optional_multi_line(&self, prompt: &str) -> Result<Vec<String>, AppError> {
+        self.record(prompt);
         match self.pop("OptionalLines") {
             MockResponse::OptionalLines(v) => Ok(v),
             other => panic!("MockPrompter: expected OptionalLines, got {other:?}"),
         }
     }
 
-    fn text_with_default(&self, _prompt: &str, default: &str) -> Result<String, AppError> {
+    fn text_with_default(&self, prompt: &str, default: &str) -> Result<String, AppError> {
+        self.record(prompt);
         match self.pop("Text") {
             MockResponse::Text(s) if s.is_empty() => Ok(default.to_string()),
             MockResponse::Text(s) => Ok(s),
@@ -98,28 +108,32 @@ impl Prompter for MockPrompter {
         }
     }
 
-    fn u32_with_default(&self, _prompt: &str, _default: u32) -> Result<u32, AppError> {
+    fn u32_with_default(&self, prompt: &str, _default: u32) -> Result<u32, AppError> {
+        self.record(prompt);
         match self.pop("U32") {
             MockResponse::U32(v) => Ok(v),
             other => panic!("MockPrompter: expected U32, got {other:?}"),
         }
     }
 
-    fn positive_f64(&self, _prompt: &str) -> Result<f64, AppError> {
+    fn positive_f64(&self, prompt: &str) -> Result<f64, AppError> {
+        self.record(prompt);
         match self.pop("F64") {
             MockResponse::F64(v) => Ok(v),
             other => panic!("MockPrompter: expected F64, got {other:?}"),
         }
     }
 
-    fn positive_f64_with_default(&self, _prompt: &str, _default: f64) -> Result<f64, AppError> {
+    fn positive_f64_with_default(&self, prompt: &str, _default: f64) -> Result<f64, AppError> {
+        self.record(prompt);
         match self.pop("F64") {
             MockResponse::F64(v) => Ok(v),
             other => panic!("MockPrompter: expected F64, got {other:?}"),
         }
     }
 
-    fn nonneg_f64_with_default(&self, _prompt: &str, _default: f64) -> Result<f64, AppError> {
+    fn nonneg_f64_with_default(&self, prompt: &str, _default: f64) -> Result<f64, AppError> {
+        self.record(prompt);
         match self.pop("F64") {
             MockResponse::F64(v) => Ok(v),
             other => panic!("Expected F64 for nonneg_f64_with_default, got {other:?}"),
@@ -127,7 +141,7 @@ impl Prompter for MockPrompter {
     }
 
     fn confirm(&self, prompt: &str, _default: bool) -> Result<bool, AppError> {
-        self.prompts.borrow_mut().push(prompt.to_string());
+        self.record(prompt);
         match self.pop("Confirm") {
             MockResponse::Confirm(b) => Ok(b),
             other => panic!("MockPrompter: expected Confirm, got {other:?}"),

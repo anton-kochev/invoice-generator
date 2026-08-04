@@ -1,16 +1,16 @@
 use std::str::FromStr;
 
 use crate::config::types::Preset;
-use crate::domain::{BillingUnit, Currency, PresetKey};
+use crate::domain::{Currency, PresetKey};
 use crate::error::AppError;
 use crate::setup::prompter::Prompter;
-use crate::setup::prompts::{prompt_optional_parsed, prompt_parsed};
+use crate::setup::prompts::{prompt_billing_unit, prompt_optional_parsed, prompt_parsed};
 
 /// Interactively collect a new preset from the user.
 ///
 /// Prompts for a unique key (validated and checked against `existing_presets`),
-/// a description, and a default daily rate. The duplicate-key
-/// check is case-sensitive. Returns the assembled [`Preset`]
+/// a description, a billing unit, and a default rate named after that unit.
+/// The duplicate-key check is case-sensitive. Returns the assembled [`Preset`]
 /// without any filesystem side effects.
 pub fn collect_new_preset(
     prompter: &dyn Prompter,
@@ -33,7 +33,8 @@ pub fn collect_new_preset(
     )?;
 
     let description = prompter.required_text("Description:")?;
-    let default_rate = prompter.positive_f64("Default daily rate:")?;
+    let unit = prompt_billing_unit(prompter)?;
+    let default_rate = prompter.positive_f64(&format!("Default {} rate:", unit.adjective()))?;
     let currency = prompt_optional_parsed(
         prompter,
         |p| p.optional_text("Currency  (blank to use default)"),
@@ -57,14 +58,14 @@ pub fn collect_new_preset(
         default_rate,
         currency,
         tax_rate: None,
-        unit: BillingUnit::Day,
+        unit,
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::Currency;
+    use crate::domain::{BillingUnit, Currency};
     use crate::setup::mock_prompter::{MockPrompter, MockResponse};
 
     #[test]
@@ -81,6 +82,7 @@ mod tests {
         let prompter = MockPrompter::new(vec![
             MockResponse::Text("analytics".into()),
             MockResponse::Text("Data analytics".into()),
+            MockResponse::U32(1), // billing unit: days
             MockResponse::F64(750.0),
             MockResponse::OptionalText(None),
         ]);
@@ -93,6 +95,87 @@ mod tests {
         assert_eq!(preset.description, "Data analytics");
         assert!((preset.default_rate - 750.0).abs() < f64::EPSILON);
         prompter.assert_exhausted();
+    }
+
+    // --- Billing unit tests ---
+
+    #[test]
+    fn daily_choice_yields_day_unit_and_daily_rate_prompt() {
+        // Arrange — regression pin: the daily rate prompt keeps its old wording.
+        let existing: Vec<Preset> = vec![];
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("dev".into()),
+            MockResponse::Text("Development".into()),
+            MockResponse::U32(1), // billing unit: days
+            MockResponse::F64(800.0),
+            MockResponse::OptionalText(None),
+        ]);
+
+        // Act
+        let preset = collect_new_preset(&prompter, &existing).unwrap();
+
+        // Assert
+        assert_eq!(preset.unit, BillingUnit::Day);
+        let prompts = prompter.prompts.borrow();
+        assert!(
+            prompts.iter().any(|p| p == "Default daily rate:"),
+            "Expected daily rate prompt, got: {prompts:?}"
+        );
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn hourly_choice_yields_hour_unit_and_hourly_rate_prompt() {
+        // Arrange
+        let existing: Vec<Preset> = vec![];
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("support".into()),
+            MockResponse::Text("Support retainer".into()),
+            MockResponse::U32(2), // billing unit: hours
+            MockResponse::F64(95.0),
+            MockResponse::OptionalText(None),
+        ]);
+
+        // Act
+        let preset = collect_new_preset(&prompter, &existing).unwrap();
+
+        // Assert
+        assert_eq!(preset.unit, BillingUnit::Hour);
+        let prompts = prompter.prompts.borrow();
+        assert!(
+            prompts.iter().any(|p| p == "Default hourly rate:"),
+            "Expected hourly rate prompt, got: {prompts:?}"
+        );
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn unit_is_prompted_after_description_and_before_rate() {
+        // Arrange — ordering matters: the rate prompt names the chosen unit.
+        let existing: Vec<Preset> = vec![];
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("support".into()),
+            MockResponse::Text("Support retainer".into()),
+            MockResponse::U32(2), // billing unit: hours
+            MockResponse::F64(95.0),
+            MockResponse::OptionalText(None),
+        ]);
+
+        // Act
+        let _ = collect_new_preset(&prompter, &existing).unwrap();
+
+        // Assert
+        let prompts = prompter.prompts.borrow();
+        assert_eq!(
+            *prompts,
+            vec![
+                "Short key (e.g. 'dev'):",
+                "Description:",
+                "Select unit number:",
+                "Default hourly rate:",
+                "Currency  (blank to use default)",
+            ]
+        );
     }
 
     #[test]
@@ -110,6 +193,7 @@ mod tests {
             MockResponse::Text("dev".into()),
             MockResponse::Text("backend".into()),
             MockResponse::Text("Backend work".into()),
+            MockResponse::U32(1), // billing unit: days
             MockResponse::F64(900.0),
             MockResponse::OptionalText(None),
         ]);
@@ -155,6 +239,7 @@ mod tests {
             MockResponse::Text("qa".into()),
             MockResponse::Text("ops".into()),
             MockResponse::Text("Operations".into()),
+            MockResponse::U32(1), // billing unit: days
             MockResponse::F64(500.0),
             MockResponse::OptionalText(None),
         ]);
@@ -193,6 +278,7 @@ mod tests {
             MockResponse::Text("Dev".into()), // rejected: uppercase
             MockResponse::Text("ops".into()), // accepted
             MockResponse::Text("Ops services".into()),
+            MockResponse::U32(1), // billing unit: days
             MockResponse::F64(800.0),
             MockResponse::OptionalText(None),
         ]);
@@ -217,6 +303,7 @@ mod tests {
         let prompter = MockPrompter::new(vec![
             MockResponse::Text("first".into()),
             MockResponse::Text("First preset".into()),
+            MockResponse::U32(1), // billing unit: days
             MockResponse::F64(100.0),
             MockResponse::OptionalText(None),
         ]);
@@ -238,6 +325,7 @@ mod tests {
         let prompter = MockPrompter::new(vec![
             MockResponse::Text("analytics".into()),
             MockResponse::Text("Data analytics".into()),
+            MockResponse::U32(1), // billing unit: days
             MockResponse::F64(750.0),
             MockResponse::OptionalText(Some("USD".into())),
         ]);
@@ -258,6 +346,7 @@ mod tests {
         let prompter = MockPrompter::new(vec![
             MockResponse::Text("analytics".into()),
             MockResponse::Text("Data analytics".into()),
+            MockResponse::U32(1), // billing unit: days
             MockResponse::F64(750.0),
             MockResponse::OptionalText(None),
         ]);
@@ -279,6 +368,7 @@ mod tests {
         let prompter = MockPrompter::new(vec![
             MockResponse::Text("analytics".into()),
             MockResponse::Text("Data analytics".into()),
+            MockResponse::U32(1), // billing unit: days
             MockResponse::F64(750.0),
             MockResponse::OptionalText(Some("CHF".into())),
             MockResponse::OptionalText(Some("EUR".into())),

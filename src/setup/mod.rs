@@ -152,6 +152,7 @@ mod tests {
             // Presets (1 preset)
             MockResponse::Text("dev".into()),
             MockResponse::Text("Dev".into()),
+            MockResponse::U32(1), // billing unit: days
             MockResponse::F64(100.0),
             MockResponse::OptionalText(None),
             MockResponse::Confirm(false),
@@ -248,6 +249,7 @@ mod tests {
             // Presets (1 preset, decline more)
             MockResponse::Text("dev".into()),
             MockResponse::Text("Development Services".into()),
+            MockResponse::U32(1), // billing unit: days
             MockResponse::F64(100.0),
             MockResponse::OptionalText(None),
             MockResponse::Confirm(false),

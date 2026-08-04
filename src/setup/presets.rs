@@ -2,13 +2,17 @@ use std::path::Path;
 use std::str::FromStr;
 
 use super::prompter::Prompter;
-use super::prompts::{prompt_optional_parsed, prompt_parsed};
+use super::prompts::{prompt_billing_unit, prompt_optional_parsed, prompt_parsed};
 use crate::config::types::{Config, Preset};
 use crate::config::writer::save_config;
-use crate::domain::{BillingUnit, Currency, PresetKey};
+use crate::domain::{Currency, PresetKey};
 use crate::error::AppError;
 
 /// Collect invoice presets interactively and persist them to disk.
+///
+/// Each preset is collected as key → description → billing unit → default rate
+/// → currency. The unit precedes the rate so the rate prompt can name it
+/// ("Default hourly rate:").
 pub fn collect_presets(
     prompter: &dyn Prompter,
     config: &mut Config,
@@ -28,7 +32,8 @@ pub fn collect_presets(
             |raw: String| PresetKey::try_new(raw).map_err(|e| e.to_string()),
         )?;
         let description = prompter.required_text("Description:")?;
-        let default_rate = prompter.positive_f64("Default daily rate:")?;
+        let unit = prompt_billing_unit(prompter)?;
+        let default_rate = prompter.positive_f64(&format!("Default {} rate:", unit.adjective()))?;
         let currency = prompt_optional_parsed(
             prompter,
             |p| p.optional_text("Currency  (blank to use default)"),
@@ -52,7 +57,7 @@ pub fn collect_presets(
             default_rate,
             currency,
             tax_rate: None,
-            unit: BillingUnit::Day,
+            unit,
         });
 
         if !prompter.confirm("Add another preset?", false)? {
@@ -72,7 +77,7 @@ pub fn collect_presets(
 mod tests {
     use super::*;
     use crate::config::loader::load_config;
-    use crate::domain::Currency;
+    use crate::domain::{BillingUnit, Currency};
     use crate::setup::mock_prompter::{MockPrompter, MockResponse};
     use crate::setup::test_helpers::*;
 
@@ -84,6 +89,7 @@ mod tests {
         let prompter = MockPrompter::new(vec![
             MockResponse::Text("dev".into()),
             MockResponse::Text("Development Services".into()),
+            MockResponse::U32(1), // billing unit: days
             MockResponse::F64(100.0),
             MockResponse::OptionalText(None),
             MockResponse::Confirm(false),
@@ -109,11 +115,13 @@ mod tests {
         let prompter = MockPrompter::new(vec![
             MockResponse::Text("dev".into()),
             MockResponse::Text("Development".into()),
+            MockResponse::U32(1), // billing unit: days
             MockResponse::F64(100.0),
             MockResponse::OptionalText(None),
             MockResponse::Confirm(true),
             MockResponse::Text("design".into()),
             MockResponse::Text("Design Work".into()),
+            MockResponse::U32(1), // billing unit: days
             MockResponse::F64(80.0),
             MockResponse::OptionalText(None),
             MockResponse::Confirm(false),
@@ -138,16 +146,19 @@ mod tests {
         let prompter = MockPrompter::new(vec![
             MockResponse::Text("a".into()),
             MockResponse::Text("A".into()),
+            MockResponse::U32(1), // billing unit: days
             MockResponse::F64(10.0),
             MockResponse::OptionalText(None),
             MockResponse::Confirm(true),
             MockResponse::Text("b".into()),
             MockResponse::Text("B".into()),
+            MockResponse::U32(1), // billing unit: days
             MockResponse::F64(20.0),
             MockResponse::OptionalText(None),
             MockResponse::Confirm(true),
             MockResponse::Text("c".into()),
             MockResponse::Text("C".into()),
+            MockResponse::U32(1), // billing unit: days
             MockResponse::F64(30.0),
             MockResponse::OptionalText(None),
             MockResponse::Confirm(false),
@@ -171,6 +182,7 @@ mod tests {
         let prompter = MockPrompter::new(vec![
             MockResponse::Text("qa".into()),
             MockResponse::Text("QA".into()),
+            MockResponse::U32(1), // billing unit: days
             MockResponse::F64(99.50),
             MockResponse::OptionalText(None),
             MockResponse::Confirm(false),
@@ -193,6 +205,7 @@ mod tests {
         let prompter = MockPrompter::new(vec![
             MockResponse::Text("dev".into()),
             MockResponse::Text("Dev".into()),
+            MockResponse::U32(1), // billing unit: days
             MockResponse::F64(100.0),
             MockResponse::OptionalText(None),
             MockResponse::Confirm(false),
@@ -210,6 +223,93 @@ mod tests {
     }
 
     #[test]
+    fn test_collect_presets_hourly_unit_persists_to_disk() {
+        // Arrange
+        let dir = setup_dir(None);
+        let mut config = empty_config();
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("support".into()),
+            MockResponse::Text("Support retainer".into()),
+            MockResponse::U32(2), // billing unit: hours
+            MockResponse::F64(95.0),
+            MockResponse::OptionalText(None),
+            MockResponse::Confirm(false),
+        ]);
+
+        // Act
+        collect_presets(&prompter, &mut config, &cfg_path(&dir)).unwrap();
+
+        // Assert — the chosen unit survives the round trip through YAML.
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
+        let presets = loaded.presets.unwrap();
+        assert_eq!(presets[0].unit, BillingUnit::Hour);
+        let prompts = prompter.prompts.borrow();
+        assert!(
+            prompts.iter().any(|p| p == "Default hourly rate:"),
+            "Expected hourly rate prompt, got: {prompts:?}"
+        );
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_collect_presets_daily_unit_keeps_legacy_rate_prompt() {
+        // Arrange — regression pin for the pre-billing-unit wording.
+        let dir = setup_dir(None);
+        let mut config = empty_config();
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("dev".into()),
+            MockResponse::Text("Development Services".into()),
+            MockResponse::U32(1), // billing unit: days
+            MockResponse::F64(100.0),
+            MockResponse::OptionalText(None),
+            MockResponse::Confirm(false),
+        ]);
+
+        // Act
+        collect_presets(&prompter, &mut config, &cfg_path(&dir)).unwrap();
+
+        // Assert
+        let presets = config.presets.as_ref().unwrap();
+        assert_eq!(presets[0].unit, BillingUnit::Day);
+        let prompts = prompter.prompts.borrow();
+        assert!(
+            prompts.iter().any(|p| p == "Default daily rate:"),
+            "Expected daily rate prompt, got: {prompts:?}"
+        );
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn test_collect_presets_mixed_units_across_two_presets() {
+        // Arrange
+        let dir = setup_dir(None);
+        let mut config = empty_config();
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("dev".into()),
+            MockResponse::Text("Development".into()),
+            MockResponse::U32(1), // billing unit: days
+            MockResponse::F64(800.0),
+            MockResponse::OptionalText(None),
+            MockResponse::Confirm(true),
+            MockResponse::Text("support".into()),
+            MockResponse::Text("Support retainer".into()),
+            MockResponse::U32(2), // billing unit: hours
+            MockResponse::F64(95.0),
+            MockResponse::OptionalText(None),
+            MockResponse::Confirm(false),
+        ]);
+
+        // Act
+        collect_presets(&prompter, &mut config, &cfg_path(&dir)).unwrap();
+
+        // Assert
+        let presets = config.presets.unwrap();
+        assert_eq!(presets[0].unit, BillingUnit::Day);
+        assert_eq!(presets[1].unit, BillingUnit::Hour);
+        prompter.assert_exhausted();
+    }
+
+    #[test]
     fn test_collect_presets_currency_provided_sets_currency_some() {
         // Arrange
         let dir = setup_dir(None);
@@ -217,6 +317,7 @@ mod tests {
         let prompter = MockPrompter::new(vec![
             MockResponse::Text("dev".into()),
             MockResponse::Text("Development Services".into()),
+            MockResponse::U32(1), // billing unit: days
             MockResponse::F64(100.0),
             MockResponse::OptionalText(Some("USD".into())),
             MockResponse::Confirm(false),
@@ -240,6 +341,7 @@ mod tests {
         let prompter = MockPrompter::new(vec![
             MockResponse::Text("dev".into()),
             MockResponse::Text("Development Services".into()),
+            MockResponse::U32(1), // billing unit: days
             MockResponse::F64(100.0),
             MockResponse::OptionalText(None),
             MockResponse::Confirm(false),
@@ -264,6 +366,7 @@ mod tests {
         let prompter = MockPrompter::new(vec![
             MockResponse::Text("dev".into()),
             MockResponse::Text("Development Services".into()),
+            MockResponse::U32(1), // billing unit: days
             MockResponse::F64(100.0),
             MockResponse::OptionalText(Some("CHF".into())),
             MockResponse::OptionalText(Some("EUR".into())),
