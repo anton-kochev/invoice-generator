@@ -4,6 +4,7 @@
 //! invalid data at the point of use, the types here parse-don't-validate at
 //! the boundary (typically deserialization or interactive setup), so the rest
 //! of the program can rely on the invariant.
+pub mod billing_unit;
 pub mod currency;
 pub mod hex_color;
 pub mod iban;
@@ -13,6 +14,9 @@ pub mod preset_key;
 pub mod recipient_key;
 pub mod sender_key;
 
+// No consumer imports `BillingUnit` yet; `Preset` picks it up in the next step.
+#[allow(unused_imports)]
+pub use billing_unit::BillingUnit;
 pub use currency::Currency;
 pub use hex_color::HexColor;
 pub use iban::Iban;
