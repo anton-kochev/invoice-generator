@@ -26,13 +26,14 @@ A CLI tool that generates professional PDF invoices through an interactive promp
 - **Config validation** — clear reporting of missing or malformed sections with guidance on how to fix
 - **Multiple recipients** — define several client profiles and select by key; set a default for quick invoicing
 - **Multiple senders** — define several sender identities (e.g. business entities) and select by key; set a default for quick invoicing
-- **Reusable presets** — define common billable items (description + default daily rate + optional currency and tax rate) and select them by number during invoicing
+- **Reusable presets** — define common billable items (description + default rate + optional currency and tax rate) and select them by number during invoicing
+- **Daily or hourly billing** — each preset declares whether its rate is per day or per hour; prompts, summaries, and the PDF adapt automatically. A single invoice may mix daily and hourly line items
 - **Inline preset creation** — add new presets on the fly during invoice generation without editing the config file
 - **Per-preset currency and tax** — each preset can carry its own currency and tax rate, overriding the global default
 - **Smart defaults** — billing month defaults to last month, currency to EUR, payment terms to 30 days
 - **Decoupled template system** — 3 templates (amalthea, metis, thebe) ship in the binary; additional templates are fetched on demand from a remote GitHub repo without needing a new binary release
 - **Locale-aware formatting** — dates and numbers in the PDF follow locale rules (en-US, en-GB, de-DE, fr-FR, cs-CZ, uk-UA)
-- **Non-interactive CLI mode** — `invoice generate` for scripting and CI; supports single-item (`--preset`/`--days`) or multi-item (`--items` JSON)
+- **Non-interactive CLI mode** — `invoice generate` for scripting and CI; supports single-item (`--preset` with `--quantity`/`--days`/`--hours`) or multi-item (`--items` JSON)
 - **Preset, recipient, sender, and template management** — `invoice preset list|delete`, `invoice recipient list|add|delete`, `invoice sender list|add|delete`, and `invoice template refresh` subcommands
 - **Professional PDF output** — clean A4 layout rendered via Typst with line-item table, payment details, and formatted totals
 - **Overwrite protection** — prompts before overwriting an existing PDF; standardized filenames (`Invoice_Name_MonYYYY.pdf`)
@@ -88,8 +89,14 @@ invoice-generator
 # Non-interactive: generate a single-item invoice
 invoice-generator generate --month 3 --year 2026 --preset dev --days 10
 
-# Non-interactive: multiple line items via JSON
-invoice-generator generate --month 3 --year 2026 --items '[{"preset":"dev","days":10},{"preset":"consulting","days":2}]'
+# An hourly preset takes --hours
+invoice-generator generate --month 3 --year 2026 --preset support --hours 8
+
+# --quantity works with either, taking the preset's own unit
+invoice-generator generate --month 3 --year 2026 --preset support --quantity 8
+
+# Non-interactive: multiple line items via JSON (each entry takes its preset's unit)
+invoice-generator generate --month 3 --year 2026 --items '[{"preset":"dev","quantity":10},{"preset":"support","quantity":8}]'
 
 # Override template and locale for a single invoice
 invoice-generator generate --month 3 --year 2026 --preset dev --days 10 --template amalthea --locale de-DE
@@ -120,6 +127,24 @@ invoice-generator template refresh
 
 On first run, the setup wizard walks you through entering your details, client info, payment methods, and presets. On subsequent runs, you go straight to invoice generation.
 
+### Quantity flags
+
+A preset is billed either per day or per hour — never both — and the preset is always the authority on which. Pick the flag that says what you mean:
+
+| Flag | Behaviour |
+| --- | --- |
+| `--quantity N` | Unit-agnostic. Bills `N` of whatever unit the preset uses. |
+| `--days N` | Bills `N` days, and *asserts* the preset is a daily one. Errors if it is hourly. |
+| `--hours N` | Bills `N` hours, and *asserts* the preset is an hourly one. Errors if it is daily. |
+
+`--days` and `--hours` are deliberately not aliases of `--quantity`: `--hours 8` against a daily preset would otherwise silently bill 8 *days*. Instead you get
+
+```
+--hours cannot be used with preset "dev" (billed in days) — use --days or --quantity
+```
+
+In `--items` JSON, use the `quantity` key; the older `days` key is still accepted as an alias.
+
 ### Interactive Flow
 
 ```
@@ -131,7 +156,7 @@ Year [2026]: 2026
 Select a preset for this line item:
 
   [1] dev — Software development (EUR 800.00/day)
-  [2] consulting — Technical consulting (EUR 1000.00/day)
+  [2] support — Support retainer (EUR 100.00/hour)
   [3] + Create new preset
 Select preset number: 1
 
@@ -140,7 +165,28 @@ Days worked: 10
 Rate per day [800]: 800
   => 10.00 days x 800.00/day = 8000.00
 
+Add another line item? Yes
+
+Select preset number: 2
+
+Line item #2: Support retainer
+Hours worked: 8
+Rate per hour [100]: 100
+  => 8.00 hours x 100.00/hour = 800.00
+
 Add another line item? No
+```
+
+Prompt wording follows the preset's unit throughout. When you create a preset — in the wizard or inline during invoicing — you pick its unit right after the description:
+
+```
+Short key (e.g. 'dev'): support
+Description: Support retainer
+Billing unit:
+  [1] days
+  [2] hours
+Select unit number: 2
+Default hourly rate: 100
 ```
 
 Before generating the PDF, you see a summary for review:
@@ -155,8 +201,10 @@ Before generating the PDF, you see a summary for review:
 +--------------------------------------+
 | Software development                 |
 |   10.00 days x 800.00 = 8000.00 EUR  |
+| Support retainer                     |
+|   8.00 hours x 100.00 = 800.00 EUR   |
 +--------------------------------------+
-| TOTAL: 8000.00 EUR                   |
+| TOTAL: 8800.00 EUR                   |
 +--------------------------------------+
 
 Generate PDF? Yes
@@ -205,9 +253,15 @@ presets:
   - key: "dev"
     description: "Software Development"
     default_rate: 100.0
+    unit: days
+  - key: "support"
+    description: "Support Retainer"
+    default_rate: 95.0
+    unit: hours
   - key: "consulting"
     description: "Technical Consulting"
     default_rate: 150.0
+    unit: days
     currency: "USD"
     tax_rate: 21.0
 
@@ -237,6 +291,10 @@ All sections except `defaults` and `branding` are required. The `defaults` secti
 
 Older configs with a single `recipient` field (instead of `recipients` list) — and likewise a single `sender` field (instead of `senders` list) — are still supported and automatically migrated on the next write.
 
+Presets written before billing units existed have no `unit` key; they load as `days`, which is what they always meant. The key is written out explicitly on the next save. To change an existing preset's unit, edit `unit:` in the config file by hand — there is no `preset edit` command yet.
+
+Bundled templates still label the quantity column "Days" regardless of unit; making them unit-aware is a follow-up. The `adrastea` template already renders it correctly.
+
 ### Sender extras (template-specific fields)
 
 A sender entry may carry arbitrary extra fields beyond the typed ones (`name`, `address`, `email`). These are an unchecked escape hatch for template-only data — for example, the bilingual `io` template reads a Ukrainian `name_ua` and extended bank details. Any extra key is flattened directly onto the sender in the template, so `name_ua: "Джейн Доу"` becomes `sender.name_ua` in the Typst source. Templates that don't reference a given key simply ignore it. Note: an extra key that collides with a typed field (e.g. `name`) shadows the typed value in the rendered output.
@@ -247,7 +305,7 @@ The generated PDF is a single-page A4 document with:
 
 - **Header** — "INVOICE" title with invoice number, date, and due date
 - **Parties** — FROM (sender) and TO (recipient) side by side, including optional company ID and VAT number
-- **Line items table** — description, period, days, rate, and amount per item with alternating row backgrounds
+- **Line items table** — description, period, quantity, rate, and amount per item with alternating row backgrounds
 - **Total** — bold, right-aligned in the configured currency
 - **Payment details** — one block per payment method with IBAN and BIC/SWIFT
 - **Footer** — thank-you message with sender contact info

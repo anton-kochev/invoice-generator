@@ -14,7 +14,7 @@
 - `cargo build`: Build the project
 - `cargo test`: Run all unit tests
 - `cargo run`: Run the interactive invoice flow (config → setup → invoice → PDF)
-- `cargo run -- generate --month 3 --year 2026 --preset dev --days 10`: Non-interactive single-item generation
+- `cargo run -- generate --month 3 --year 2026 --preset dev --days 10`: Non-interactive single-item generation. Use `--hours N` for an hourly preset, or `--quantity N` for either — `--days`/`--hours` also assert the preset's unit and error on a mismatch
 - `cargo run -- preset list|delete <key>`: Manage presets
 - `cargo run -- recipient list|add|delete <key>`: Manage recipients
 - `cargo run -- sender list|add|delete <key>`: Manage senders
@@ -32,12 +32,14 @@
 ## Architecture
 - `src/main.rs` — entry point, clap CLI parsing, dispatches to interactive or subcommand handlers
 - `src/error.rs` — AppError enum with variants for config, setup, invoice, PDF, preset, recipient, template, and locale errors
+- `src/domain/` — validated newtypes and closed enums shared across layers: Currency, BillingUnit (days/hours, defaults to days so unitless configs stay daily), PresetKey
 - `src/config/` — YAML config: types (Config, Sender, Recipient, PaymentMethod, Preset, Defaults, Branding, TemplateKey), loader, validator, writer
 - `src/cli/` — clap subcommands: generate (non-interactive), preset list/delete, recipient list/add/delete, sender list/add/delete, template refresh, interactive flow
 - `src/setup/` — interactive setup wizard: sender, recipient, payment, presets, defaults, prompter
 - `src/invoice/` — invoice generation: line items, period, currency, preset selection/creation, summary, display
 - `src/locale.rs` — Locale enum (en-US, en-GB, de-DE, fr-FR, cs-CZ, uk-UA) with date/number formatting
 - `src/pdf/` — PDF output via typst: data mapping, typst world, compilation, manifest/registry with 3 bundled templates (amalthea, metis, thebe) + remote-fetched templates (callisto, europa, io)
+  - Templates are fetched at runtime independently of the binary version, so the JSON contract must stay compatible both ways: only add keys, and read new ones with `.at(key, default:)`. `line_items[].days` is a legacy alias of `quantity`, kept until every published template migrates
 - `docs/` — SRS (v1, v2, v3) and user stories
 
 ## Workflow
