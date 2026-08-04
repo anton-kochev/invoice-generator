@@ -1,7 +1,7 @@
 use std::fmt;
 
 use crate::config::types::Preset;
-use crate::domain::Currency;
+use crate::domain::{BillingUnit, Currency};
 
 /// Result of the preset selection prompt.
 #[derive(Debug, Clone, PartialEq)]
@@ -79,6 +79,11 @@ pub struct LineItem {
     pub description: String,
     /// Amount of work billed, in the preset's billing unit.
     pub quantity: f64,
+    /// The billing unit `quantity` and `rate` are expressed in.
+    ///
+    /// Presentational only: it never enters the amount arithmetic, it just
+    /// tells prompts, summaries and templates how to word the quantity.
+    pub unit: BillingUnit,
     /// Rate per billing unit.
     pub rate: f64,
     /// Computed amount: quantity * rate, rounded to 2 decimal places.
@@ -96,9 +101,13 @@ impl LineItem {
     /// and `tax_amount` as `amount * tax_rate / 100`, also rounded to 2dp.
     ///
     /// `tax_rate == 0.0` means untaxed; the tax fields then compute to 0.0.
+    ///
+    /// `unit` is carried through untouched — the amount is `quantity * rate`
+    /// whether the item is billed per day or per hour.
     pub fn new(
         description: String,
         quantity: f64,
+        unit: BillingUnit,
         rate: f64,
         currency: Currency,
         tax_rate: f64,
@@ -108,6 +117,7 @@ impl LineItem {
         Self {
             description,
             quantity,
+            unit,
             rate,
             amount,
             currency,
@@ -234,6 +244,7 @@ mod tests {
         let item = LineItem::new(
             "Software development".into(),
             days,
+            BillingUnit::Day,
             rate,
             Currency::Eur,
             0.0,
@@ -249,7 +260,14 @@ mod tests {
         let description = "Consulting work";
 
         // Act
-        let item = LineItem::new(description.into(), 5.0, 100.0, Currency::Eur, 0.0);
+        let item = LineItem::new(
+            description.into(),
+            5.0,
+            BillingUnit::Day,
+            100.0,
+            Currency::Eur,
+            0.0,
+        );
 
         // Assert
         assert_eq!(item.description, "Consulting work");
@@ -262,7 +280,14 @@ mod tests {
         let rate = 750.0;
 
         // Act
-        let item = LineItem::new("Dev work".into(), days, rate, Currency::Eur, 0.0);
+        let item = LineItem::new(
+            "Dev work".into(),
+            days,
+            BillingUnit::Day,
+            rate,
+            Currency::Eur,
+            0.0,
+        );
 
         // Assert
         assert!((item.quantity - 12.5).abs() < f64::EPSILON);
@@ -276,7 +301,14 @@ mod tests {
         let rate = 100.03;
 
         // Act
-        let item = LineItem::new("Dev".into(), days, rate, Currency::Eur, 0.0);
+        let item = LineItem::new(
+            "Dev".into(),
+            days,
+            BillingUnit::Day,
+            rate,
+            Currency::Eur,
+            0.0,
+        );
 
         // Assert
         assert!((item.amount - 1050.32).abs() < f64::EPSILON);
@@ -289,7 +321,14 @@ mod tests {
         let rate = 1.111;
 
         // Act
-        let item = LineItem::new("Dev".into(), days, rate, Currency::Eur, 0.0);
+        let item = LineItem::new(
+            "Dev".into(),
+            days,
+            BillingUnit::Day,
+            rate,
+            Currency::Eur,
+            0.0,
+        );
 
         // Assert
         assert!((item.amount - 11.11).abs() < f64::EPSILON);
@@ -302,7 +341,14 @@ mod tests {
         let rate = 1.119;
 
         // Act
-        let item = LineItem::new("Dev".into(), days, rate, Currency::Eur, 0.0);
+        let item = LineItem::new(
+            "Dev".into(),
+            days,
+            BillingUnit::Day,
+            rate,
+            Currency::Eur,
+            0.0,
+        );
 
         // Assert
         assert!((item.amount - 1.12).abs() < f64::EPSILON);
@@ -315,7 +361,14 @@ mod tests {
         let rate = 100.0;
 
         // Act
-        let item = LineItem::new("Dev".into(), days, rate, Currency::Eur, 0.0);
+        let item = LineItem::new(
+            "Dev".into(),
+            days,
+            BillingUnit::Day,
+            rate,
+            Currency::Eur,
+            0.0,
+        );
 
         // Assert
         assert!((item.amount - 500.0).abs() < f64::EPSILON);
@@ -328,7 +381,14 @@ mod tests {
         let rate = 100.0;
 
         // Act
-        let item = LineItem::new("Dev".into(), days, rate, Currency::Eur, 0.0);
+        let item = LineItem::new(
+            "Dev".into(),
+            days,
+            BillingUnit::Day,
+            rate,
+            Currency::Eur,
+            0.0,
+        );
 
         // Assert
         assert!((item.amount - 1234.0).abs() < f64::EPSILON);
@@ -341,7 +401,14 @@ mod tests {
         let rate = 0.01;
 
         // Act
-        let item = LineItem::new("Dev".into(), days, rate, Currency::Eur, 0.0);
+        let item = LineItem::new(
+            "Dev".into(),
+            days,
+            BillingUnit::Day,
+            rate,
+            Currency::Eur,
+            0.0,
+        );
 
         // Assert
         assert!((item.amount - 0.01).abs() < f64::EPSILON);
@@ -354,7 +421,14 @@ mod tests {
         let rate = 800.0;
 
         // Act
-        let item = LineItem::new("Dev".into(), days, rate, Currency::Usd, 0.0);
+        let item = LineItem::new(
+            "Dev".into(),
+            days,
+            BillingUnit::Day,
+            rate,
+            Currency::Usd,
+            0.0,
+        );
 
         // Assert
         assert_eq!(item.currency, Currency::Usd);
@@ -367,7 +441,14 @@ mod tests {
         let rate = 100.03;
 
         // Act
-        let item = LineItem::new("Dev".into(), days, rate, Currency::Uah, 0.0);
+        let item = LineItem::new(
+            "Dev".into(),
+            days,
+            BillingUnit::Day,
+            rate,
+            Currency::Uah,
+            0.0,
+        );
 
         // Assert
         assert!((item.amount - 1050.32).abs() < f64::EPSILON);
@@ -406,7 +487,14 @@ mod tests {
         let rate = 800.0;
 
         // Act
-        let item = LineItem::new("Dev".into(), days, rate, Currency::Eur, 0.0);
+        let item = LineItem::new(
+            "Dev".into(),
+            days,
+            BillingUnit::Day,
+            rate,
+            Currency::Eur,
+            0.0,
+        );
 
         // Assert
         assert!((item.tax_rate - 0.0).abs() < f64::EPSILON);
@@ -416,7 +504,14 @@ mod tests {
     #[test]
     fn line_item_with_tax_zero_rate_gives_zero_tax_amount() {
         // Arrange & Act
-        let item = LineItem::new("Dev".into(), 10.0, 800.0, Currency::Eur, 0.0);
+        let item = LineItem::new(
+            "Dev".into(),
+            10.0,
+            BillingUnit::Day,
+            800.0,
+            Currency::Eur,
+            0.0,
+        );
 
         // Assert
         assert!((item.tax_amount - 0.0).abs() < f64::EPSILON);
@@ -425,7 +520,14 @@ mod tests {
     #[test]
     fn line_item_with_tax_computes_tax_amount() {
         // Arrange & Act
-        let item = LineItem::new("Dev".into(), 10.0, 800.0, Currency::Eur, 21.0);
+        let item = LineItem::new(
+            "Dev".into(),
+            10.0,
+            BillingUnit::Day,
+            800.0,
+            Currency::Eur,
+            21.0,
+        );
 
         // Assert
         assert!((item.amount - 8000.0).abs() < f64::EPSILON);
@@ -436,7 +538,14 @@ mod tests {
     fn line_item_with_tax_amount_rounds_half_up() {
         // Arrange — amount = 100.03, tax = 100.03 * 21 / 100 = 21.0063 → 21.01
         // Act
-        let item = LineItem::new("Dev".into(), 1.0, 100.03, Currency::Eur, 21.0);
+        let item = LineItem::new(
+            "Dev".into(),
+            1.0,
+            BillingUnit::Day,
+            100.03,
+            Currency::Eur,
+            21.0,
+        );
 
         // Assert
         assert!((item.tax_amount - 21.01).abs() < f64::EPSILON);
@@ -445,10 +554,24 @@ mod tests {
     #[test]
     fn line_item_with_tax_does_not_affect_base_amount() {
         // Arrange
-        let without = LineItem::new("Dev".into(), 10.0, 800.0, Currency::Eur, 0.0);
+        let without = LineItem::new(
+            "Dev".into(),
+            10.0,
+            BillingUnit::Day,
+            800.0,
+            Currency::Eur,
+            0.0,
+        );
 
         // Act
-        let with = LineItem::new("Dev".into(), 10.0, 800.0, Currency::Eur, 21.0);
+        let with = LineItem::new(
+            "Dev".into(),
+            10.0,
+            BillingUnit::Day,
+            800.0,
+            Currency::Eur,
+            21.0,
+        );
 
         // Assert
         assert!((with.amount - without.amount).abs() < f64::EPSILON);
@@ -457,7 +580,14 @@ mod tests {
     #[test]
     fn line_item_with_tax_high_rate_100_percent() {
         // Arrange & Act
-        let item = LineItem::new("Dev".into(), 5.0, 200.0, Currency::Eur, 100.0);
+        let item = LineItem::new(
+            "Dev".into(),
+            5.0,
+            BillingUnit::Day,
+            200.0,
+            Currency::Eur,
+            100.0,
+        );
 
         // Assert — amount = 1000.0, tax = 1000.0
         assert!((item.amount - 1000.0).abs() < f64::EPSILON);
@@ -467,9 +597,102 @@ mod tests {
     #[test]
     fn line_item_with_tax_fractional_rate() {
         // Arrange & Act
-        let item = LineItem::new("Dev".into(), 10.0, 800.0, Currency::Eur, 7.5);
+        let item = LineItem::new(
+            "Dev".into(),
+            10.0,
+            BillingUnit::Day,
+            800.0,
+            Currency::Eur,
+            7.5,
+        );
 
         // Assert — amount = 8000.0, tax = 8000.0 * 7.5 / 100 = 600.0
         assert!((item.tax_amount - 600.0).abs() < f64::EPSILON);
+    }
+
+    // --- LineItem billing unit tests ---
+
+    #[test]
+    fn line_item_new_stores_supplied_unit_and_quantity() {
+        // Arrange
+        let quantity = 7.5;
+        let unit = BillingUnit::Hour;
+
+        // Act
+        let item = LineItem::new("Dev".into(), quantity, unit, 120.0, Currency::Eur, 0.0);
+
+        // Assert
+        assert_eq!(item.unit, BillingUnit::Hour);
+        assert!((item.quantity - 7.5).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn line_item_new_stores_day_unit() {
+        // Arrange & Act
+        let item = LineItem::new(
+            "Dev".into(),
+            3.0,
+            BillingUnit::Day,
+            800.0,
+            Currency::Eur,
+            0.0,
+        );
+
+        // Assert
+        assert_eq!(item.unit, BillingUnit::Day);
+    }
+
+    #[test]
+    fn line_item_amount_is_quantity_times_rate_regardless_of_unit() {
+        // Arrange — identical quantity and rate, differing only in the unit.
+        let quantity = 10.5;
+        let rate = 100.03;
+
+        // Act
+        let daily = LineItem::new(
+            "Dev".into(),
+            quantity,
+            BillingUnit::Day,
+            rate,
+            Currency::Eur,
+            0.0,
+        );
+        let hourly = LineItem::new(
+            "Dev".into(),
+            quantity,
+            BillingUnit::Hour,
+            rate,
+            Currency::Eur,
+            0.0,
+        );
+
+        // Assert — the unit is presentational; it must not enter the arithmetic.
+        assert!((daily.amount - hourly.amount).abs() < f64::EPSILON);
+        assert!((hourly.amount - 1050.32).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn line_item_tax_amount_is_independent_of_unit() {
+        // Arrange & Act
+        let daily = LineItem::new(
+            "Dev".into(),
+            10.0,
+            BillingUnit::Day,
+            800.0,
+            Currency::Eur,
+            21.0,
+        );
+        let hourly = LineItem::new(
+            "Dev".into(),
+            10.0,
+            BillingUnit::Hour,
+            800.0,
+            Currency::Eur,
+            21.0,
+        );
+
+        // Assert
+        assert!((daily.tax_amount - hourly.tax_amount).abs() < f64::EPSILON);
+        assert!((hourly.tax_amount - 1680.0).abs() < f64::EPSILON);
     }
 }

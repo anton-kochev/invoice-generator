@@ -81,7 +81,14 @@ pub fn collect_line_item_details(
         _ => 0.0,
     };
 
-    let item = LineItem::new(preset.description.clone(), days, rate, currency, tax_rate);
+    let item = LineItem::new(
+        preset.description.clone(),
+        days,
+        preset.unit,
+        rate,
+        currency,
+        tax_rate,
+    );
 
     prompter.message(&format!(
         "  => {:.2} days x {:.2}/day = {:.2}",
@@ -888,6 +895,87 @@ mod tests {
 
         // Assert
         assert_eq!(item.currency, Currency::Eur);
+        prompter.assert_exhausted();
+    }
+
+    // --- Billing unit propagation tests ---
+
+    #[test]
+    fn collect_line_item_carries_hourly_preset_unit() {
+        // Arrange
+        let preset = Preset {
+            key: PresetKey::try_new("support").unwrap(),
+            description: "Support retainer".into(),
+            default_rate: 120.0,
+            currency: None,
+            tax_rate: None,
+            unit: BillingUnit::Hour,
+        };
+        let prompter = MockPrompter::new(vec![MockResponse::F64(7.5), MockResponse::F64(120.0)]);
+
+        // Act
+        let item = collect_line_item_details(&prompter, &preset, 1, Currency::Eur).unwrap();
+
+        // Assert — the preset is authoritative for the unit.
+        assert_eq!(item.unit, BillingUnit::Hour);
+        assert!((item.amount - 900.0).abs() < f64::EPSILON);
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn collect_line_item_carries_daily_preset_unit() {
+        // Arrange
+        let preset = make_preset(); // BillingUnit::Day
+        let prompter = MockPrompter::new(vec![MockResponse::F64(10.0), MockResponse::F64(800.0)]);
+
+        // Act
+        let item = collect_line_item_details(&prompter, &preset, 1, Currency::Eur).unwrap();
+
+        // Assert
+        assert_eq!(item.unit, BillingUnit::Day);
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn collect_all_line_items_carries_unit_per_preset() {
+        // Arrange
+        let dir = setup_test_dir();
+        let presets = vec![
+            Preset {
+                key: PresetKey::try_new("dev").unwrap(),
+                description: "Software development".into(),
+                default_rate: 800.0,
+                currency: None,
+                tax_rate: None,
+                unit: BillingUnit::Day,
+            },
+            Preset {
+                key: PresetKey::try_new("support").unwrap(),
+                description: "Support retainer".into(),
+                default_rate: 120.0,
+                currency: None,
+                tax_rate: None,
+                unit: BillingUnit::Hour,
+            },
+        ];
+        let prompter = MockPrompter::new(vec![
+            MockResponse::U32(1),         // select preset #1 (dev, daily)
+            MockResponse::F64(10.0),      // quantity
+            MockResponse::F64(800.0),     // rate
+            MockResponse::Confirm(true),  // add another? yes
+            MockResponse::U32(2),         // select preset #2 (support, hourly)
+            MockResponse::F64(7.5),       // quantity
+            MockResponse::F64(120.0),     // rate
+            MockResponse::Confirm(false), // add another? no
+        ]);
+
+        // Act
+        let items =
+            collect_all_line_items(&prompter, &presets, Currency::Eur, &cfg_path(&dir)).unwrap();
+
+        // Assert
+        assert_eq!(items[0].unit, BillingUnit::Day);
+        assert_eq!(items[1].unit, BillingUnit::Hour);
         prompter.assert_exhausted();
     }
 }

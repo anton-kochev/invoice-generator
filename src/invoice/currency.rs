@@ -61,7 +61,14 @@ mod tests {
     #[test]
     fn test_validate_single_item_passes() {
         // Arrange
-        let items = vec![LineItem::new("Dev".into(), 10.0, 800.0, Currency::Eur, 0.0)];
+        let items = vec![LineItem::new(
+            "Dev".into(),
+            10.0,
+            BillingUnit::Day,
+            800.0,
+            Currency::Eur,
+            0.0,
+        )];
 
         // Act
         let result = validate_uniform_currency(&items);
@@ -74,8 +81,22 @@ mod tests {
     fn test_validate_same_currency_passes() {
         // Arrange
         let items = vec![
-            LineItem::new("Dev".into(), 10.0, 800.0, Currency::Eur, 0.0),
-            LineItem::new("QA".into(), 5.0, 600.0, Currency::Eur, 0.0),
+            LineItem::new(
+                "Dev".into(),
+                10.0,
+                BillingUnit::Day,
+                800.0,
+                Currency::Eur,
+                0.0,
+            ),
+            LineItem::new(
+                "QA".into(),
+                5.0,
+                BillingUnit::Day,
+                600.0,
+                Currency::Eur,
+                0.0,
+            ),
         ];
 
         // Act
@@ -89,8 +110,22 @@ mod tests {
     fn test_validate_mixed_returns_error() {
         // Arrange
         let items = vec![
-            LineItem::new("Dev".into(), 10.0, 800.0, Currency::Eur, 0.0),
-            LineItem::new("QA".into(), 5.0, 600.0, Currency::Usd, 0.0),
+            LineItem::new(
+                "Dev".into(),
+                10.0,
+                BillingUnit::Day,
+                800.0,
+                Currency::Eur,
+                0.0,
+            ),
+            LineItem::new(
+                "QA".into(),
+                5.0,
+                BillingUnit::Day,
+                600.0,
+                Currency::Usd,
+                0.0,
+            ),
         ];
 
         // Act
@@ -111,9 +146,9 @@ mod tests {
         // Arrange — first conflict (EUR vs USD) is reported; the third item
         // is irrelevant once we've already detected mixed currencies.
         let items = vec![
-            LineItem::new("A".into(), 1.0, 100.0, Currency::Eur, 0.0),
-            LineItem::new("B".into(), 1.0, 100.0, Currency::Usd, 0.0),
-            LineItem::new("C".into(), 1.0, 100.0, Currency::Uah, 0.0),
+            LineItem::new("A".into(), 1.0, BillingUnit::Day, 100.0, Currency::Eur, 0.0),
+            LineItem::new("B".into(), 1.0, BillingUnit::Day, 100.0, Currency::Usd, 0.0),
+            LineItem::new("C".into(), 1.0, BillingUnit::Day, 100.0, Currency::Uah, 0.0),
         ];
 
         // Act
@@ -134,8 +169,22 @@ mod tests {
         // Arrange — both resolve to EUR (one from None preset, one from Some(EUR)).
         // At the LineItem level, both just carry Currency::Eur.
         let items = vec![
-            LineItem::new("Dev".into(), 10.0, 800.0, Currency::Eur, 0.0),
-            LineItem::new("QA".into(), 5.0, 600.0, Currency::Eur, 0.0),
+            LineItem::new(
+                "Dev".into(),
+                10.0,
+                BillingUnit::Day,
+                800.0,
+                Currency::Eur,
+                0.0,
+            ),
+            LineItem::new(
+                "QA".into(),
+                5.0,
+                BillingUnit::Day,
+                600.0,
+                Currency::Eur,
+                0.0,
+            ),
         ];
 
         // Act

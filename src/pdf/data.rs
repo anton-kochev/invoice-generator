@@ -217,6 +217,7 @@ mod tests {
                 LineItem::new(
                     "Software development".into(),
                     10.0,
+                    BillingUnit::Day,
                     800.0,
                     crate::domain::Currency::Eur,
                     0.0,
@@ -224,6 +225,7 @@ mod tests {
                 LineItem::new(
                     "Technical consulting".into(),
                     5.0,
+                    BillingUnit::Day,
                     1000.0,
                     crate::domain::Currency::Eur,
                     0.0,
@@ -640,6 +642,7 @@ mod tests {
             line_items: vec![LineItem::new(
                 "Software development".into(),
                 10.0,
+                BillingUnit::Day,
                 800.0,
                 crate::domain::Currency::Eur,
                 21.0,

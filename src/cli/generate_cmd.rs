@@ -85,9 +85,12 @@ fn resolve_line_items(
                 let rate = spec.rate.unwrap_or(preset.default_rate);
                 let currency = effective_currency(preset, default_currency);
                 let tax_rate = spec.tax_rate.or(preset.tax_rate).unwrap_or(0.0);
+                // The preset is authoritative for the unit: an --items entry
+                // inherits it from the preset it references.
                 Ok(LineItem::new(
                     preset.description.clone(),
                     spec.days,
+                    preset.unit,
                     rate,
                     currency,
                     tax_rate,
@@ -108,6 +111,7 @@ fn resolve_line_items(
         Ok(vec![LineItem::new(
             preset.description.clone(),
             days,
+            preset.unit,
             preset.default_rate,
             currency,
             tax_rate,
@@ -427,6 +431,78 @@ mod tests {
         // Assert
         assert!(result.is_ok());
         assert_eq!(result.unwrap().key.as_str(), "dev");
+    }
+
+    // ── Billing unit propagation ──
+
+    fn presets_with_units() -> Vec<Preset> {
+        use crate::domain::PresetKey;
+        vec![
+            Preset {
+                key: PresetKey::try_new("dev").unwrap(),
+                description: "Software development".into(),
+                default_rate: 800.0,
+                currency: None,
+                tax_rate: None,
+                unit: BillingUnit::Day,
+            },
+            Preset {
+                key: PresetKey::try_new("support").unwrap(),
+                description: "Support retainer".into(),
+                default_rate: 120.0,
+                currency: None,
+                tax_rate: None,
+                unit: BillingUnit::Hour,
+            },
+        ]
+    }
+
+    #[test]
+    fn test_resolve_single_item_carries_preset_unit() {
+        // Arrange
+        let args = generate_single_args(3, 2026, "support", 7.5);
+
+        // Act
+        let items = resolve_line_items(&args, &presets_with_units(), Currency::Eur).unwrap();
+
+        // Assert
+        assert_eq!(items[0].unit, BillingUnit::Hour);
+        assert!((items[0].amount - 900.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_resolve_items_entry_inherits_unit_from_referenced_preset() {
+        // Arrange — the preset is authoritative for the unit, --items only
+        // carries the quantity.
+        let args = generate_items_args(
+            3,
+            2026,
+            r#"[{"preset": "dev", "days": 10}, {"preset": "support", "days": 7.5}]"#,
+        );
+
+        // Act
+        let items = resolve_line_items(&args, &presets_with_units(), Currency::Eur).unwrap();
+
+        // Assert
+        assert_eq!(items[0].unit, BillingUnit::Day);
+        assert_eq!(items[1].unit, BillingUnit::Hour);
+    }
+
+    #[test]
+    fn test_resolve_items_rate_override_does_not_change_unit() {
+        // Arrange
+        let args = generate_items_args(
+            3,
+            2026,
+            r#"[{"preset": "support", "days": 4, "rate": 150}]"#,
+        );
+
+        // Act
+        let items = resolve_line_items(&args, &presets_with_units(), Currency::Eur).unwrap();
+
+        // Assert
+        assert_eq!(items[0].unit, BillingUnit::Hour);
+        assert!((items[0].amount - 600.0).abs() < f64::EPSILON);
     }
 
     // ── Phase 4: Handler tests — single-item (tempdir) ──
