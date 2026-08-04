@@ -21,12 +21,13 @@ pub fn select_preset(
     for (i, preset) in presets.iter().enumerate() {
         let effective = effective_currency(preset, currency);
         prompter.message(&format!(
-            "  [{}] {} \u{2014} {} ({} {:.2}/day)",
+            "  [{}] {} \u{2014} {} ({} {:.2}/{})",
             i + 1,
             preset.key,
             preset.description,
             effective,
             preset.default_rate,
+            preset.unit.singular(),
         ));
     }
 
@@ -328,6 +329,53 @@ mod tests {
             all.contains("[6] + Create new preset"),
             "Expected '[6] + Create new preset' in messages, got: {all}"
         );
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn daily_preset_line_is_pinned() {
+        // Arrange — regression pin: daily rendering must not drift.
+        let presets = make_presets();
+        let prompter = MockPrompter::new(vec![MockResponse::U32(1)]);
+
+        // Act
+        select_preset(&prompter, &presets, Currency::Eur).unwrap();
+
+        // Assert
+        let messages = prompter.messages.borrow();
+        assert!(
+            messages
+                .iter()
+                .any(|m| m == "  [1] dev \u{2014} Software development (EUR 800.00/day)"),
+            "Daily preset line changed, got: {messages:?}"
+        );
+        prompter.assert_exhausted();
+    }
+
+    #[test]
+    fn displays_hourly_preset_rate_per_hour() {
+        // Arrange
+        let presets = vec![Preset {
+            key: PresetKey::try_new("support").unwrap(),
+            description: "Support retainer".into(),
+            default_rate: 100.0,
+            currency: None,
+            tax_rate: None,
+            unit: BillingUnit::Hour,
+        }];
+        let prompter = MockPrompter::new(vec![MockResponse::U32(1)]);
+
+        // Act
+        select_preset(&prompter, &presets, Currency::Eur).unwrap();
+
+        // Assert
+        let messages = prompter.messages.borrow();
+        let all = messages.join("\n");
+        assert!(
+            all.contains("(EUR 100.00/hour)"),
+            "Expected '(EUR 100.00/hour)' in messages, got: {all}"
+        );
+        assert!(!all.contains("/day"), "Should not say '/day', got: {all}");
         prompter.assert_exhausted();
     }
 

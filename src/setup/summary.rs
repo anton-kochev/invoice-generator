@@ -16,7 +16,12 @@ pub fn display_summary(prompter: &dyn Prompter, config: &Config, config_path: &P
     if let Some(presets) = &config.presets {
         prompter.message(&format!("Presets:        {} defined", presets.len()));
         for p in presets {
-            prompter.message(&format!("  - {} ({:.2}/day)", p.key, p.default_rate));
+            prompter.message(&format!(
+                "  - {} ({:.2}/{})",
+                p.key,
+                p.default_rate,
+                p.unit.singular()
+            ));
         }
     }
     if let Some(defaults) = &config.defaults {
@@ -94,6 +99,43 @@ mod tests {
         let output = messages.join("\n");
         assert!(output.contains("dev"), "Should include preset key");
         assert!(output.contains("100"), "Should include rate");
+    }
+
+    #[test]
+    fn test_display_summary_daily_preset_line_is_pinned() {
+        // Arrange — regression pin: daily rendering must not drift.
+        let config = complete_config();
+        let prompter = MockPrompter::new(vec![]);
+
+        // Act
+        display_summary(&prompter, &config, &fake_config_path());
+
+        // Assert
+        let messages = prompter.messages.borrow();
+        assert!(
+            messages.iter().any(|m| m == "  - dev (100.00/day)"),
+            "Daily preset line changed, got: {messages:?}"
+        );
+    }
+
+    #[test]
+    fn test_display_summary_hourly_preset_shows_per_hour() {
+        // Arrange
+        let mut config = complete_config();
+        let presets = config.presets.as_mut().unwrap();
+        presets[0].default_rate = 95.0;
+        presets[0].unit = crate::domain::BillingUnit::Hour;
+        let prompter = MockPrompter::new(vec![]);
+
+        // Act
+        display_summary(&prompter, &config, &fake_config_path());
+
+        // Assert
+        let messages = prompter.messages.borrow();
+        assert!(
+            messages.iter().any(|m| m == "  - dev (95.00/hour)"),
+            "Expected hourly preset line, got: {messages:?}"
+        );
     }
 
     #[test]

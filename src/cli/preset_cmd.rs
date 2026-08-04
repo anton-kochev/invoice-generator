@@ -12,10 +12,12 @@ use crate::error::AppError;
 use crate::invoice::currency::effective_currency;
 use crate::setup::prompter::Prompter;
 
-/// Format presets as a table string with columns: Key, Description, Default Rate, Currency.
+/// Format presets as a table string with columns: Key, Description, Default Rate,
+/// Unit, Currency.
 ///
 /// Dynamic column widths based on data (minimum widths: Key=3, Description=11, Rate=12).
-/// Rate is formatted with 2 decimal places and right-aligned.
+/// Rate is formatted with 2 decimal places and right-aligned; the billing unit is a
+/// separate column so the numeric rate column stays scannable.
 pub fn format_preset_table(presets: &[Preset], default_currency: Currency) -> String {
     let min_key = 3;
     let min_desc = 11;
@@ -39,6 +41,12 @@ pub fn format_preset_table(presets: &[Preset], default_currency: Currency) -> St
         .max()
         .unwrap_or(0)
         .max(min_rate);
+    let unit_w = presets
+        .iter()
+        .map(|p| p.unit.plural().len())
+        .max()
+        .unwrap_or(0)
+        .max(5); // "Hours".len()
     let curr_w = presets
         .iter()
         .map(|p| effective_currency(p, default_currency).code().len())
@@ -50,16 +58,17 @@ pub fn format_preset_table(presets: &[Preset], default_currency: Currency) -> St
 
     // Header
     out.push_str(&format!(
-        "{:<key_w$}  {:<desc_w$}  {:>rate_w$}  {:<curr_w$}\n",
-        "Key", "Description", "Default Rate", "Currency",
+        "{:<key_w$}  {:<desc_w$}  {:>rate_w$}  {:<unit_w$}  {:<curr_w$}\n",
+        "Key", "Description", "Default Rate", "Unit", "Currency",
     ));
 
     // Separator
     out.push_str(&format!(
-        "{}  {}  {}  {}\n",
+        "{}  {}  {}  {}  {}\n",
         "-".repeat(key_w),
         "-".repeat(desc_w),
         "-".repeat(rate_w),
+        "-".repeat(unit_w),
         "-".repeat(curr_w),
     ));
 
@@ -67,8 +76,12 @@ pub fn format_preset_table(presets: &[Preset], default_currency: Currency) -> St
     for p in presets {
         let curr = effective_currency(p, default_currency);
         out.push_str(&format!(
-            "{:<key_w$}  {:<desc_w$}  {:>rate_w$.2}  {:<curr_w$}\n",
-            p.key, p.description, p.default_rate, curr,
+            "{:<key_w$}  {:<desc_w$}  {:>rate_w$.2}  {:<unit_w$}  {:<curr_w$}\n",
+            p.key,
+            p.description,
+            p.default_rate,
+            p.unit.plural(),
+            curr,
         ));
     }
 
@@ -165,6 +178,7 @@ mod tests {
             output.contains("Default Rate"),
             "Missing 'Default Rate' header"
         );
+        assert!(output.contains("Unit"), "Missing 'Unit' header");
         assert!(output.contains("Currency"), "Missing 'Currency' header");
     }
 
@@ -486,6 +500,104 @@ mod tests {
             dev_line.contains("EUR"),
             "Dev row should show EUR: {dev_line}"
         );
+    }
+
+    // ── Billing unit column ──
+
+    #[test]
+    fn test_format_preset_table_header_has_unit_between_rate_and_currency() {
+        // Arrange
+        let presets = vec![dev_preset()];
+
+        // Act
+        let output = format_preset_table(&presets, Currency::Eur);
+
+        // Assert — trailing padding of the last column is not under test.
+        let header = output.lines().next().unwrap();
+        assert_eq!(
+            header.trim_end(),
+            "Key  Description           Default Rate  Unit   Currency"
+        );
+    }
+
+    #[test]
+    fn test_format_preset_table_daily_row_is_pinned() {
+        // Arrange — regression pin: existing cells and alignment must not drift.
+        let presets = vec![dev_preset()];
+
+        // Act
+        let output = format_preset_table(&presets, Currency::Eur);
+
+        // Assert
+        let row = output.lines().nth(2).unwrap();
+        assert_eq!(
+            row.trim_end(),
+            "dev  Development Services        100.00  days   EUR"
+        );
+    }
+
+    #[test]
+    fn test_format_preset_table_separator_matches_column_widths() {
+        // Arrange
+        let presets = vec![dev_preset()];
+
+        // Act
+        let output = format_preset_table(&presets, Currency::Eur);
+
+        // Assert
+        let header = output.lines().next().unwrap();
+        let separator = output.lines().nth(1).unwrap();
+        assert_eq!(separator.len(), header.len());
+        assert!(
+            separator.chars().all(|c| c == '-' || c == ' '),
+            "Separator should be dashes and spaces: {separator}"
+        );
+    }
+
+    #[test]
+    fn test_format_preset_table_shows_hours_for_hourly_preset() {
+        // Arrange
+        let presets = vec![Preset {
+            key: crate::domain::PresetKey::try_new("sup").unwrap(),
+            description: "Support retainer".into(),
+            default_rate: 95.0,
+            currency: None,
+            tax_rate: None,
+            unit: BillingUnit::Hour,
+        }];
+
+        // Act
+        let output = format_preset_table(&presets, Currency::Eur);
+
+        // Assert
+        let row = output.lines().nth(2).unwrap();
+        assert!(row.contains("hours"), "Expected 'hours' in row: {row}");
+    }
+
+    #[test]
+    fn test_format_preset_table_mixed_units() {
+        // Arrange
+        let presets = vec![
+            dev_preset(),
+            Preset {
+                key: crate::domain::PresetKey::try_new("sup").unwrap(),
+                description: "Support retainer".into(),
+                default_rate: 95.0,
+                currency: None,
+                tax_rate: None,
+                unit: BillingUnit::Hour,
+            },
+        ];
+
+        // Act
+        let output = format_preset_table(&presets, Currency::Eur);
+
+        // Assert
+        let data_lines: Vec<&str> = output.lines().skip(2).collect();
+        let dev_line = data_lines.iter().find(|l| l.contains("dev")).unwrap();
+        let sup_line = data_lines.iter().find(|l| l.contains("sup")).unwrap();
+        assert!(dev_line.contains("days"), "Dev row should show days");
+        assert!(sup_line.contains("hours"), "Support row should show hours");
     }
 
     #[test]

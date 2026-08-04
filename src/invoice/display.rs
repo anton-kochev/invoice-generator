@@ -36,8 +36,12 @@ pub fn format_summary(summary: &InvoiceSummary) -> String {
         lines.push(format!(
             "| {:<w$} |",
             format!(
-                "  {:.2} days x {:.2} = {:.2} {}",
-                item.quantity, item.rate, item.amount, summary.currency
+                "  {:.2} {} x {:.2} = {:.2} {}",
+                item.quantity,
+                item.unit.plural(),
+                item.rate,
+                item.amount,
+                summary.currency
             ),
             w = width - 2
         ));
@@ -297,6 +301,114 @@ mod tests {
 
         // Assert
         assert!(output.contains("tax 21.0%"));
+    }
+
+    // ── Billing-unit aware line items ──
+
+    fn make_hourly_summary() -> InvoiceSummary {
+        InvoiceSummary {
+            invoice_number: "INV-2026-03".into(),
+            period: InvoicePeriod::new(3, 2026).unwrap(),
+            invoice_date: Date::from_calendar_date(2026, Month::April, 9).unwrap(),
+            due_date: Date::from_calendar_date(2026, Month::May, 9).unwrap(),
+            currency: crate::domain::Currency::Eur,
+            line_items: vec![LineItem::new(
+                "Support retainer".into(),
+                8.0,
+                crate::domain::BillingUnit::Hour,
+                100.0,
+                crate::domain::Currency::Eur,
+                0.0,
+            )],
+            subtotal: 800.0,
+            tax_total: 0.0,
+            total: 800.0,
+        }
+    }
+
+    fn make_mixed_unit_summary() -> InvoiceSummary {
+        InvoiceSummary {
+            invoice_number: "INV-2026-03".into(),
+            period: InvoicePeriod::new(3, 2026).unwrap(),
+            invoice_date: Date::from_calendar_date(2026, Month::April, 9).unwrap(),
+            due_date: Date::from_calendar_date(2026, Month::May, 9).unwrap(),
+            currency: crate::domain::Currency::Eur,
+            line_items: vec![
+                LineItem::new(
+                    "Software development".into(),
+                    10.0,
+                    crate::domain::BillingUnit::Day,
+                    800.0,
+                    crate::domain::Currency::Eur,
+                    0.0,
+                ),
+                LineItem::new(
+                    "Support retainer".into(),
+                    8.0,
+                    crate::domain::BillingUnit::Hour,
+                    100.0,
+                    crate::domain::Currency::Eur,
+                    0.0,
+                ),
+            ],
+            subtotal: 8800.0,
+            tax_total: 0.0,
+            total: 8800.0,
+        }
+    }
+
+    #[test]
+    fn format_summary_daily_item_line_is_pinned() {
+        // Arrange — regression pin: daily rendering must not drift.
+        let summary = make_summary();
+
+        // Act
+        let output = format_summary(&summary);
+
+        // Assert
+        assert!(
+            output.contains("  10.00 days x 800.00 = 8000.00 EUR"),
+            "Daily line changed, got:\n{output}"
+        );
+        assert!(
+            output.contains("  5.00 days x 1000.00 = 5000.00 EUR"),
+            "Daily line changed, got:\n{output}"
+        );
+    }
+
+    #[test]
+    fn format_summary_hourly_item_renders_hours() {
+        // Arrange
+        let summary = make_hourly_summary();
+
+        // Act
+        let output = format_summary(&summary);
+
+        // Assert
+        assert!(
+            output.contains("  8.00 hours x 100.00 = 800.00 EUR"),
+            "Expected hourly noun, got:\n{output}"
+        );
+        assert!(!output.contains("days"), "Should not say days:\n{output}");
+    }
+
+    #[test]
+    fn format_summary_mixed_units_render_each_item_with_its_own_unit() {
+        // Arrange — mixed-unit invoices are supported; the noun is per item.
+        let summary = make_mixed_unit_summary();
+
+        // Act
+        let output = format_summary(&summary);
+
+        // Assert
+        assert!(
+            output.contains("  10.00 days x 800.00 = 8000.00 EUR"),
+            "Expected daily line, got:\n{output}"
+        );
+        assert!(
+            output.contains("  8.00 hours x 100.00 = 800.00 EUR"),
+            "Expected hourly line, got:\n{output}"
+        );
     }
 
     #[test]
