@@ -4,10 +4,6 @@
 //! `FromStr`, or interactive prompts) so the rest of the program can rely on
 //! exhaustive `match` checks instead of a stringly-typed unit.
 
-// Nothing outside this module's tests references `BillingUnit` yet; it is wired
-// into `Preset`, `LineItem`, the CLI, and the PDF data layer in later phases.
-#![allow(dead_code)]
-
 use std::fmt;
 use std::str::FromStr;
 
@@ -42,6 +38,8 @@ pub enum BillingUnit {
 
 impl BillingUnit {
     /// All supported billing units, in declaration order.
+    // Consumed by the interactive billing-unit prompt (phase 5).
+    #[allow(dead_code)]
     pub const ALL: [BillingUnit; 2] = [BillingUnit::Day, BillingUnit::Hour];
 
     /// Lowercase plural key (`"days"`, `"hours"`).
@@ -57,6 +55,8 @@ impl BillingUnit {
 
     /// Capitalized plural label (`"Days"`, `"Hours"`) for the PDF quantity
     /// column header.
+    // Consumed by the PDF data layer's `unit_label` (phase 8).
+    #[allow(dead_code)]
     pub fn label(&self) -> &'static str {
         match self {
             Self::Day => "Days",
@@ -66,6 +66,8 @@ impl BillingUnit {
 
     /// Lowercase singular noun (`"day"`, `"hour"`), used in prompts and
     /// summaries such as `Rate per {singular}`.
+    // Consumed by prompts (phase 5) and display surfaces (phase 6).
+    #[allow(dead_code)]
     pub fn singular(&self) -> &'static str {
         match self {
             Self::Day => "day",

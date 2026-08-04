@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{
-    Currency, HexColor, Iban, PaymentMethodKey, PresetKey, RecipientKey, SenderKey,
+    BillingUnit, Currency, HexColor, Iban, PaymentMethodKey, PresetKey, RecipientKey, SenderKey,
 };
 use crate::locale::Locale;
 
@@ -145,6 +145,14 @@ pub struct Preset {
     pub currency: Option<Currency>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tax_rate: Option<f64>,
+    /// Whether `default_rate` is per day or per hour.
+    ///
+    /// Always serialized (unlike the `Option` fields above) so that the unit is
+    /// discoverable when hand-editing `config.yaml`. `#[serde(default)]` plus
+    /// [`BillingUnit::Day`] being the [`Default`] keeps pre-billing-unit
+    /// configs — which have no `unit` key — loading as daily.
+    #[serde(default)]
+    pub unit: BillingUnit,
 }
 
 fn default_currency() -> Currency {
@@ -451,6 +459,7 @@ mod tests {
             default_rate: 800.0,
             currency: None,
             tax_rate: None,
+            unit: BillingUnit::Day,
         };
 
         // Act
@@ -473,6 +482,7 @@ mod tests {
             default_rate: 800.0,
             currency: Some(Currency::Uah),
             tax_rate: None,
+            unit: BillingUnit::Day,
         };
 
         // Act
@@ -529,6 +539,7 @@ mod tests {
             default_rate: 800.0,
             currency: None,
             tax_rate: None,
+            unit: BillingUnit::Day,
         };
 
         // Act
@@ -550,6 +561,7 @@ mod tests {
             default_rate: 800.0,
             currency: None,
             tax_rate: Some(21.0),
+            unit: BillingUnit::Day,
         };
 
         // Act
@@ -569,6 +581,7 @@ mod tests {
             default_rate: 800.0,
             currency: None,
             tax_rate: Some(0.0),
+            unit: BillingUnit::Day,
         };
 
         // Act

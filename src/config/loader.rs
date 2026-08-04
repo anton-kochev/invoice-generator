@@ -70,6 +70,7 @@ pub fn load_config(path: &Path) -> Result<LoadResult, ConfigError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::BillingUnit;
     use tempfile::TempDir;
 
     // ── Cycle 1 ──
@@ -505,6 +506,73 @@ defaults:
         // Assert — template hint should still be returned
         assert_eq!(hints.len(), 1);
         assert!(hints[0].contains("template"));
+    }
+
+    // ── Per-preset billing unit ──
+
+    #[test]
+    fn test_preset_without_unit_field_defaults_to_days() {
+        // Arrange — pre-billing-unit config: presets carry no `unit` key.
+        let yaml = r#"
+presets:
+  - key: "dev"
+    description: "Development"
+    default_rate: 100.0
+"#;
+
+        // Act
+        let result = load_from_yaml(yaml).unwrap();
+
+        // Assert — back-compat pin: existing configs stay daily.
+        match result {
+            LoadResult::Loaded(config) => {
+                let presets = config.presets.unwrap();
+                assert_eq!(presets[0].unit, BillingUnit::Day);
+            }
+            LoadResult::NotFound => panic!("Expected Loaded"),
+        }
+    }
+
+    #[test]
+    fn test_preset_with_hours_unit_loads_as_hour() {
+        // Arrange
+        let yaml = r#"
+presets:
+  - key: "consult"
+    description: "Consulting"
+    default_rate: 150.0
+    unit: hours
+"#;
+
+        // Act
+        let result = load_from_yaml(yaml).unwrap();
+
+        // Assert
+        match result {
+            LoadResult::Loaded(config) => {
+                let presets = config.presets.unwrap();
+                assert_eq!(presets[0].unit, BillingUnit::Hour);
+            }
+            LoadResult::NotFound => panic!("Expected Loaded"),
+        }
+    }
+
+    #[test]
+    fn test_preset_with_unknown_unit_fails_to_load() {
+        // Arrange
+        let yaml = r#"
+presets:
+  - key: "dev"
+    description: "Development"
+    default_rate: 100.0
+    unit: weeks
+"#;
+
+        // Act
+        let result = load_from_yaml(yaml);
+
+        // Assert
+        assert!(result.is_err(), "Expected load failure for unit: weeks");
     }
 
     // ── Helper ──

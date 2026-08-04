@@ -5,7 +5,7 @@ use super::prompter::Prompter;
 use super::prompts::{prompt_optional_parsed, prompt_parsed};
 use crate::config::types::{Config, Preset};
 use crate::config::writer::save_config;
-use crate::domain::{Currency, PresetKey};
+use crate::domain::{BillingUnit, Currency, PresetKey};
 use crate::error::AppError;
 
 /// Collect invoice presets interactively and persist them to disk.
@@ -52,6 +52,7 @@ pub fn collect_presets(
             default_rate,
             currency,
             tax_rate: None,
+            unit: BillingUnit::Day,
         });
 
         if !prompter.confirm("Add another preset?", false)? {

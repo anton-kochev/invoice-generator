@@ -47,7 +47,7 @@ pub fn select_preset(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::PresetKey;
+    use crate::domain::{BillingUnit, PresetKey};
     use crate::setup::mock_prompter::{MockPrompter, MockResponse};
 
     fn make_presets() -> Vec<Preset> {
@@ -58,6 +58,7 @@ mod tests {
                 default_rate: 800.0,
                 currency: None,
                 tax_rate: None,
+                unit: BillingUnit::Day,
             },
             Preset {
                 key: PresetKey::try_new("consulting").unwrap(),
@@ -65,6 +66,7 @@ mod tests {
                 default_rate: 1000.0,
                 currency: None,
                 tax_rate: None,
+                unit: BillingUnit::Day,
             },
         ]
     }
@@ -107,6 +109,7 @@ mod tests {
             default_rate: 500.0,
             currency: None,
             tax_rate: None,
+            unit: BillingUnit::Day,
         }];
         let prompter = MockPrompter::new(vec![MockResponse::U32(1)]);
 
@@ -178,6 +181,7 @@ mod tests {
             default_rate: 600.0,
             currency: None,
             tax_rate: None,
+            unit: BillingUnit::Day,
         }];
         let prompter = MockPrompter::new(vec![MockResponse::U32(2)]);
 
@@ -279,6 +283,7 @@ mod tests {
             default_rate: 1234.56,
             currency: None,
             tax_rate: None,
+            unit: BillingUnit::Day,
         }];
         let prompter = MockPrompter::new(vec![MockResponse::U32(1)]);
 
@@ -307,6 +312,7 @@ mod tests {
                 default_rate: i as f64 * 100.0,
                 currency: None,
                 tax_rate: None,
+                unit: BillingUnit::Day,
             })
             .collect();
         let prompter = MockPrompter::new(vec![MockResponse::U32(6)]);
@@ -334,6 +340,7 @@ mod tests {
             default_rate: 800.0,
             currency: Some(Currency::Usd),
             tax_rate: None,
+            unit: BillingUnit::Day,
         }];
         let prompter = MockPrompter::new(vec![MockResponse::U32(1)]);
 
@@ -359,6 +366,7 @@ mod tests {
             default_rate: 800.0,
             currency: None,
             tax_rate: None,
+            unit: BillingUnit::Day,
         }];
         let prompter = MockPrompter::new(vec![MockResponse::U32(1)]);
 

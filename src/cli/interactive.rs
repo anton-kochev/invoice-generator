@@ -336,7 +336,7 @@ mod tests {
     use super::*;
     use crate::config::types::*;
     use crate::config::validator::{ValidatedBranding, ValidatedPaymentMethod};
-    use crate::domain::NonEmpty;
+    use crate::domain::{BillingUnit, NonEmpty};
     use crate::setup::mock_prompter::{MockPrompter, MockResponse};
 
     fn make_validated_config() -> ValidatedConfig {
@@ -373,6 +373,7 @@ mod tests {
                 default_rate: 800.0,
                 currency: None,
                 tax_rate: None,
+                unit: BillingUnit::Day,
             }])
             .unwrap(),
             Defaults::default(),

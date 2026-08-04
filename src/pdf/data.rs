@@ -202,6 +202,7 @@ mod tests {
     use super::*;
     use crate::config::types::*;
     use crate::config::validator::{ValidatedBranding, ValidatedPaymentMethod};
+    use crate::domain::BillingUnit;
     use crate::invoice::types::*;
     use time::{Date, Month};
 
@@ -267,6 +268,7 @@ mod tests {
                 default_rate: 800.0,
                 currency: None,
                 tax_rate: None,
+                unit: BillingUnit::Day,
             }])
             .unwrap(),
             Defaults::default(),
@@ -390,6 +392,7 @@ mod tests {
                 default_rate: 800.0,
                 currency: None,
                 tax_rate: None,
+                unit: BillingUnit::Day,
             }])
             .unwrap(),
             Defaults::default(),
@@ -1066,6 +1069,7 @@ mod tests {
                 default_rate: 800.0,
                 currency: None,
                 tax_rate: None,
+                unit: BillingUnit::Day,
             }])
             .unwrap(),
             Defaults::default(),

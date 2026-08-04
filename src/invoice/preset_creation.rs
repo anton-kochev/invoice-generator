@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use crate::config::types::Preset;
-use crate::domain::{Currency, PresetKey};
+use crate::domain::{BillingUnit, Currency, PresetKey};
 use crate::error::AppError;
 use crate::setup::prompter::Prompter;
 use crate::setup::prompts::{prompt_optional_parsed, prompt_parsed};
@@ -57,6 +57,7 @@ pub fn collect_new_preset(
         default_rate,
         currency,
         tax_rate: None,
+        unit: BillingUnit::Day,
     })
 }
 
@@ -75,6 +76,7 @@ mod tests {
             default_rate: 800.0,
             currency: None,
             tax_rate: None,
+            unit: BillingUnit::Day,
         }];
         let prompter = MockPrompter::new(vec![
             MockResponse::Text("analytics".into()),
@@ -102,6 +104,7 @@ mod tests {
             default_rate: 800.0,
             currency: None,
             tax_rate: None,
+            unit: BillingUnit::Day,
         }];
         let prompter = MockPrompter::new(vec![
             MockResponse::Text("dev".into()),
@@ -136,6 +139,7 @@ mod tests {
                 default_rate: 800.0,
                 currency: None,
                 tax_rate: None,
+                unit: BillingUnit::Day,
             },
             Preset {
                 key: PresetKey::try_new("qa").unwrap(),
@@ -143,6 +147,7 @@ mod tests {
                 default_rate: 600.0,
                 currency: None,
                 tax_rate: None,
+                unit: BillingUnit::Day,
             },
         ];
         let prompter = MockPrompter::new(vec![
@@ -182,6 +187,7 @@ mod tests {
             default_rate: 800.0,
             currency: None,
             tax_rate: None,
+            unit: BillingUnit::Day,
         }];
         let prompter = MockPrompter::new(vec![
             MockResponse::Text("Dev".into()), // rejected: uppercase

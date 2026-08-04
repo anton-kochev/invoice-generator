@@ -14,8 +14,6 @@ pub mod preset_key;
 pub mod recipient_key;
 pub mod sender_key;
 
-// No consumer imports `BillingUnit` yet; `Preset` picks it up in the next step.
-#[allow(unused_imports)]
 pub use billing_unit::BillingUnit;
 pub use currency::Currency;
 pub use hex_color::HexColor;

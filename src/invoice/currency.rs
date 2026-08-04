@@ -31,6 +31,7 @@ pub fn validate_uniform_currency(items: &[LineItem]) -> Result<Currency, Invoice
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::BillingUnit;
     use crate::invoice::types::LineItem;
 
     fn make_preset(currency: Option<Currency>) -> Preset {
@@ -40,6 +41,7 @@ mod tests {
             default_rate: 800.0,
             currency,
             tax_rate: None,
+            unit: BillingUnit::Day,
         }
     }
 

@@ -395,6 +395,7 @@ mod tests {
     use super::*;
     use crate::config::loader::{LoadResult, load_config};
     use crate::config::types::*;
+    use crate::domain::BillingUnit;
     use std::path::PathBuf;
     use tempfile::TempDir;
 
@@ -448,6 +449,7 @@ mod tests {
             default_rate: 100.0,
             currency: None,
             tax_rate: None,
+            unit: BillingUnit::Day,
         }]
     }
 
@@ -511,6 +513,40 @@ mod tests {
 
         // Assert
         assert_eq!(loaded, original);
+    }
+
+    #[test]
+    fn test_save_config_preset_unit_round_trips() {
+        // Arrange — an hourly preset alongside the default daily one.
+        let dir = TempDir::new().unwrap();
+        let mut config = complete_config();
+        config.presets = Some(vec![
+            Preset {
+                key: crate::domain::PresetKey::try_new("dev").unwrap(),
+                description: "Development Services".to_string(),
+                default_rate: 100.0,
+                currency: None,
+                tax_rate: None,
+                unit: BillingUnit::Day,
+            },
+            Preset {
+                key: crate::domain::PresetKey::try_new("consult").unwrap(),
+                description: "Consulting".to_string(),
+                default_rate: 150.0,
+                currency: None,
+                tax_rate: None,
+                unit: BillingUnit::Hour,
+            },
+        ]);
+
+        // Act
+        save_config(&cfg_path(&dir), &config).unwrap();
+        let loaded = unwrap_loaded(load_config(&cfg_path(&dir)));
+
+        // Assert
+        let presets = loaded.presets.unwrap();
+        assert_eq!(presets[0].unit, BillingUnit::Day);
+        assert_eq!(presets[1].unit, BillingUnit::Hour);
     }
 
     // ── Cycle 3: test_save_config_partial_sender_only ──
@@ -628,6 +664,7 @@ mod tests {
             default_rate: 80.0,
             currency: None,
             tax_rate: None,
+            unit: BillingUnit::Day,
         };
 
         // Act
@@ -659,6 +696,7 @@ mod tests {
                 default_rate: 60.0,
                 currency: None,
                 tax_rate: None,
+                unit: BillingUnit::Day,
             },
         )
         .unwrap();
@@ -692,6 +730,7 @@ mod tests {
                 default_rate: 90.0,
                 currency: None,
                 tax_rate: None,
+                unit: BillingUnit::Day,
             },
         )
         .unwrap();
@@ -719,6 +758,7 @@ mod tests {
                 default_rate: 50.0,
                 currency: None,
                 tax_rate: None,
+                unit: BillingUnit::Day,
             },
         );
 
@@ -741,6 +781,7 @@ mod tests {
             default_rate: 80.0,
             currency: None,
             tax_rate: None,
+            unit: BillingUnit::Day,
         });
         config.presets = Some(presets);
         save_config(&cfg_path(&dir), &config).unwrap();
@@ -768,6 +809,7 @@ mod tests {
             default_rate: 80.0,
             currency: None,
             tax_rate: None,
+            unit: BillingUnit::Day,
         });
         config.presets = Some(presets);
         save_config(&cfg_path(&dir), &config).unwrap();
@@ -804,6 +846,7 @@ mod tests {
             default_rate: 80.0,
             currency: None,
             tax_rate: None,
+            unit: BillingUnit::Day,
         });
         config.presets = Some(presets);
         save_config(&cfg_path(&dir), &config).unwrap();
@@ -843,6 +886,7 @@ mod tests {
                     default_rate: 100.0,
                     currency: None,
                     tax_rate: None,
+                    unit: BillingUnit::Day,
                 },
                 Preset {
                     key: crate::domain::PresetKey::try_new("design").unwrap(),
@@ -850,6 +894,7 @@ mod tests {
                     default_rate: 80.0,
                     currency: None,
                     tax_rate: None,
+                    unit: BillingUnit::Day,
                 },
                 Preset {
                     key: crate::domain::PresetKey::try_new("qa").unwrap(),
@@ -857,6 +902,7 @@ mod tests {
                     default_rate: 60.0,
                     currency: None,
                     tax_rate: None,
+                    unit: BillingUnit::Day,
                 },
             ]),
             ..complete_config()
@@ -1015,6 +1061,7 @@ mod tests {
                     default_rate: 100.0,
                     currency: None,
                     tax_rate: None,
+                    unit: BillingUnit::Day,
                 },
                 Preset {
                     key: crate::domain::PresetKey::try_new("design").unwrap(),
@@ -1022,6 +1069,7 @@ mod tests {
                     default_rate: 80.0,
                     currency: None,
                     tax_rate: None,
+                    unit: BillingUnit::Day,
                 },
             ]),
             ..complete_config()

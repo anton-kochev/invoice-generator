@@ -837,6 +837,7 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::BillingUnit;
     use crate::setup::test_helpers::sender_for_test;
 
     #[test]
@@ -1748,6 +1749,7 @@ mod tests {
             default_rate: 100.0,
             currency: None,
             tax_rate: None,
+            unit: BillingUnit::Day,
         }]
     }
 

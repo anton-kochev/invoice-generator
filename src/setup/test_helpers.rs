@@ -7,6 +7,7 @@ use crate::config::ConfigError;
 use crate::config::loader::LoadResult;
 use crate::config::types::*;
 use crate::config::writer::save_config;
+use crate::domain::BillingUnit;
 
 // ── Synthetic Data Factories ──
 
@@ -47,6 +48,7 @@ pub fn synthetic_presets() -> Vec<Preset> {
         default_rate: 100.0,
         currency: None,
         tax_rate: None,
+        unit: BillingUnit::Day,
     }]
 }
 
@@ -98,6 +100,7 @@ pub fn config_with_two_presets() -> Config {
             default_rate: 100.0,
             currency: None,
             tax_rate: None,
+            unit: BillingUnit::Day,
         },
         Preset {
             key: crate::domain::PresetKey::try_new("design").unwrap(),
@@ -105,6 +108,7 @@ pub fn config_with_two_presets() -> Config {
             default_rate: 80.0,
             currency: None,
             tax_rate: None,
+            unit: BillingUnit::Day,
         },
     ]);
     cfg

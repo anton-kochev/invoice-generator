@@ -134,6 +134,7 @@ pub fn handle_preset_delete(
 mod tests {
     use super::*;
     use crate::config::types::Preset;
+    use crate::domain::BillingUnit;
 
     fn dev_preset() -> Preset {
         Preset {
@@ -142,6 +143,7 @@ mod tests {
             default_rate: 100.0,
             currency: None,
             tax_rate: None,
+            unit: BillingUnit::Day,
         }
     }
 
@@ -207,6 +209,7 @@ mod tests {
                 default_rate: 80.0,
                 currency: None,
                 tax_rate: None,
+                unit: BillingUnit::Day,
             },
         ];
 
@@ -241,6 +244,7 @@ mod tests {
             default_rate: 50.0,
             currency: None,
             tax_rate: None,
+            unit: BillingUnit::Day,
         }];
 
         // Act
@@ -443,6 +447,7 @@ mod tests {
             default_rate: 800.0,
             currency: Some(Currency::Uah),
             tax_rate: None,
+            unit: BillingUnit::Day,
         }];
 
         // Act
@@ -468,6 +473,7 @@ mod tests {
             default_rate: 800.0,
             currency: None,
             tax_rate: None,
+            unit: BillingUnit::Day,
         }];
 
         // Act
@@ -492,6 +498,7 @@ mod tests {
                 default_rate: 800.0,
                 currency: Some(Currency::Usd),
                 tax_rate: None,
+                unit: BillingUnit::Day,
             },
             Preset {
                 key: crate::domain::PresetKey::try_new("qa").unwrap(),
@@ -499,6 +506,7 @@ mod tests {
                 default_rate: 600.0,
                 currency: None,
                 tax_rate: None,
+                unit: BillingUnit::Day,
             },
         ];
 

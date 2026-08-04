@@ -252,6 +252,7 @@ pub fn handle_generate(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::BillingUnit;
     use crate::setup::test_helpers::*;
 
     // ── Test helper builders ──
@@ -295,6 +296,7 @@ mod tests {
                 default_rate: *rate,
                 currency: None,
                 tax_rate: None,
+                unit: BillingUnit::Day,
             })
             .collect();
         Config {
@@ -826,6 +828,7 @@ mod tests {
                 default_rate: *rate,
                 currency: *currency,
                 tax_rate: None,
+                unit: BillingUnit::Day,
             })
             .collect();
         Config {
@@ -886,6 +889,7 @@ mod tests {
                 default_rate: *rate,
                 currency: None,
                 tax_rate: *tax,
+                unit: BillingUnit::Day,
             })
             .collect();
         Config {
