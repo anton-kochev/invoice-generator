@@ -841,11 +841,17 @@ mod tests {
                 "amount_in_words": "Five hundred sixty USD",
                 "amount_in_words_ua": "П'ятсот шістдесят доларів США",
                 "total": "560.00",
+                "unit_label": "Days",
                 "line_items": [
                     {
                         "description": "Consulting on informatization. Period: March 2026",
                         "description_ua": "Консультування з питань інформатизації, березень 2026",
+                        // `days` is the legacy alias of `quantity`; both are
+                        // emitted with the same value so already-published
+                        // templates keep rendering.
                         "days": "1",
+                        "quantity": "1",
+                        "unit": "days",
                         "rate": "560.00",
                         "amount": "560.00"
                     }
@@ -868,6 +874,12 @@ mod tests {
                 "font": ["Helvetica", "Noto Sans", "Liberation Sans"]
             }
         });
+
+        // Back-compat pin: `io.typ` reads `item.days`, so the legacy alias must
+        // stay in the contract alongside the newer `quantity` key.
+        let item = &data["invoice"]["line_items"][0];
+        assert_eq!(item["days"], "1");
+        assert_eq!(item["days"], item["quantity"]);
 
         let json = serde_json::to_vec(&data).expect("JSON serialization");
         let template = repo_template("io");

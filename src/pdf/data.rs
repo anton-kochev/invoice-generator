@@ -1,7 +1,8 @@
 use serde::Serialize;
 
 use crate::config::validator::{ValidatedConfig, ValidatedRecipient, ValidatedSender};
-use crate::invoice::types::InvoiceSummary;
+use crate::domain::BillingUnit;
+use crate::invoice::types::{InvoiceSummary, LineItem};
 use crate::locale::Locale;
 
 /// All data needed to render the invoice PDF template.
@@ -55,6 +56,11 @@ pub struct InvoiceInfo {
     pub date: String,
     pub due_date: String,
     pub currency: String,
+    /// Header for the quantity column, derived from the invoice's line items
+    /// (see [`unit_label_for`]). Always emitted: templates read it with
+    /// `.at("unit_label", default: ...)`, so an old template ignores it while
+    /// a new one always finds a sane value.
+    pub unit_label: String,
     pub line_items: Vec<LineItemData>,
     pub has_tax: bool,
     pub subtotal: String,
@@ -66,7 +72,18 @@ pub struct InvoiceInfo {
 #[derive(Debug, Serialize)]
 pub struct LineItemData {
     pub description: String,
+    /// LEGACY alias of [`LineItemData::quantity`], carrying the identical
+    /// formatted value. Kept because remote templates are fetched
+    /// independently of the binary version, so an already-published `.typ`
+    /// reading `item.days` must keep working against a newer binary. Removable
+    /// only once every published template reads `quantity`.
     pub days: String,
+    /// Amount of work billed, locale-formatted. Same value as
+    /// [`LineItemData::days`] — the duplication is deliberate.
+    pub quantity: String,
+    /// Wire key of the line item's billing unit: `"days"` or `"hours"`
+    /// ([`BillingUnit::key`]). Never the display label.
+    pub unit: String,
     pub rate: String,
     pub amount: String,
     pub tax_rate: String,
@@ -89,6 +106,26 @@ pub struct PaymentData<'a> {
     pub label: Option<&'a str>,
     pub iban: String,
     pub bic_swift: &'a str,
+}
+
+/// Column header used when an invoice mixes billing units and no single unit
+/// describes the quantity column.
+///
+/// Judgement call: nothing currently depends on this exact string, and the
+/// follow-up template work may revise it.
+const MIXED_UNIT_LABEL: &str = "Qty";
+
+/// Header for the quantity column: the shared unit's [`BillingUnit::label`]
+/// when every line item bills in the same unit, otherwise
+/// [`MIXED_UNIT_LABEL`]. An empty invoice falls back to the default unit's
+/// label so old templates keep seeing `"Days"`.
+fn unit_label_for(line_items: &[LineItem]) -> &'static str {
+    let mut units = line_items.iter().map(|item| item.unit);
+    match units.next() {
+        None => BillingUnit::default().label(),
+        Some(first) if units.all(|unit| unit == first) => first.label(),
+        Some(_) => MIXED_UNIT_LABEL,
+    }
 }
 
 /// Default font fallback chain matching v1.0 styling.
@@ -143,12 +180,15 @@ impl<'a> InvoiceData<'a> {
                 date: locale.format_date(summary.invoice_date),
                 due_date: locale.format_date(summary.due_date),
                 currency: summary.currency.to_string(),
+                unit_label: unit_label_for(&summary.line_items).to_string(),
                 line_items: summary
                     .line_items
                     .iter()
                     .map(|item| LineItemData {
                         description: item.description.clone(),
                         days: locale.format_number(item.quantity, 2),
+                        quantity: locale.format_number(item.quantity, 2),
+                        unit: item.unit.key().to_string(),
                         rate: locale.format_number(item.rate, 2),
                         amount: locale.format_number(item.amount, 2),
                         tax_rate: if item.tax_rate > 0.0 {
@@ -1171,6 +1211,164 @@ mod tests {
         assert_eq!(arr.len(), 2);
         assert_eq!(arr[0], "вул. Головна 1");
         assert_eq!(arr[1], "Київ");
+    }
+
+    // ── Billing-unit wire contract (additive: `quantity`, `unit`, `unit_label`) ──
+
+    /// Build a summary whose line items carry the supplied `(quantity, unit)`
+    /// pairs. Rates/amounts are synthetic and irrelevant to the unit contract.
+    fn make_summary_with_units(items: &[(f64, BillingUnit)]) -> InvoiceSummary {
+        let line_items: Vec<LineItem> = items
+            .iter()
+            .map(|(quantity, unit)| {
+                LineItem::new(
+                    "Synthetic work".into(),
+                    *quantity,
+                    *unit,
+                    100.0,
+                    crate::domain::Currency::Eur,
+                    0.0,
+                )
+            })
+            .collect();
+        let subtotal: f64 = line_items.iter().map(|i| i.amount).sum();
+        InvoiceSummary {
+            invoice_number: "INV-2026-03".into(),
+            period: InvoicePeriod::new(3, 2026).unwrap(),
+            invoice_date: Date::from_calendar_date(2026, Month::April, 9).unwrap(),
+            due_date: Date::from_calendar_date(2026, Month::May, 9).unwrap(),
+            currency: crate::domain::Currency::Eur,
+            line_items,
+            subtotal,
+            tax_total: 0.0,
+            total: subtotal,
+        }
+    }
+
+    fn json_for(summary: &InvoiceSummary, locale: Locale) -> serde_json::Value {
+        let config = make_config();
+        let data = InvoiceData::from_parts(
+            summary,
+            &config,
+            config.default_sender(),
+            config.default_recipient(),
+            None,
+            locale,
+        );
+        serde_json::to_value(&data).unwrap()
+    }
+
+    #[test]
+    fn line_item_quantity_duplicates_days_for_daily_item() {
+        // Arrange — pins the deliberate duplication: `days` is a legacy alias
+        // of `quantity`, so both keys must be emitted with identical values.
+        let summary = make_summary_with_units(&[(10.0, BillingUnit::Day)]);
+
+        // Act
+        let json = json_for(&summary, Locale::EnUs);
+
+        // Assert
+        let item = &json["invoice"]["line_items"][0];
+        assert_eq!(item["quantity"], "10.00");
+        assert_eq!(item["days"], "10.00");
+        assert_eq!(item["quantity"], item["days"]);
+    }
+
+    #[test]
+    fn line_item_unit_is_hours_for_hourly_item() {
+        // Arrange
+        let summary = make_summary_with_units(&[(8.0, BillingUnit::Hour)]);
+
+        // Act
+        let json = json_for(&summary, Locale::EnUs);
+
+        // Assert — `unit` carries the wire key, never the display label.
+        assert_eq!(json["invoice"]["line_items"][0]["unit"], "hours");
+    }
+
+    #[test]
+    fn line_item_unit_is_days_for_daily_item() {
+        // Arrange
+        let summary = make_summary_with_units(&[(10.0, BillingUnit::Day)]);
+
+        // Act
+        let json = json_for(&summary, Locale::EnUs);
+
+        // Assert
+        assert_eq!(json["invoice"]["line_items"][0]["unit"], "days");
+    }
+
+    #[test]
+    fn unit_label_is_days_for_all_daily_invoice() {
+        // Arrange
+        let summary = make_summary_with_units(&[(10.0, BillingUnit::Day), (5.0, BillingUnit::Day)]);
+
+        // Act
+        let json = json_for(&summary, Locale::EnUs);
+
+        // Assert
+        assert_eq!(json["invoice"]["unit_label"], "Days");
+    }
+
+    #[test]
+    fn unit_label_is_hours_for_all_hourly_invoice() {
+        // Arrange
+        let summary =
+            make_summary_with_units(&[(8.0, BillingUnit::Hour), (4.0, BillingUnit::Hour)]);
+
+        // Act
+        let json = json_for(&summary, Locale::EnUs);
+
+        // Assert
+        assert_eq!(json["invoice"]["unit_label"], "Hours");
+    }
+
+    #[test]
+    fn unit_label_is_qty_for_mixed_unit_invoice() {
+        // Arrange
+        let summary =
+            make_summary_with_units(&[(10.0, BillingUnit::Day), (8.0, BillingUnit::Hour)]);
+
+        // Act
+        let json = json_for(&summary, Locale::EnUs);
+
+        // Assert — neutral header; no single unit describes the column.
+        assert_eq!(json["invoice"]["unit_label"], "Qty");
+    }
+
+    #[test]
+    fn line_item_still_emits_legacy_days_key() {
+        // Arrange — back-compat pin: remote templates are fetched independently
+        // of the binary version, so an already-published `.typ` reading
+        // `item.days` must keep working against a newer binary.
+        let summary = make_summary_with_units(&[(8.0, BillingUnit::Hour)]);
+
+        // Act
+        let json = json_for(&summary, Locale::EnUs);
+
+        // Assert
+        let item = json["invoice"]["line_items"][0]
+            .as_object()
+            .expect("line item is a JSON object");
+        assert!(
+            item.contains_key("days"),
+            "expected legacy `days` key to remain in the wire contract, got {item:?}"
+        );
+        assert_eq!(item["days"], "8.00");
+    }
+
+    #[test]
+    fn line_item_quantity_respects_locale_formatting() {
+        // Arrange — `quantity` must go through the same locale formatter as
+        // `days`, otherwise de-DE invoices would show mismatched separators.
+        let summary = make_summary_with_units(&[(1234.5, BillingUnit::Hour)]);
+
+        // Act
+        let json = json_for(&summary, Locale::DeDe);
+
+        // Assert
+        assert_eq!(json["invoice"]["line_items"][0]["quantity"], "1.234,50");
+        assert_eq!(json["invoice"]["line_items"][0]["days"], "1.234,50");
     }
 
     #[test]
