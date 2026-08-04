@@ -8,7 +8,7 @@
 
 use thiserror::Error;
 
-use crate::domain::Currency;
+use crate::domain::{BillingUnit, Currency};
 
 /// Errors produced by the invoice subsystem.
 #[derive(Debug, Error)]
@@ -17,9 +17,31 @@ pub enum InvoiceError {
     #[error("invalid date: {0}")]
     InvalidDate(String),
 
-    /// Invalid days value in `--days` or `--items` JSON.
-    #[error("invalid days value: {0} (must be > 0)")]
-    InvalidDays(String),
+    /// Invalid quantity in `--quantity`/`--days`/`--hours` or `--items` JSON.
+    #[error("invalid quantity: {0} (must be > 0)")]
+    InvalidQuantity(String),
+
+    /// A unit-asserting flag (`--days`/`--hours`) contradicts the referenced
+    /// preset's billing unit.
+    ///
+    /// `--quantity` is unit-agnostic and can never produce this error; the
+    /// point of the stricter flags is to refuse to silently bill hours as days.
+    #[error(
+        "{flag} cannot be used with preset \"{preset}\" (billed in {unit}) — use --{unit} or --quantity"
+    )]
+    UnitMismatch {
+        flag: &'static str,
+        preset: String,
+        unit: BillingUnit,
+    },
+
+    /// `--preset` was given without any of `--quantity`/`--days`/`--hours`.
+    ///
+    /// clap's `amount` group normally rejects this before the handler runs;
+    /// the variant exists so the resolution path can return an error instead
+    /// of panicking if that wiring ever regresses.
+    #[error("--preset requires one of --quantity, --days, or --hours")]
+    MissingQuantity,
 
     /// Invalid tax rate (must be >= 0).
     #[error("invalid tax rate: {0} (must be >= 0)")]
@@ -63,6 +85,56 @@ mod tests {
         // Assert
         assert!(msg.contains("EUR"), "Expected 'EUR' in: {msg}");
         assert!(msg.contains("USD"), "Expected 'USD' in: {msg}");
+    }
+
+    #[test]
+    fn test_invalid_quantity_displays_value() {
+        // Arrange
+        let err = InvoiceError::InvalidQuantity("0".into());
+
+        // Act
+        let msg = format!("{err}");
+
+        // Assert
+        assert_eq!(msg, "invalid quantity: 0 (must be > 0)");
+    }
+
+    #[test]
+    fn test_unit_mismatch_names_flag_preset_and_remedy() {
+        // Arrange
+        let err = InvoiceError::UnitMismatch {
+            flag: "--hours",
+            preset: "dev".into(),
+            unit: BillingUnit::Day,
+        };
+
+        // Act
+        let msg = format!("{err}");
+
+        // Assert
+        assert_eq!(
+            msg,
+            "--hours cannot be used with preset \"dev\" (billed in days) — use --days or --quantity"
+        );
+    }
+
+    #[test]
+    fn test_unit_mismatch_suggests_hours_for_hourly_preset() {
+        // Arrange
+        let err = InvoiceError::UnitMismatch {
+            flag: "--days",
+            preset: "support".into(),
+            unit: BillingUnit::Hour,
+        };
+
+        // Act
+        let msg = format!("{err}");
+
+        // Assert
+        assert_eq!(
+            msg,
+            "--days cannot be used with preset \"support\" (billed in hours) — use --hours or --quantity"
+        );
     }
 
     #[test]

@@ -63,7 +63,10 @@ pub enum Command {
 #[command(
     group = clap::ArgGroup::new("item-source")
         .required(true)
-        .args(["preset", "items"])
+        .args(["preset", "items"]),
+    group = clap::ArgGroup::new("amount")
+        .args(["quantity", "days", "hours"])
+        .multiple(false)
 )]
 pub struct GenerateArgs {
     /// Billing month (1-12)
@@ -73,13 +76,19 @@ pub struct GenerateArgs {
     #[arg(long)]
     pub year: u32,
     /// Preset key to use for a single line item
-    #[arg(long, requires = "days", conflicts_with = "items")]
+    #[arg(long, requires = "amount", conflicts_with = "items")]
     pub preset: Option<String>,
-    /// Number of days worked (required with --preset)
+    /// Amount worked, in the preset's own billing unit (required with --preset)
     #[arg(long, requires = "preset", conflicts_with = "items")]
+    pub quantity: Option<f64>,
+    /// Days worked; also asserts the preset is billed in days
+    #[arg(long, requires = "preset", conflicts_with_all = ["items", "quantity", "hours"])]
     pub days: Option<f64>,
-    /// JSON array of line items: [{"preset":"key","days":N,"rate":N}]
-    #[arg(long, conflicts_with_all = ["preset", "days"])]
+    /// Hours worked; also asserts the preset is billed in hours
+    #[arg(long, requires = "preset", conflicts_with_all = ["items", "quantity", "days"])]
+    pub hours: Option<f64>,
+    /// JSON array of line items: [{"preset":"key","quantity":N,"rate":N}]
+    #[arg(long, conflicts_with_all = ["preset", "quantity", "days", "hours"])]
     pub items: Option<String>,
     /// Recipient profile key (defaults to default_recipient)
     #[arg(long)]
@@ -298,7 +307,9 @@ mod tests {
             Some(Command::Generate(g)) => {
                 assert_eq!(g.items.as_deref(), Some(json));
                 assert!(g.preset.is_none());
+                assert!(g.quantity.is_none());
                 assert!(g.days.is_none());
+                assert!(g.hours.is_none());
             }
             other => panic!("Expected Generate, got {other:?}"),
         }
@@ -325,6 +336,152 @@ mod tests {
         let args = [
             "invoice", "generate", "--month", "3", "--year", "2026", "--items", "[{}]", "--days",
             "5",
+        ];
+
+        // Act
+        let result = Cli::try_parse_from(args);
+
+        // Assert
+        assert!(result.is_err());
+    }
+
+    // ── Amount flags: --quantity / --days / --hours ──
+
+    #[test]
+    fn test_generate_quantity_flag_parses() {
+        // Arrange
+        let args = [
+            "invoice",
+            "generate",
+            "--month",
+            "3",
+            "--year",
+            "2026",
+            "--preset",
+            "support",
+            "--quantity",
+            "8",
+        ];
+
+        // Act
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        // Assert
+        match cli.command {
+            Some(Command::Generate(g)) => {
+                assert!((g.quantity.unwrap() - 8.0).abs() < f64::EPSILON);
+                assert!(g.days.is_none());
+                assert!(g.hours.is_none());
+            }
+            other => panic!("Expected Generate, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_generate_hours_flag_parses() {
+        // Arrange
+        let args = [
+            "invoice", "generate", "--month", "3", "--year", "2026", "--preset", "support",
+            "--hours", "8",
+        ];
+
+        // Act
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        // Assert
+        match cli.command {
+            Some(Command::Generate(g)) => {
+                assert!((g.hours.unwrap() - 8.0).abs() < f64::EPSILON);
+                assert!(g.days.is_none());
+                assert!(g.quantity.is_none());
+            }
+            other => panic!("Expected Generate, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_generate_days_and_hours_mutually_exclusive() {
+        // Arrange
+        let args = [
+            "invoice", "generate", "--month", "3", "--year", "2026", "--preset", "dev", "--days",
+            "10", "--hours", "8",
+        ];
+
+        // Act
+        let result = Cli::try_parse_from(args);
+
+        // Assert
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_generate_quantity_and_days_mutually_exclusive() {
+        // Arrange
+        let args = [
+            "invoice",
+            "generate",
+            "--month",
+            "3",
+            "--year",
+            "2026",
+            "--preset",
+            "dev",
+            "--quantity",
+            "8",
+            "--days",
+            "10",
+        ];
+
+        // Act
+        let result = Cli::try_parse_from(args);
+
+        // Assert
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_generate_preset_without_amount_is_error() {
+        // Arrange — --preset alone, none of --quantity/--days/--hours
+        let args = [
+            "invoice", "generate", "--month", "3", "--year", "2026", "--preset", "dev",
+        ];
+
+        // Act
+        let result = Cli::try_parse_from(args);
+
+        // Assert
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_generate_items_and_quantity_mutually_exclusive() {
+        // Arrange
+        let args = [
+            "invoice",
+            "generate",
+            "--month",
+            "3",
+            "--year",
+            "2026",
+            "--items",
+            "[{}]",
+            "--quantity",
+            "8",
+        ];
+
+        // Act
+        let result = Cli::try_parse_from(args);
+
+        // Assert
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_generate_items_and_hours_mutually_exclusive() {
+        // Arrange
+        let args = [
+            "invoice", "generate", "--month", "3", "--year", "2026", "--items", "[{}]", "--hours",
+            "8",
         ];
 
         // Act

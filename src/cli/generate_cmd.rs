@@ -5,7 +5,7 @@ use std::str::FromStr;
 use crate::config::ConfigError;
 use crate::config::types::Preset;
 use crate::config::validator::{ValidatedConfig, ValidatedRecipient, ValidatedSender};
-use crate::domain::Currency;
+use crate::domain::{BillingUnit, Currency};
 use crate::error::AppError;
 use crate::invoice::InvoiceError;
 use crate::invoice::summary::build_summary;
@@ -21,10 +21,16 @@ use super::common::pdf_output_path;
 use super::load_validated_config;
 
 /// A single item entry from the `--items` JSON array.
+///
+/// `quantity` is expressed in the referenced preset's billing unit. The `days`
+/// alias keeps pre-billing-unit payloads working; there is deliberately no
+/// `hours` alias, because the preset — not the payload — decides the unit, so
+/// an `hours` key would just be `quantity` under a misleading name.
 #[derive(Debug, serde::Deserialize)]
 struct ItemSpec {
     preset: String,
-    days: f64,
+    #[serde(alias = "days")]
+    quantity: f64,
     rate: Option<f64>,
     tax_rate: Option<f64>,
 }
@@ -35,12 +41,36 @@ fn validate_period(month: u32, year: u32) -> Result<InvoicePeriod, InvoiceError>
         .ok_or_else(|| InvoiceError::InvalidDate(format!("month={month}, year={year}")))
 }
 
-/// Validate that days is positive and finite.
-fn validate_days(days: f64) -> Result<(), InvoiceError> {
-    if !days.is_finite() || days <= 0.0 {
-        return Err(InvoiceError::InvalidDays(format!("{days}")));
+/// Validate that a quantity is positive and finite.
+fn validate_quantity(quantity: f64) -> Result<(), InvoiceError> {
+    if !quantity.is_finite() || quantity <= 0.0 {
+        return Err(InvoiceError::InvalidQuantity(format!("{quantity}")));
     }
     Ok(())
+}
+
+/// Pick the quantity for single-item mode out of the three amount flags.
+///
+/// `--quantity` is unit-agnostic and simply takes the preset's unit. `--days`
+/// and `--hours` additionally *assert* the unit: using one against a preset
+/// billed in the other unit is rejected rather than silently billed, since the
+/// resulting figure would be wrong on a money document with no other signal.
+fn resolve_quantity(args: &GenerateArgs, preset: &Preset) -> Result<f64, InvoiceError> {
+    let mismatch = |flag: &'static str| InvoiceError::UnitMismatch {
+        flag,
+        preset: preset.key.as_str().to_string(),
+        unit: preset.unit,
+    };
+    match (args.quantity, args.days, args.hours) {
+        (Some(quantity), _, _) => Ok(quantity),
+        (_, Some(days), _) if preset.unit == BillingUnit::Day => Ok(days),
+        (_, Some(_), _) => Err(mismatch("--days")),
+        (_, _, Some(hours)) if preset.unit == BillingUnit::Hour => Ok(hours),
+        (_, _, Some(_)) => Err(mismatch("--hours")),
+        // Unreachable while clap's `amount` group holds; surfaced as an error
+        // rather than a panic so a wiring regression stays a usage message.
+        (None, None, None) => Err(InvoiceError::MissingQuantity),
+    }
 }
 
 /// Find a preset by key, returning `PresetNotFound` if absent.
@@ -59,7 +89,7 @@ fn parse_items(json: &str) -> Result<Vec<ItemSpec>, InvoiceError> {
         return Err(InvoiceError::EmptyItems);
     }
     for item in &items {
-        validate_days(item.days)?;
+        validate_quantity(item.quantity)?;
         if let Some(tr) = item.tax_rate
             && tr < 0.0
         {
@@ -89,7 +119,7 @@ fn resolve_line_items(
                 // inherits it from the preset it references.
                 Ok(LineItem::new(
                     preset.description.clone(),
-                    spec.days,
+                    spec.quantity,
                     preset.unit,
                     rate,
                     currency,
@@ -98,19 +128,19 @@ fn resolve_line_items(
             })
             .collect()
     } else {
-        // Single-item mode: --preset + --days
+        // Single-item mode: --preset + one of --quantity/--days/--hours
         let key = args
             .preset
             .as_deref()
             .expect("clap enforces preset or items");
-        let days = args.days.expect("clap enforces days with preset");
-        validate_days(days)?;
         let preset = find_preset(key, presets)?;
+        let quantity = resolve_quantity(args, preset)?;
+        validate_quantity(quantity)?;
         let currency = effective_currency(preset, default_currency);
         let tax_rate = preset.tax_rate.unwrap_or(0.0);
         Ok(vec![LineItem::new(
             preset.description.clone(),
-            days,
+            quantity,
             preset.unit,
             preset.default_rate,
             currency,
@@ -241,17 +271,19 @@ pub fn handle_generate(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::BillingUnit;
     use crate::setup::test_helpers::*;
 
     // ── Test helper builders ──
 
-    fn generate_single_args(month: u32, year: u32, preset: &str, days: f64) -> GenerateArgs {
+    /// `GenerateArgs` with no item source — the base every builder below fills in.
+    fn generate_args(month: u32, year: u32) -> GenerateArgs {
         GenerateArgs {
             month,
             year,
-            preset: Some(preset.to_string()),
-            days: Some(days),
+            preset: None,
+            quantity: None,
+            days: None,
+            hours: None,
             items: None,
             client: None,
             sender: None,
@@ -260,17 +292,34 @@ mod tests {
         }
     }
 
+    fn generate_single_args(month: u32, year: u32, preset: &str, days: f64) -> GenerateArgs {
+        GenerateArgs {
+            preset: Some(preset.to_string()),
+            days: Some(days),
+            ..generate_args(month, year)
+        }
+    }
+
+    fn generate_quantity_args(month: u32, year: u32, preset: &str, quantity: f64) -> GenerateArgs {
+        GenerateArgs {
+            preset: Some(preset.to_string()),
+            quantity: Some(quantity),
+            ..generate_args(month, year)
+        }
+    }
+
+    fn generate_hours_args(month: u32, year: u32, preset: &str, hours: f64) -> GenerateArgs {
+        GenerateArgs {
+            preset: Some(preset.to_string()),
+            hours: Some(hours),
+            ..generate_args(month, year)
+        }
+    }
+
     fn generate_items_args(month: u32, year: u32, json: &str) -> GenerateArgs {
         GenerateArgs {
-            month,
-            year,
-            preset: None,
-            days: None,
             items: Some(json.to_string()),
-            client: None,
-            sender: None,
-            template: None,
-            locale: None,
+            ..generate_args(month, year)
         }
     }
 
@@ -366,30 +415,91 @@ mod tests {
         let result = parse_items(json);
 
         // Assert
-        assert!(matches!(result, Err(InvoiceError::InvalidDays(_))));
+        assert!(matches!(result, Err(InvoiceError::InvalidQuantity(_))));
+    }
+
+    #[test]
+    fn test_parse_items_days_key_still_parses() {
+        // Arrange — back-compat pin: pre-billing-unit payloads use `days`.
+        let json = r#"[{"preset":"dev","days":10}]"#;
+
+        // Act
+        let items = parse_items(json).unwrap();
+
+        // Assert
+        assert!((items[0].quantity - 10.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_parse_items_quantity_key_parses() {
+        // Arrange
+        let json = r#"[{"preset":"dev","quantity":8}]"#;
+
+        // Act
+        let items = parse_items(json).unwrap();
+
+        // Assert
+        assert!((items[0].quantity - 8.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_parse_items_both_days_and_quantity_returns_error() {
+        // Arrange — serde treats the alias as a duplicate field, which is the
+        // right outcome: the two keys would otherwise silently disagree.
+        let json = r#"[{"preset":"dev","days":10,"quantity":8}]"#;
+
+        // Act
+        let result = parse_items(json);
+
+        // Assert
+        assert!(matches!(result, Err(InvoiceError::ItemsParse(_))));
     }
 
     // ── Phase 3: Validation tests (pure) ──
 
     #[test]
-    fn test_validate_days_zero_returns_error() {
+    fn test_validate_quantity_zero_returns_error() {
         // Arrange
-        let days = 0.0;
+        let quantity = 0.0;
 
         // Act
-        let result = validate_days(days);
+        let result = validate_quantity(quantity);
 
         // Assert
-        assert!(matches!(result, Err(InvoiceError::InvalidDays(_))));
+        assert!(matches!(result, Err(InvoiceError::InvalidQuantity(_))));
     }
 
     #[test]
-    fn test_validate_days_positive_succeeds() {
+    fn test_validate_quantity_negative_returns_error() {
         // Arrange
-        let days = 5.5;
+        let quantity = -3.0;
 
         // Act
-        let result = validate_days(days);
+        let result = validate_quantity(quantity);
+
+        // Assert
+        assert!(matches!(result, Err(InvoiceError::InvalidQuantity(_))));
+    }
+
+    #[test]
+    fn test_validate_quantity_non_finite_returns_error() {
+        // Arrange
+        let quantity = f64::INFINITY;
+
+        // Act
+        let result = validate_quantity(quantity);
+
+        // Assert
+        assert!(matches!(result, Err(InvoiceError::InvalidQuantity(_))));
+    }
+
+    #[test]
+    fn test_validate_quantity_positive_succeeds() {
+        // Arrange
+        let quantity = 5.5;
+
+        // Act
+        let result = validate_quantity(quantity);
 
         // Assert
         assert!(result.is_ok());
@@ -459,8 +569,8 @@ mod tests {
 
     #[test]
     fn test_resolve_single_item_carries_preset_unit() {
-        // Arrange
-        let args = generate_single_args(3, 2026, "support", 7.5);
+        // Arrange — --quantity is unit-agnostic, so the preset supplies the unit.
+        let args = generate_quantity_args(3, 2026, "support", 7.5);
 
         // Act
         let items = resolve_line_items(&args, &presets_with_units(), Currency::Eur).unwrap();
@@ -503,6 +613,123 @@ mod tests {
         // Assert
         assert_eq!(items[0].unit, BillingUnit::Hour);
         assert!((items[0].amount - 600.0).abs() < f64::EPSILON);
+    }
+
+    // ── Amount flags: --quantity / --days / --hours ──
+
+    #[test]
+    fn test_quantity_flag_on_hourly_preset_produces_hour_line_item() {
+        // Arrange
+        let args = generate_quantity_args(3, 2026, "support", 8.0);
+
+        // Act
+        let items = resolve_line_items(&args, &presets_with_units(), Currency::Eur).unwrap();
+
+        // Assert
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].unit, BillingUnit::Hour);
+        assert!((items[0].quantity - 8.0).abs() < f64::EPSILON);
+        assert!((items[0].amount - 960.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_days_flag_on_daily_preset_unchanged() {
+        // Arrange — regression pin: existing scripts must behave exactly as before.
+        let args = generate_single_args(3, 2026, "dev", 10.0);
+
+        // Act
+        let items = resolve_line_items(&args, &presets_with_units(), Currency::Eur).unwrap();
+
+        // Assert
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].unit, BillingUnit::Day);
+        assert!((items[0].quantity - 10.0).abs() < f64::EPSILON);
+        assert!((items[0].amount - 8000.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_hours_flag_on_daily_preset_returns_unit_mismatch() {
+        // Arrange
+        let args = generate_hours_args(3, 2026, "dev", 8.0);
+
+        // Act
+        let result = resolve_line_items(&args, &presets_with_units(), Currency::Eur);
+
+        // Assert
+        match result {
+            Err(AppError::Invoice(InvoiceError::UnitMismatch { flag, preset, unit })) => {
+                assert_eq!(flag, "--hours");
+                assert_eq!(preset, "dev");
+                assert_eq!(unit, BillingUnit::Day);
+            }
+            other => panic!("Expected UnitMismatch, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_days_flag_on_hourly_preset_returns_unit_mismatch() {
+        // Arrange
+        let args = generate_single_args(3, 2026, "support", 10.0);
+
+        // Act
+        let result = resolve_line_items(&args, &presets_with_units(), Currency::Eur);
+
+        // Assert
+        match result {
+            Err(AppError::Invoice(InvoiceError::UnitMismatch { flag, preset, unit })) => {
+                assert_eq!(flag, "--days");
+                assert_eq!(preset, "support");
+                assert_eq!(unit, BillingUnit::Hour);
+            }
+            other => panic!("Expected UnitMismatch, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_quantity_flag_never_mismatches_either_unit() {
+        // Arrange — --quantity is unit-agnostic by design.
+        let presets = presets_with_units();
+
+        // Act
+        let daily = resolve_quantity(&generate_quantity_args(3, 2026, "dev", 4.0), &presets[0]);
+        let hourly = resolve_quantity(
+            &generate_quantity_args(3, 2026, "support", 4.0),
+            &presets[1],
+        );
+
+        // Assert
+        assert!((daily.unwrap() - 4.0).abs() < f64::EPSILON);
+        assert!((hourly.unwrap() - 4.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_resolve_quantity_without_any_amount_flag_returns_error() {
+        // Arrange — clap's `amount` group prevents this; the handler must not panic.
+        let args = GenerateArgs {
+            preset: Some("dev".into()),
+            ..generate_args(3, 2026)
+        };
+
+        // Act
+        let result = resolve_quantity(&args, &presets_with_units()[0]);
+
+        // Assert
+        assert!(matches!(result, Err(InvoiceError::MissingQuantity)));
+    }
+
+    #[test]
+    fn test_single_item_non_positive_quantity_returns_invalid_quantity() {
+        // Arrange
+        let args = generate_quantity_args(3, 2026, "dev", 0.0);
+
+        // Act
+        let result = resolve_line_items(&args, &presets_with_units(), Currency::Eur);
+
+        // Assert
+        assert!(matches!(
+            result,
+            Err(AppError::Invoice(InvoiceError::InvalidQuantity(_)))
+        ));
     }
 
     // ── Phase 4: Handler tests — single-item (tempdir) ──
