@@ -85,18 +85,13 @@ fn resolve_line_items(
                 let rate = spec.rate.unwrap_or(preset.default_rate);
                 let currency = effective_currency(preset, default_currency);
                 let tax_rate = spec.tax_rate.or(preset.tax_rate).unwrap_or(0.0);
-                let item = if tax_rate > 0.0 {
-                    LineItem::with_tax(
-                        preset.description.clone(),
-                        spec.days,
-                        rate,
-                        currency,
-                        tax_rate,
-                    )
-                } else {
-                    LineItem::new(preset.description.clone(), spec.days, rate, currency)
-                };
-                Ok(item)
+                Ok(LineItem::new(
+                    preset.description.clone(),
+                    spec.days,
+                    rate,
+                    currency,
+                    tax_rate,
+                ))
             })
             .collect()
     } else {
@@ -110,23 +105,13 @@ fn resolve_line_items(
         let preset = find_preset(key, presets)?;
         let currency = effective_currency(preset, default_currency);
         let tax_rate = preset.tax_rate.unwrap_or(0.0);
-        let item = if tax_rate > 0.0 {
-            LineItem::with_tax(
-                preset.description.clone(),
-                days,
-                preset.default_rate,
-                currency,
-                tax_rate,
-            )
-        } else {
-            LineItem::new(
-                preset.description.clone(),
-                days,
-                preset.default_rate,
-                currency,
-            )
-        };
-        Ok(vec![item])
+        Ok(vec![LineItem::new(
+            preset.description.clone(),
+            days,
+            preset.default_rate,
+            currency,
+            tax_rate,
+        )])
     }
 }
 

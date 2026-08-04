@@ -37,7 +37,7 @@ pub fn format_summary(summary: &InvoiceSummary) -> String {
             "| {:<w$} |",
             format!(
                 "  {:.2} days x {:.2} = {:.2} {}",
-                item.days, item.rate, item.amount, summary.currency
+                item.quantity, item.rate, item.amount, summary.currency
             ),
             w = width - 2
         ));
@@ -101,12 +101,14 @@ mod tests {
                     10.0,
                     800.0,
                     crate::domain::Currency::Eur,
+                    0.0,
                 ),
                 LineItem::new(
                     "Technical consulting".into(),
                     5.0,
                     1000.0,
                     crate::domain::Currency::Eur,
+                    0.0,
                 ),
             ],
             subtotal: 13000.0,
@@ -220,7 +222,7 @@ mod tests {
             invoice_date: Date::from_calendar_date(2026, Month::April, 9).unwrap(),
             due_date: Date::from_calendar_date(2026, Month::May, 9).unwrap(),
             currency: crate::domain::Currency::Eur,
-            line_items: vec![LineItem::with_tax(
+            line_items: vec![LineItem::new(
                 "Software development".into(),
                 10.0,
                 800.0,

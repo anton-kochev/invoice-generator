@@ -81,15 +81,11 @@ pub fn collect_line_item_details(
         _ => 0.0,
     };
 
-    let item = if tax_rate > 0.0 {
-        LineItem::with_tax(preset.description.clone(), days, rate, currency, tax_rate)
-    } else {
-        LineItem::new(preset.description.clone(), days, rate, currency)
-    };
+    let item = LineItem::new(preset.description.clone(), days, rate, currency, tax_rate);
 
     prompter.message(&format!(
         "  => {:.2} days x {:.2}/day = {:.2}",
-        item.days, item.rate, item.amount
+        item.quantity, item.rate, item.amount
     ));
 
     if item.tax_rate > 0.0 {
@@ -220,7 +216,7 @@ mod tests {
         let item = collect_line_item_details(&prompter, &preset, 1, Currency::Eur).unwrap();
 
         // Assert
-        assert!((item.days - 10.0).abs() < f64::EPSILON);
+        assert!((item.quantity - 10.0).abs() < f64::EPSILON);
         assert!((item.rate - 800.0).abs() < f64::EPSILON);
         assert!((item.amount - 8000.0).abs() < f64::EPSILON);
         prompter.assert_exhausted();
@@ -236,7 +232,7 @@ mod tests {
         let item = collect_line_item_details(&prompter, &preset, 1, Currency::Eur).unwrap();
 
         // Assert
-        assert!((item.days - 5.0).abs() < f64::EPSILON);
+        assert!((item.quantity - 5.0).abs() < f64::EPSILON);
         assert!((item.rate - 1200.0).abs() < f64::EPSILON);
         assert!((item.amount - 6000.0).abs() < f64::EPSILON);
         prompter.assert_exhausted();
