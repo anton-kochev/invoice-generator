@@ -2,7 +2,9 @@ use std::fmt;
 
 use super::error::ConfigError;
 use super::types::*;
-use crate::domain::{HexColor, Iban, NonEmpty, PaymentMethodKey, RecipientKey, SenderKey};
+use crate::domain::{
+    HexColor, Iban, NonEmpty, PaymentMethodKey, RecipientKey, SenderKey, is_valid_tax_rate,
+};
 use crate::locale::Locale;
 
 const DEFAULT_ACCENT_COLOR: &str = "#2c3e50";
@@ -657,6 +659,33 @@ fn normalize_payment_methods(
     Ok(normalized)
 }
 
+/// Verify preset invariants that the field types cannot encode.
+///
+/// Today that is just `tax_rate`, and it is a money invariant rather than a
+/// cosmetic one: `LineItem::new` multiplies the rate into `tax_amount`
+/// unconditionally and `build_summary` sums it unguarded, while every display
+/// path (`invoice::display`, and `pdf::data`'s `has_tax`) only renders tax
+/// when the rate is *positive*. A negative rate would therefore shrink the
+/// grand total below the sum of the line amounts on a PDF that shows no tax
+/// anywhere. Non-finite rates are rejected for the same reason — YAML `.nan`
+/// and `.inf` deserialize into `f64` without complaint and would poison every
+/// downstream sum.
+///
+/// `0.0` and an absent `tax_rate` both mean "untaxed" and stay valid.
+fn validate_preset_invariants(presets: &[Preset]) -> Result<(), ConfigError> {
+    for p in presets {
+        if let Some(rate) = p.tax_rate
+            && !is_valid_tax_rate(rate)
+        {
+            return Err(ConfigError::InvalidPresetTaxRate {
+                key: p.key.as_str().to_string(),
+                rate,
+            });
+        }
+    }
+    Ok(())
+}
+
 /// Fold an optional [`Branding`] into a fully resolved [`ValidatedBranding`],
 /// substituting defaults for absent fields.
 fn resolve_branding(branding: Option<Branding>) -> ValidatedBranding {
@@ -812,8 +841,12 @@ impl Config {
             .collect();
         let payment_ne =
             NonEmpty::try_from_vec(validated_payment).expect("payment non-empty checked above");
-        let presets_ne = NonEmpty::try_from_vec(presets.expect("presets present"))
-            .expect("presets non-empty checked above");
+        // Presets carry a money invariant (`tax_rate`) the type system does not
+        // encode; a violation is a hard error, not a missing section.
+        let presets_vec = presets.expect("presets present");
+        validate_preset_invariants(&presets_vec)?;
+        let presets_ne =
+            NonEmpty::try_from_vec(presets_vec).expect("presets non-empty checked above");
 
         let resolved_defaults = defaults.unwrap_or_default();
         let template = resolved_defaults.template.clone();
@@ -1681,6 +1714,120 @@ mod tests {
 
         // Assert
         assert!(matches!(result, Err(ConfigError::DuplicateSenderKey(_))));
+    }
+
+    // ── Preset tax_rate validation ──
+
+    /// A complete config whose sole preset carries the given `tax_rate`.
+    fn config_with_preset_tax(tax_rate: Option<f64>) -> Config {
+        let mut config = make_complete_config();
+        config.presets = Some(vec![Preset {
+            tax_rate,
+            ..make_presets().remove(0)
+        }]);
+        config
+    }
+
+    #[test]
+    fn test_validate_negative_preset_tax_rate_returns_error() {
+        // Arrange — hand-edited config.yaml with a negative rate.
+        let config = config_with_preset_tax(Some(-21.0));
+
+        // Act
+        let result = config.validate();
+
+        // Assert
+        let msg = match result {
+            Err(e @ ConfigError::InvalidPresetTaxRate { .. }) => e.to_string(),
+            other => panic!("Expected InvalidPresetTaxRate, got {other:?}"),
+        };
+        assert!(msg.contains("dev"), "Expected the preset key in: {msg}");
+        assert!(msg.contains("tax_rate"), "Expected 'tax_rate' in: {msg}");
+        assert!(msg.contains("-21"), "Expected the offending rate in: {msg}");
+    }
+
+    #[test]
+    fn test_validate_zero_preset_tax_rate_is_valid() {
+        // Arrange — 0.0 is the explicit "untaxed" spelling and must be kept.
+        let config = config_with_preset_tax(Some(0.0));
+
+        // Act
+        let result = config.validate();
+
+        // Assert
+        assert!(matches!(result, Ok(ValidationOutcome::Complete(_))));
+    }
+
+    #[test]
+    fn test_validate_absent_preset_tax_rate_is_valid() {
+        // Arrange
+        let config = config_with_preset_tax(None);
+
+        // Act
+        let result = config.validate();
+
+        // Assert
+        assert!(matches!(result, Ok(ValidationOutcome::Complete(_))));
+    }
+
+    #[test]
+    fn test_validate_positive_preset_tax_rate_is_valid() {
+        // Arrange
+        let config = config_with_preset_tax(Some(21.0));
+
+        // Act
+        let result = config.validate();
+
+        // Assert
+        assert!(matches!(result, Ok(ValidationOutcome::Complete(_))));
+    }
+
+    #[test]
+    fn test_validate_non_finite_preset_tax_rate_returns_error() {
+        // Arrange — YAML `.nan` / `.inf` deserialize happily into f64.
+        for rate in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let config = config_with_preset_tax(Some(rate));
+
+            // Act
+            let result = config.validate();
+
+            // Assert
+            assert!(
+                matches!(result, Err(ConfigError::InvalidPresetTaxRate { .. })),
+                "Expected InvalidPresetTaxRate for tax_rate {rate}, got {result:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_validate_reports_the_offending_preset_among_several() {
+        // Arrange — only the second preset is malformed.
+        let mut config = make_complete_config();
+        let base = make_presets().remove(0);
+        config.presets = Some(vec![
+            Preset {
+                tax_rate: Some(21.0),
+                ..base.clone()
+            },
+            Preset {
+                key: crate::domain::PresetKey::try_new("support").unwrap(),
+                tax_rate: Some(-5.0),
+                ..base
+            },
+        ]);
+
+        // Act
+        let result = config.validate();
+
+        // Assert
+        let msg = match result {
+            Err(e @ ConfigError::InvalidPresetTaxRate { .. }) => e.to_string(),
+            other => panic!("Expected InvalidPresetTaxRate, got {other:?}"),
+        };
+        assert!(
+            msg.contains("support"),
+            "Expected the offending preset key in: {msg}"
+        );
     }
 
     // ── Helpers ──

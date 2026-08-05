@@ -586,6 +586,48 @@ mod tests {
         assert!((summary.total - 15730.0).abs() < f64::EPSILON);
     }
 
+    /// Documents *why* `Config::validate` rejects a negative preset `tax_rate`
+    /// — do not delete that check thinking it is redundant.
+    ///
+    /// `LineItem::new` multiplies the rate into `tax_amount` unconditionally
+    /// and `build_summary` sums it unguarded, so a negative rate silently
+    /// shrinks the total below the sum of the line amounts. Every display path
+    /// (`invoice::display`, `pdf::data`'s `has_tax`) gates on `tax_rate > 0.0`,
+    /// so the resulting PDF shows no tax anywhere while its total no longer
+    /// matches its own line items. The only defense is the config boundary.
+    #[test]
+    fn build_summary_negative_tax_rate_would_shrink_total_below_subtotal() {
+        // Arrange — the state a negative preset tax_rate would produce if it
+        // ever reached the arithmetic.
+        let period = InvoicePeriod::new(3, 2026).unwrap();
+        let items = vec![LineItem::new(
+            "Dev".into(),
+            10.0,
+            BillingUnit::Day,
+            800.0,
+            Currency::Eur,
+            -21.0,
+        )];
+
+        // Act
+        let summary = build_summary(period, items, &make_defaults()).unwrap();
+
+        // Assert — tax is negative and the total undercuts the line amounts.
+        assert!(
+            summary.line_items[0].tax_amount < 0.0,
+            "expected a negative tax_amount, got {}",
+            summary.line_items[0].tax_amount
+        );
+        assert!((summary.subtotal - 8000.0).abs() < f64::EPSILON);
+        assert!((summary.total - 6320.0).abs() < f64::EPSILON);
+        assert!(
+            summary.total < summary.subtotal,
+            "total {} should undercut subtotal {}",
+            summary.total,
+            summary.subtotal
+        );
+    }
+
     #[test]
     fn build_summary_mixed_tax_and_no_tax_items() {
         // Arrange

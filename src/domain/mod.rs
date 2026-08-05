@@ -13,6 +13,7 @@ pub mod payment_method_key;
 pub mod preset_key;
 pub mod recipient_key;
 pub mod sender_key;
+pub mod tax_rate;
 
 pub use billing_unit::BillingUnit;
 pub use currency::Currency;
@@ -23,3 +24,4 @@ pub use payment_method_key::PaymentMethodKey;
 pub use preset_key::PresetKey;
 pub use recipient_key::RecipientKey;
 pub use sender_key::SenderKey;
+pub use tax_rate::is_valid_tax_rate;

@@ -84,6 +84,16 @@ pub enum ConfigError {
     /// Requested preset key does not exist.
     #[error("unknown preset: \"{0}\"")]
     PresetNotFound(String),
+
+    /// A preset's `tax_rate` is negative or non-finite.
+    ///
+    /// Only reachable by hand-editing `config.yaml` — the setup wizard cannot
+    /// produce one. Rejected because the tax arithmetic would apply it while
+    /// every display path hides it; see `Config::validate` for the mechanism.
+    #[error(
+        "preset \"{key}\": tax_rate {rate} is invalid \u{2014} must be a finite percentage >= 0"
+    )]
+    InvalidPresetTaxRate { key: String, rate: f64 },
 }
 
 #[cfg(test)]

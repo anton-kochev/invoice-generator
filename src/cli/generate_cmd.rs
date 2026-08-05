@@ -5,7 +5,7 @@ use std::str::FromStr;
 use crate::config::ConfigError;
 use crate::config::types::Preset;
 use crate::config::validator::{ValidatedConfig, ValidatedRecipient, ValidatedSender};
-use crate::domain::{BillingUnit, Currency};
+use crate::domain::{BillingUnit, Currency, is_valid_tax_rate};
 use crate::error::AppError;
 use crate::invoice::InvoiceError;
 use crate::invoice::summary::build_summary;
@@ -90,8 +90,10 @@ fn parse_items(json: &str) -> Result<Vec<ItemSpec>, InvoiceError> {
     }
     for item in &items {
         validate_quantity(item.quantity)?;
+        // Same invariant as `Preset.tax_rate` (enforced in `Config::validate`),
+        // shared via `is_valid_tax_rate` so the two boundaries cannot drift.
         if let Some(tr) = item.tax_rate
-            && tr < 0.0
+            && !is_valid_tax_rate(tr)
         {
             return Err(InvoiceError::InvalidTaxRate(format!("{tr}")));
         }
@@ -1290,6 +1292,49 @@ mod tests {
         assert!(matches!(
             result,
             Err(AppError::Invoice(InvoiceError::InvalidTaxRate(_)))
+        ));
+    }
+
+    #[test]
+    fn test_handle_generate_negative_preset_tax_rejected_at_config_load() {
+        // Arrange — hand-edited config with a negative preset tax_rate. Without
+        // the config-boundary check this produced a PDF showing no tax at all
+        // whose total undercut the sum of its line items.
+        let config = config_with_tax_presets(&[("dev", 800.0, Some(-21.0))]);
+        let dir = setup_dir(Some(&config));
+        let args = generate_single_args(3, 2026, "dev", 10.0);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
+
+        // Assert
+        assert!(matches!(
+            result,
+            Err(AppError::Config(ConfigError::InvalidPresetTaxRate { .. }))
+        ));
+        assert!(
+            !dir.path().join("Invoice_Alice_Smith_Mar2026.pdf").exists(),
+            "no PDF should be written for an invalid config"
+        );
+    }
+
+    #[test]
+    fn test_handle_generate_items_negative_preset_tax_rejected_at_config_load() {
+        // Arrange — the --items path fell back to `preset.tax_rate` unchecked.
+        let config = config_with_tax_presets(&[("dev", 800.0, Some(-21.0))]);
+        let dir = setup_dir(Some(&config));
+        let json = r#"[{"preset":"dev","days":10}]"#;
+        let args = generate_items_args(3, 2026, json);
+        let mut buf: Vec<u8> = Vec::new();
+
+        // Act
+        let result = handle_generate(&args, &cfg_path(&dir), dir.path(), &mut buf);
+
+        // Assert
+        assert!(matches!(
+            result,
+            Err(AppError::Config(ConfigError::InvalidPresetTaxRate { .. }))
         ));
     }
 
