@@ -5,6 +5,7 @@
     { "name": "amalthea", "file": "amalthea.typ", "description": "Editorial & refined" },
     { "name": "metis",    "file": "metis.typ",    "description": "Bare-bones & printable" },
     { "name": "io",       "file": "io.typ",       "description": "Bilingual UA/EN refined card" },
-    { "name": "europa",   "file": "europa.typ",   "description": "Designed minimal" }
+    { "name": "europa",   "file": "europa.typ",   "description": "Designed minimal" },
+    { "name": "adrastea", "file": "adrastea.typ", "description": "Minimal & monospaced" }
   ]
 }

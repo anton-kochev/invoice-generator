@@ -335,7 +335,7 @@ Exact layout varies by template; the above describes `amalthea`.
 
 ### Billing units in the PDF
 
-**Known limitation.** No template is unit-aware yet, so an invoice built from an hourly preset is rendered with daily wording:
+**Only `adrastea` is unit-aware.** Every other template renders an hourly invoice with daily wording:
 
 - `amalthea`, `metis`, `callisto`, `europa` label the quantity column **"Days"** whatever the unit
 - `thebe` is worse — it prints the quantity inline as `8.00 d × 95.00`, so an hourly item reads as days in the body text rather than just in a heading
@@ -343,7 +343,17 @@ Exact layout varies by template; the above describes `amalthea`.
 
 **Amounts, rates, and totals are always correct** — the arithmetic never depended on the unit. Only the wording is wrong.
 
-The data is already there: the generator emits `invoice.unit_label` (`"Days"`, `"Hours"`, or `"Qty"` for a mixed invoice) and a per-item `quantity` and `unit`, alongside the legacy `days` key. Templates just don't read it yet. Making them unit-aware is a follow-up; until then, prefer daily presets if the PDF wording matters to your clients.
+The data is already there: the generator emits `invoice.unit_label` (`"Days"`, `"Hours"`, or `"Qty"` for a mixed invoice) and a per-item `quantity` and `unit`, alongside the legacy `days` key. The remaining templates just don't read it yet.
+
+`adrastea` does, and shows what that looks like:
+
+- the quantity column header follows the unit — **"Days"**, **"Hours"**, or **"Qty"** when one invoice mixes both
+- on a mixed invoice each row carries its own `d`/`h` suffix, since a single header can't name two units
+- hourly quantities render as clock time: `2.75` hours prints as **2:45**
+
+That last one is presentational only — you still enter and are billed decimal hours, so a quantity that doesn't land on a whole minute shows a rounded clock time next to an amount computed from the unrounded value (`2.33` → `2:20`, billed as 2.33). Quarter-hours are exact.
+
+If the PDF wording matters to your clients, use `adrastea` for hourly work, or prefer daily presets.
 
 ### Templates
 
@@ -364,6 +374,7 @@ Templates are stored as `.typ` files (Typst source) in `~/.config/invoice-genera
 | `callisto` | Bold & structured |
 | `europa` | Designed minimal |
 | `io` | Bilingual UA/EN refined card |
+| `adrastea` | Minimal & monospaced — the only unit-aware template (see [Billing units in the PDF](#billing-units-in-the-pdf)) |
 
 **Installing a remote template:**
 

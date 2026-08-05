@@ -36,7 +36,7 @@ pub fn missing_field_hints(yaml_content: &str) -> Vec<&'static str> {
     let mut hints = Vec::new();
     if !yaml_has_field(yaml_content, "template") {
         hints.push(
-            "  template: amalthea    \u{2014} invoice template style (amalthea, thebe, metis, callisto, io, europa)",
+            "  template: amalthea    \u{2014} invoice template style (amalthea, thebe, metis, callisto, io, europa, adrastea)",
         );
     }
     if !yaml_has_field(yaml_content, "locale") {

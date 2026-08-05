@@ -131,8 +131,9 @@ mod tests {
 
     /// All shipped template names. Tests iterate over this in lieu of the
     /// removed `TemplateKey::ALL`.
-    const ALL_TEMPLATE_NAMES: [&str; 6] =
-        ["callisto", "thebe", "amalthea", "metis", "io", "europa"];
+    const ALL_TEMPLATE_NAMES: [&str; 7] = [
+        "callisto", "thebe", "amalthea", "metis", "io", "europa", "adrastea",
+    ];
 
     fn make_summary() -> InvoiceSummary {
         InvoiceSummary {
@@ -510,7 +511,9 @@ mod tests {
     /// `InvoiceData::from_parts`. The `io` template requires a hand-crafted
     /// bilingual data blob and is exercised separately via
     /// [`regen_io_sample`].
-    const STANDARD_TEMPLATE_NAMES: [&str; 5] = ["callisto", "thebe", "amalthea", "metis", "europa"];
+    const STANDARD_TEMPLATE_NAMES: [&str; 6] = [
+        "callisto", "thebe", "amalthea", "metis", "europa", "adrastea",
+    ];
 
     #[test]
     fn test_template_source_each_key_returns_distinct_content() {

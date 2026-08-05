@@ -38,7 +38,7 @@
 - `src/setup/` — interactive setup wizard: sender, recipient, payment, presets, defaults, prompter
 - `src/invoice/` — invoice generation: line items, period, currency, preset selection/creation, summary, display
 - `src/locale.rs` — Locale enum (en-US, en-GB, de-DE, fr-FR, cs-CZ, uk-UA) with date/number formatting
-- `src/pdf/` — PDF output via typst: data mapping, typst world, compilation, manifest/registry with 3 bundled templates (amalthea, metis, thebe) + remote-fetched templates (callisto, europa, io)
+- `src/pdf/` — PDF output via typst: data mapping, typst world, compilation, manifest/registry with 3 bundled templates (amalthea, metis, thebe) + remote-fetched templates (callisto, europa, io, adrastea)
   - Templates are fetched at runtime independently of the binary version, so the JSON contract must stay compatible both ways: only add keys, and read new ones with `.at(key, default:)`. `line_items[].days` is a legacy alias of `quantity`, kept until every published template migrates
 - `docs/` — SRS (v1, v2, v3) and user stories
 
