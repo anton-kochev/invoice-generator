@@ -57,9 +57,12 @@ pub struct InvoiceInfo {
     pub due_date: String,
     pub currency: String,
     /// Header for the quantity column, derived from the invoice's line items
-    /// (see [`unit_label_for`]). Always emitted: templates read it with
-    /// `.at("unit_label", default: ...)`, so an old template ignores it while
-    /// a new one always finds a sane value.
+    /// (see [`unit_label_for`]). Always emitted, but no shipped template reads
+    /// it yet — every template in `templates/manifest.json` still renders a
+    /// hard-coded header (or no quantity column at all). Templates that adopt
+    /// it should read it as `.at("unit_label", default: ...)`, which keeps the
+    /// contract compatible both ways: an old template ignores the key, and a
+    /// new template still renders against an older binary that omits it.
     pub unit_label: String,
     pub line_items: Vec<LineItemData>,
     pub has_tax: bool,
@@ -79,10 +82,13 @@ pub struct LineItemData {
     /// only once every published template reads `quantity`.
     pub days: String,
     /// Amount of work billed, locale-formatted. Same value as
-    /// [`LineItemData::days`] — the duplication is deliberate.
+    /// [`LineItemData::days`] — the duplication is deliberate. Emitted for
+    /// templates to migrate onto; no shipped template reads it yet.
     pub quantity: String,
     /// Wire key of the line item's billing unit: `"days"` or `"hours"`
-    /// ([`BillingUnit::key`]). Never the display label.
+    /// ([`BillingUnit::key`]). Never the display label. Emitted for templates
+    /// to consume; no shipped template reads it yet, and adopters should use
+    /// `.at("unit", default: ...)` to stay compatible with older binaries.
     pub unit: String,
     pub rate: String,
     pub amount: String,
@@ -118,7 +124,7 @@ const MIXED_UNIT_LABEL: &str = "Qty";
 /// Header for the quantity column: the shared unit's [`BillingUnit::label`]
 /// when every line item bills in the same unit, otherwise
 /// [`MIXED_UNIT_LABEL`]. An empty invoice falls back to the default unit's
-/// label so old templates keep seeing `"Days"`.
+/// label (`"Days"`) so the key is never blank for a future consumer.
 fn unit_label_for(line_items: &[LineItem]) -> &'static str {
     let mut units = line_items.iter().map(|item| item.unit);
     match units.next() {

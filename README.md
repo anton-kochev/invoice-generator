@@ -27,7 +27,7 @@ A CLI tool that generates professional PDF invoices through an interactive promp
 - **Multiple recipients** — define several client profiles and select by key; set a default for quick invoicing
 - **Multiple senders** — define several sender identities (e.g. business entities) and select by key; set a default for quick invoicing
 - **Reusable presets** — define common billable items (description + default rate + optional currency and tax rate) and select them by number during invoicing
-- **Daily or hourly billing** — each preset declares whether its rate is per day or per hour; prompts, summaries, and the PDF adapt automatically. A single invoice may mix daily and hourly line items
+- **Daily or hourly billing** — each preset declares whether its rate is per day or per hour; prompts and console summaries adapt automatically, and a single invoice may mix daily and hourly line items. ⚠️ The PDF templates do **not** adapt yet — see [Billing units in the PDF](#billing-units-in-the-pdf)
 - **Inline preset creation** — add new presets on the fly during invoice generation without editing the config file
 - **Per-preset currency and tax** — each preset can carry its own currency and tax rate, overriding the global default
 - **Smart defaults** — billing month defaults to last month, currency to EUR, payment terms to 30 days
@@ -297,7 +297,7 @@ Older configs with a single `recipient` field (instead of `recipients` list) —
 
 Presets written before billing units existed have no `unit` key; they load as `days`, which is what they always meant. The key is written out explicitly on the next save. To change an existing preset's unit, edit `unit:` in the config file by hand — there is no `preset edit` command yet.
 
-Note: templates still label the quantity column "Days" regardless of a preset's unit, so an hourly invoice currently shows hours under a "Days" heading. Amounts and totals are correct; only the heading is wrong. Making the templates unit-aware is a follow-up.
+See [Billing units in the PDF](#billing-units-in-the-pdf) for a current limitation affecting hourly presets.
 
 ### Sender extras (template-specific fields)
 
@@ -332,6 +332,18 @@ The generated PDF is an A4 document — typically one page, though a long line-i
 - **Footer** — the configured `branding.footer_text`
 
 Exact layout varies by template; the above describes `amalthea`.
+
+### Billing units in the PDF
+
+**Known limitation.** No template is unit-aware yet, so an invoice built from an hourly preset is rendered with daily wording:
+
+- `amalthea`, `metis`, `callisto`, `europa` label the quantity column **"Days"** whatever the unit
+- `thebe` is worse — it prints the quantity inline as `8.00 d × 95.00`, so an hourly item reads as days in the body text rather than just in a heading
+- `io` has no quantity column, so it is unaffected
+
+**Amounts, rates, and totals are always correct** — the arithmetic never depended on the unit. Only the wording is wrong.
+
+The data is already there: the generator emits `invoice.unit_label` (`"Days"`, `"Hours"`, or `"Qty"` for a mixed invoice) and a per-item `quantity` and `unit`, alongside the legacy `days` key. Templates just don't read it yet. Making them unit-aware is a follow-up; until then, prefer daily presets if the PDF wording matters to your clients.
 
 ### Templates
 
