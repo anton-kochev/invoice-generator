@@ -4,6 +4,13 @@
 **Date:** 1 April 2026  
 **Author:** Claude (Anthropic), based on requirements from Anton Kochiev
 
+> **Historical record.** This spec is frozen at v1.0 and superseded by
+> `SRS_Invoice_Generator_v2.md` and `SRS_Invoice_Generator_v3.md`. It does not describe current
+> behaviour — among other drift, the config lives at `~/.config/invoice-generator/config.yaml`
+> rather than `./invoice_config.yaml` in the working directory, and presets now declare a
+> billing unit of days or hours.
+> **[README.md](../README.md) is the source of truth for current behaviour.**
+
 ---
 
 ## 1. Purpose

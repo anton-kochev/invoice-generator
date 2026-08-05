@@ -5,6 +5,13 @@
 **Author:** Claude (Anthropic), based on requirements from Anton Kochiev  
 **Parent document:** `SRS_Invoice_Generator.md` (v1.0)
 
+> **Historical record.** This spec is frozen at v2.0 and superseded by
+> `SRS_Invoice_Generator_v3.md`. It does not describe current behaviour — among other drift, the
+> config lives at `~/.config/invoice-generator/config.yaml` rather than `./invoice_config.yaml`,
+> and `generate` now accepts `--quantity`/`--hours` alongside `--days` because presets declare a
+> billing unit of days or hours.
+> **[README.md](../README.md) is the source of truth for current behaviour.**
+
 ---
 
 ## 1. Overview

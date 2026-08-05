@@ -1,5 +1,12 @@
 # User Stories — Invoice Generator CLI
 
+> **Historical record.** This is the backlog as it was delivered through v3.0, kept for
+> traceability. It is not maintained against the current code and has drifted in places —
+> notably the config lives at `~/.config/invoice-generator/config.yaml` (not
+> `./invoice_config.yaml`), presets now declare a billing unit of days or hours, line items
+> carry a `quantity` rather than `days`, and `generate` accepts `--quantity`/`--hours`
+> alongside `--days`. **[README.md](../README.md) is the source of truth for current behaviour.**
+
 ## Summary
 - **Epics**: 14 (5 v1.0 + 6 v2.0 + 3 v3.0)
 - **Total User Stories**: 57 (57 completed ✅)

@@ -21,7 +21,7 @@ A CLI tool that generates professional PDF invoices through an interactive promp
 
 ## Features
 
-- **First-run setup wizard** — interactive walkthrough creates `invoice_config.yaml` from scratch; resumes from where you left off if interrupted
+- **First-run setup wizard** — interactive walkthrough creates the config file from scratch; resumes from where you left off if interrupted
 - **YAML-based configuration** — sender, recipients, payment methods, line-item presets, and invoice defaults
 - **Config validation** — clear reporting of missing or malformed sections with guidance on how to fix
 - **Multiple recipients** — define several client profiles and select by key; set a default for quick invoicing
@@ -33,10 +33,10 @@ A CLI tool that generates professional PDF invoices through an interactive promp
 - **Smart defaults** — billing month defaults to last month, currency to EUR, payment terms to 30 days
 - **Decoupled template system** — 3 templates (amalthea, metis, thebe) ship in the binary; additional templates are fetched on demand from a remote GitHub repo without needing a new binary release
 - **Locale-aware formatting** — dates and numbers in the PDF follow locale rules (en-US, en-GB, de-DE, fr-FR, cs-CZ, uk-UA)
-- **Non-interactive CLI mode** — `invoice generate` for scripting and CI; supports single-item (`--preset` with `--quantity`/`--days`/`--hours`) or multi-item (`--items` JSON)
-- **Preset, recipient, sender, and template management** — `invoice preset list|delete`, `invoice recipient list|add|delete`, `invoice sender list|add|delete`, and `invoice template refresh` subcommands
+- **Non-interactive CLI mode** — `invoice-generator generate` for scripting and CI; supports single-item (`--preset` with `--quantity`/`--days`/`--hours`) or multi-item (`--items` JSON)
+- **Preset, recipient, sender, and template management** — `invoice-generator preset list|delete`, `invoice-generator recipient list|add|delete`, `invoice-generator sender list|add|delete`, and `invoice-generator template refresh` subcommands
 - **Professional PDF output** — clean A4 layout rendered via Typst with line-item table, payment details, and formatted totals
-- **Overwrite protection** — prompts before overwriting an existing PDF; standardized filenames (`Invoice_Name_MonYYYY.pdf`)
+- **Overwrite protection** — interactive mode prompts before overwriting an existing PDF (`generate` overwrites without asking, by design, so it stays scriptable); standardized filenames (`Invoice_Name_MonYYYY.pdf`)
 
 ## Prerequisites
 
@@ -167,6 +167,8 @@ Rate per day [800]: 800
 
 Add another line item? Yes
 
+Select a preset for this line item:
+  ...
 Select preset number: 2
 
 Line item #2: Support retainer
@@ -223,8 +225,10 @@ senders:
       - "123 Main Street"
       - "Springfield, IL 62704"
     email: "jane@example.com"
-    # Optional free-form fields consumed by specific templates (see below)
-    name_ua: "Джейн Доу"
+    # Optional free-form fields consumed by specific templates (see below).
+    # These must be nested under `extras:` — a stray top-level key is ignored.
+    extras:
+      name_ua: "Джейн Доу"
 
 default_sender: "jane"
 
@@ -293,22 +297,41 @@ Older configs with a single `recipient` field (instead of `recipients` list) —
 
 Presets written before billing units existed have no `unit` key; they load as `days`, which is what they always meant. The key is written out explicitly on the next save. To change an existing preset's unit, edit `unit:` in the config file by hand — there is no `preset edit` command yet.
 
-Bundled templates still label the quantity column "Days" regardless of unit; making them unit-aware is a follow-up. The `adrastea` template already renders it correctly.
+Note: templates still label the quantity column "Days" regardless of a preset's unit, so an hourly invoice currently shows hours under a "Days" heading. Amounts and totals are correct; only the heading is wrong. Making the templates unit-aware is a follow-up.
 
 ### Sender extras (template-specific fields)
 
-A sender entry may carry arbitrary extra fields beyond the typed ones (`name`, `address`, `email`). These are an unchecked escape hatch for template-only data — for example, the bilingual `io` template reads a Ukrainian `name_ua` and extended bank details. Any extra key is flattened directly onto the sender in the template, so `name_ua: "Джейн Доу"` becomes `sender.name_ua` in the Typst source. Templates that don't reference a given key simply ignore it. Note: an extra key that collides with a typed field (e.g. `name`) shadows the typed value in the rendered output.
+A sender entry may carry arbitrary extra fields beyond the typed ones (`name`, `address`, `email`), nested under an `extras:` mapping. These are an unchecked escape hatch for template-only data — for example, the bilingual `io` template reads a Ukrainian `name_ua` and extended bank details.
+
+```yaml
+senders:
+  - key: "jane"
+    name: "Jane Doe"
+    extras:
+      name_ua: "Джейн Доу"
+```
+
+Each key under `extras` is flattened onto the sender when the template renders, so `name_ua` above becomes `sender.name_ua` in the Typst source. Templates that don't reference a given key simply ignore it.
+
+Two things to watch:
+
+- **The `extras:` nesting is required.** A key placed directly on the sender (`name_ua:` as a sibling of `name:`) is an unknown field. The config parser ignores it silently — no error, and the template never sees the value.
+- **An extra that collides with a typed field** (e.g. `name`) shadows the typed value in the rendered output.
+
+The setup wizard never prompts for extras; they're hand-edit only.
 
 ## PDF Output
 
-The generated PDF is a single-page A4 document with:
+The generated PDF is an A4 document — typically one page, though a long line-item list flows onto a second — with:
 
-- **Header** — "INVOICE" title with invoice number, date, and due date
-- **Parties** — FROM (sender) and TO (recipient) side by side, including optional company ID and VAT number
-- **Line items table** — description, period, quantity, rate, and amount per item with alternating row backgrounds
+- **Header** — "Invoice" title with invoice number, and a meta strip carrying the billing period, invoice date, and due date
+- **Parties** — sender and recipient side by side, including optional company ID and VAT number
+- **Line items table** — description, quantity, rate, and amount per item, plus tax rate and tax amount when any item is taxed
 - **Total** — bold, right-aligned in the configured currency
 - **Payment details** — one block per payment method with IBAN and BIC/SWIFT
-- **Footer** — thank-you message with sender contact info
+- **Footer** — the configured `branding.footer_text`
+
+Exact layout varies by template; the above describes `amalthea`.
 
 ### Templates
 
@@ -327,7 +350,7 @@ Templates are stored as `.typ` files (Typst source) in `~/.config/invoice-genera
 | Template | Style |
 |----------|-------|
 | `callisto` | Bold & structured |
-| `europa` | Minimal & clean |
+| `europa` | Designed minimal |
 | `io` | Bilingual UA/EN refined card |
 
 **Installing a remote template:**
