@@ -21,19 +21,34 @@ pub enum InvoiceError {
     #[error("invalid quantity: {0} (must be > 0)")]
     InvalidQuantity(String),
 
-    /// A unit-asserting flag (`--days`/`--hours`) contradicts the referenced
-    /// preset's billing unit.
+    /// A unit assertion — a `--days`/`--hours` flag, or the `days` key of an
+    /// `--items` entry — contradicts the referenced preset's billing unit.
     ///
-    /// `--quantity` is unit-agnostic and can never produce this error; the
-    /// point of the stricter flags is to refuse to silently bill hours as days.
-    #[error(
-        "{flag} cannot be used with preset \"{preset}\" (billed in {unit}) — use --{unit} or --quantity"
-    )]
+    /// `--quantity` (and the `quantity` key) is unit-agnostic and can never
+    /// produce this error; the point of the stricter spellings is to refuse to
+    /// silently bill hours as days.
+    ///
+    /// `remedy` is carried rather than derived because it depends on where the
+    /// assertion came from: an `--items` entry has no `--hours` flag to reach
+    /// for, it has the unit-agnostic `quantity` key instead.
+    #[error("{flag} cannot be used with preset \"{preset}\" (billed in {unit}) — {remedy}")]
     UnitMismatch {
         flag: &'static str,
         preset: String,
         unit: BillingUnit,
+        remedy: String,
     },
+
+    /// An `--items` entry set both `days` and `quantity`.
+    ///
+    /// The two can disagree, and `days` additionally asserts a unit, so there
+    /// is no safe way to pick a winner on a money document.
+    #[error("--items entry for preset \"{preset}\" sets both \"days\" and \"quantity\" — use one")]
+    ConflictingItemAmount { preset: String },
+
+    /// An `--items` entry set neither `days` nor `quantity`.
+    #[error("--items entry for preset \"{preset}\" needs a \"quantity\" (or \"days\") amount")]
+    MissingItemAmount { preset: String },
 
     /// `--preset` was given without any of `--quantity`/`--days`/`--hours`.
     ///
@@ -106,6 +121,7 @@ mod tests {
             flag: "--hours",
             preset: "dev".into(),
             unit: BillingUnit::Day,
+            remedy: "use --days or --quantity".into(),
         };
 
         // Act
@@ -125,6 +141,7 @@ mod tests {
             flag: "--days",
             preset: "support".into(),
             unit: BillingUnit::Hour,
+            remedy: "use --hours or --quantity".into(),
         };
 
         // Act
@@ -134,6 +151,61 @@ mod tests {
         assert_eq!(
             msg,
             "--days cannot be used with preset \"support\" (billed in hours) — use --hours or --quantity"
+        );
+    }
+
+    #[test]
+    fn test_unit_mismatch_from_items_points_at_the_quantity_key() {
+        // Arrange — the --items spelling must not suggest flags that cannot be
+        // combined with --items.
+        let err = InvoiceError::UnitMismatch {
+            flag: "the \"days\" key in --items",
+            preset: "support".into(),
+            unit: BillingUnit::Hour,
+            remedy: "use \"quantity\" instead".into(),
+        };
+
+        // Act
+        let msg = format!("{err}");
+
+        // Assert
+        assert_eq!(
+            msg,
+            "the \"days\" key in --items cannot be used with preset \"support\" (billed in hours) — use \"quantity\" instead"
+        );
+    }
+
+    #[test]
+    fn test_conflicting_item_amount_names_preset() {
+        // Arrange
+        let err = InvoiceError::ConflictingItemAmount {
+            preset: "dev".into(),
+        };
+
+        // Act
+        let msg = format!("{err}");
+
+        // Assert
+        assert_eq!(
+            msg,
+            "--items entry for preset \"dev\" sets both \"days\" and \"quantity\" — use one"
+        );
+    }
+
+    #[test]
+    fn test_missing_item_amount_names_preset() {
+        // Arrange
+        let err = InvoiceError::MissingItemAmount {
+            preset: "dev".into(),
+        };
+
+        // Act
+        let msg = format!("{err}");
+
+        // Assert
+        assert_eq!(
+            msg,
+            "--items entry for preset \"dev\" needs a \"quantity\" (or \"days\") amount"
         );
     }
 

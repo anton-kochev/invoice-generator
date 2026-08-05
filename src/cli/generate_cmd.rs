@@ -20,19 +20,60 @@ use super::GenerateArgs;
 use super::common::pdf_output_path;
 use super::load_validated_config;
 
-/// A single item entry from the `--items` JSON array.
+/// A single `--items` entry exactly as written by the user.
 ///
-/// `quantity` is expressed in the referenced preset's billing unit. The `days`
-/// alias keeps pre-billing-unit payloads working; there is deliberately no
-/// `hours` alias, because the preset — not the payload — decides the unit, so
-/// an `hours` key would just be `quantity` under a misleading name.
+/// The two amount keys are kept apart at the serde layer so the normalization
+/// step below can tell which one was used; exactly one must be present.
 #[derive(Debug, serde::Deserialize)]
-struct ItemSpec {
+struct RawItemSpec {
     preset: String,
-    #[serde(alias = "days")]
-    quantity: f64,
+    quantity: Option<f64>,
+    days: Option<f64>,
     rate: Option<f64>,
     tax_rate: Option<f64>,
+}
+
+/// A normalized, validated entry from the `--items` JSON array.
+///
+/// `quantity` is expressed in the referenced preset's billing unit — the
+/// preset, not the payload, decides that unit. There is deliberately no
+/// `hours` key, because it would just be `quantity` under a misleading name.
+///
+/// `days` is the one exception and is *not* a mere alias: like the `--days`
+/// flag it asserts the preset is billed daily, recorded here as
+/// `asserted_unit`. Writing `days` against an hourly preset is a mismatch, not
+/// a rename — otherwise "10 days" would print as "10 hours" on an invoice with
+/// nothing to signal the discrepancy. Legacy payloads are unaffected: every
+/// pre-billing-unit preset was daily.
+#[derive(Debug)]
+struct ItemSpec {
+    preset: String,
+    quantity: f64,
+    asserted_unit: Option<BillingUnit>,
+    rate: Option<f64>,
+    tax_rate: Option<f64>,
+}
+
+impl TryFrom<RawItemSpec> for ItemSpec {
+    type Error = InvoiceError;
+
+    fn try_from(raw: RawItemSpec) -> Result<Self, Self::Error> {
+        let (quantity, asserted_unit) = match (raw.quantity, raw.days) {
+            (Some(_), Some(_)) => {
+                return Err(InvoiceError::ConflictingItemAmount { preset: raw.preset });
+            }
+            (Some(quantity), None) => (quantity, None),
+            (None, Some(days)) => (days, Some(BillingUnit::Day)),
+            (None, None) => return Err(InvoiceError::MissingItemAmount { preset: raw.preset }),
+        };
+        Ok(ItemSpec {
+            preset: raw.preset,
+            quantity,
+            asserted_unit,
+            rate: raw.rate,
+            tax_rate: raw.tax_rate,
+        })
+    }
 }
 
 /// Validate month/year into an `InvoicePeriod`.
@@ -49,6 +90,30 @@ fn validate_quantity(quantity: f64) -> Result<(), InvoiceError> {
     Ok(())
 }
 
+/// Enforce a unit assertion made by the caller against the preset's own unit.
+///
+/// Every spelling that lets the user *name* a unit — the `--days`/`--hours`
+/// flags and the `days` key of an `--items` entry — funnels through here, so
+/// the two entry points cannot drift apart and leave one of them silently
+/// mis-billing. `flag` and `remedy` describe the spelling that was used, since
+/// an `--items` entry cannot be fixed by reaching for `--hours`.
+fn assert_unit(
+    preset: &Preset,
+    asserted: BillingUnit,
+    flag: &'static str,
+    remedy: String,
+) -> Result<(), InvoiceError> {
+    if preset.unit == asserted {
+        return Ok(());
+    }
+    Err(InvoiceError::UnitMismatch {
+        flag,
+        preset: preset.key.as_str().to_string(),
+        unit: preset.unit,
+        remedy,
+    })
+}
+
 /// Pick the quantity for single-item mode out of the three amount flags.
 ///
 /// `--quantity` is unit-agnostic and simply takes the preset's unit. `--days`
@@ -56,17 +121,17 @@ fn validate_quantity(quantity: f64) -> Result<(), InvoiceError> {
 /// billed in the other unit is rejected rather than silently billed, since the
 /// resulting figure would be wrong on a money document with no other signal.
 fn resolve_quantity(args: &GenerateArgs, preset: &Preset) -> Result<f64, InvoiceError> {
-    let mismatch = |flag: &'static str| InvoiceError::UnitMismatch {
-        flag,
-        preset: preset.key.as_str().to_string(),
-        unit: preset.unit,
-    };
+    let remedy = || format!("use --{} or --quantity", preset.unit);
     match (args.quantity, args.days, args.hours) {
         (Some(quantity), _, _) => Ok(quantity),
-        (_, Some(days), _) if preset.unit == BillingUnit::Day => Ok(days),
-        (_, Some(_), _) => Err(mismatch("--days")),
-        (_, _, Some(hours)) if preset.unit == BillingUnit::Hour => Ok(hours),
-        (_, _, Some(_)) => Err(mismatch("--hours")),
+        (_, Some(days), _) => {
+            assert_unit(preset, BillingUnit::Day, "--days", remedy())?;
+            Ok(days)
+        }
+        (_, _, Some(hours)) => {
+            assert_unit(preset, BillingUnit::Hour, "--hours", remedy())?;
+            Ok(hours)
+        }
         // Unreachable while clap's `amount` group holds; surfaced as an error
         // rather than a panic so a wiring regression stays a usage message.
         (None, None, None) => Err(InvoiceError::MissingQuantity),
@@ -84,10 +149,14 @@ fn find_preset<'a>(key: &str, presets: &'a [Preset]) -> Result<&'a Preset, Confi
 /// Parse the `--items` JSON string into validated `ItemSpec` entries.
 fn parse_items(json: &str) -> Result<Vec<ItemSpec>, InvoiceError> {
     // serde_json::Error → InvoiceError::ItemsParse via #[from].
-    let items: Vec<ItemSpec> = serde_json::from_str(json)?;
-    if items.is_empty() {
+    let raw: Vec<RawItemSpec> = serde_json::from_str(json)?;
+    if raw.is_empty() {
         return Err(InvoiceError::EmptyItems);
     }
+    let items: Vec<ItemSpec> = raw
+        .into_iter()
+        .map(ItemSpec::try_from)
+        .collect::<Result<_, _>>()?;
     for item in &items {
         validate_quantity(item.quantity)?;
         // Same invariant as `Preset.tax_rate` (enforced in `Config::validate`),
@@ -114,6 +183,17 @@ fn resolve_line_items(
             .iter()
             .map(|spec| {
                 let preset = find_preset(&spec.preset, presets)?;
+                // A `days` key asserts the preset is billed daily — same
+                // guarantee the `--days` flag gives, enforced by the same
+                // helper. A `quantity` key asserts nothing.
+                if let Some(asserted) = spec.asserted_unit {
+                    assert_unit(
+                        preset,
+                        asserted,
+                        "the \"days\" key in --items",
+                        "use \"quantity\" instead".to_string(),
+                    )?;
+                }
                 let rate = spec.rate.unwrap_or(preset.default_rate);
                 let currency = effective_currency(preset, default_currency);
                 let tax_rate = spec.tax_rate.or(preset.tax_rate).unwrap_or(0.0);
@@ -446,15 +526,35 @@ mod tests {
 
     #[test]
     fn test_parse_items_both_days_and_quantity_returns_error() {
-        // Arrange — serde treats the alias as a duplicate field, which is the
-        // right outcome: the two keys would otherwise silently disagree.
+        // Arrange — `days` is no longer a serde alias of `quantity` (it carries
+        // a unit assertion), so the rejection is now an explicit check rather
+        // than serde's duplicate-field error. The behaviour is unchanged: the
+        // two keys would otherwise silently disagree on a money document.
         let json = r#"[{"preset":"dev","days":10,"quantity":8}]"#;
 
         // Act
         let result = parse_items(json);
 
         // Assert
-        assert!(matches!(result, Err(InvoiceError::ItemsParse(_))));
+        match result {
+            Err(InvoiceError::ConflictingItemAmount { preset }) => assert_eq!(preset, "dev"),
+            other => panic!("Expected ConflictingItemAmount, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_parse_items_neither_days_nor_quantity_returns_error() {
+        // Arrange — an entry with no amount at all.
+        let json = r#"[{"preset":"dev","rate":800.0}]"#;
+
+        // Act
+        let result = parse_items(json);
+
+        // Assert
+        match result {
+            Err(InvoiceError::MissingItemAmount { preset }) => assert_eq!(preset, "dev"),
+            other => panic!("Expected MissingItemAmount, got {other:?}"),
+        }
     }
 
     // ── Phase 3: Validation tests (pure) ──
@@ -584,12 +684,13 @@ mod tests {
 
     #[test]
     fn test_resolve_items_entry_inherits_unit_from_referenced_preset() {
-        // Arrange — the preset is authoritative for the unit, --items only
-        // carries the quantity.
+        // Arrange — the preset is authoritative for the unit, a `quantity`
+        // entry only carries the amount. (`days` is *not* interchangeable here:
+        // it asserts the daily unit — see the mismatch tests below.)
         let args = generate_items_args(
             3,
             2026,
-            r#"[{"preset": "dev", "days": 10}, {"preset": "support", "days": 7.5}]"#,
+            r#"[{"preset": "dev", "quantity": 10}, {"preset": "support", "quantity": 7.5}]"#,
         );
 
         // Act
@@ -606,7 +707,7 @@ mod tests {
         let args = generate_items_args(
             3,
             2026,
-            r#"[{"preset": "support", "days": 4, "rate": 150}]"#,
+            r#"[{"preset": "support", "quantity": 4, "rate": 150}]"#,
         );
 
         // Act
@@ -615,6 +716,90 @@ mod tests {
         // Assert
         assert_eq!(items[0].unit, BillingUnit::Hour);
         assert!((items[0].amount - 600.0).abs() < f64::EPSILON);
+    }
+
+    // ── `--items` unit assertions: the `days` key mirrors the `--days` flag ──
+
+    #[test]
+    fn test_items_days_key_on_hourly_preset_returns_unit_mismatch() {
+        // Arrange — the whole point: "days" against an hourly preset used to be
+        // billed silently as hours.
+        let args = generate_items_args(3, 2026, r#"[{"preset": "support", "days": 10}]"#);
+
+        // Act
+        let result = resolve_line_items(&args, &presets_with_units(), Currency::Eur);
+
+        // Assert
+        match result {
+            Err(AppError::Invoice(InvoiceError::UnitMismatch {
+                flag, preset, unit, ..
+            })) => {
+                assert_eq!(flag, "the \"days\" key in --items");
+                assert_eq!(preset, "support");
+                assert_eq!(unit, BillingUnit::Hour);
+            }
+            other => panic!("Expected UnitMismatch, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_items_days_key_on_daily_preset_unchanged() {
+        // Arrange — back-compat pin: every pre-billing-unit payload referenced a
+        // preset that was daily, so legacy `days` payloads keep working.
+        let args = generate_items_args(3, 2026, r#"[{"preset": "dev", "days": 10}]"#);
+
+        // Act
+        let items = resolve_line_items(&args, &presets_with_units(), Currency::Eur).unwrap();
+
+        // Assert
+        assert_eq!(items[0].unit, BillingUnit::Day);
+        assert!((items[0].quantity - 10.0).abs() < f64::EPSILON);
+        assert!((items[0].amount - 8000.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_items_quantity_key_on_hourly_preset_succeeds() {
+        // Arrange — `quantity` is unit-agnostic, so no assertion to violate.
+        let args = generate_items_args(3, 2026, r#"[{"preset": "support", "quantity": 8}]"#);
+
+        // Act
+        let items = resolve_line_items(&args, &presets_with_units(), Currency::Eur).unwrap();
+
+        // Assert
+        assert_eq!(items[0].unit, BillingUnit::Hour);
+        assert!((items[0].amount - 960.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_items_quantity_key_on_daily_preset_succeeds() {
+        // Arrange
+        let args = generate_items_args(3, 2026, r#"[{"preset": "dev", "quantity": 10}]"#);
+
+        // Act
+        let items = resolve_line_items(&args, &presets_with_units(), Currency::Eur).unwrap();
+
+        // Assert
+        assert_eq!(items[0].unit, BillingUnit::Day);
+        assert!((items[0].amount - 8000.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_items_one_bad_entry_fails_the_whole_command() {
+        // Arrange — a valid daily entry followed by a mismatching hourly one.
+        let args = generate_items_args(
+            3,
+            2026,
+            r#"[{"preset": "dev", "days": 10}, {"preset": "support", "days": 7.5}]"#,
+        );
+
+        // Act
+        let result = resolve_line_items(&args, &presets_with_units(), Currency::Eur);
+
+        // Assert
+        assert!(matches!(
+            result,
+            Err(AppError::Invoice(InvoiceError::UnitMismatch { .. }))
+        ));
     }
 
     // ── Amount flags: --quantity / --days / --hours ──
@@ -659,10 +844,16 @@ mod tests {
 
         // Assert
         match result {
-            Err(AppError::Invoice(InvoiceError::UnitMismatch { flag, preset, unit })) => {
+            Err(AppError::Invoice(InvoiceError::UnitMismatch {
+                flag,
+                preset,
+                unit,
+                remedy,
+            })) => {
                 assert_eq!(flag, "--hours");
                 assert_eq!(preset, "dev");
                 assert_eq!(unit, BillingUnit::Day);
+                assert_eq!(remedy, "use --days or --quantity");
             }
             other => panic!("Expected UnitMismatch, got {other:?}"),
         }
@@ -678,10 +869,16 @@ mod tests {
 
         // Assert
         match result {
-            Err(AppError::Invoice(InvoiceError::UnitMismatch { flag, preset, unit })) => {
+            Err(AppError::Invoice(InvoiceError::UnitMismatch {
+                flag,
+                preset,
+                unit,
+                remedy,
+            })) => {
                 assert_eq!(flag, "--days");
                 assert_eq!(preset, "support");
                 assert_eq!(unit, BillingUnit::Hour);
+                assert_eq!(remedy, "use --hours or --quantity");
             }
             other => panic!("Expected UnitMismatch, got {other:?}"),
         }
